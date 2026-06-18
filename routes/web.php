@@ -1,11 +1,55 @@
 <?php
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Livewire\Volt\Volt;
 
 Route::view('/', 'welcome')->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::view('dashboard', 'dashboard')->name('dashboard');
-});
+Volt::route('/login', 'auth.login')
+    ->middleware('guest')
+    ->name('login');
 
-require __DIR__.'/settings.php';
+Route::post('/logout', function (Request $request) {
+    Auth::guard('web')->logout();
+
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()->route('login');
+})->middleware('auth')->name('logout');
+
+Volt::route('/dashboard', 'dashboard')
+    ->middleware(['auth', 'active'])
+    ->name('dashboard');
+
+
+//Admin Routes
+Volt::route('/admin/dashboard', 'admin.dashboard')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.dashboard');
+
+Volt::route('/admin/entrance-fees', 'admin.entrance-fees.index')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.entrance-fees.index');
+
+Volt::route('/admin/discounts', 'admin.discounts.index')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.discounts.index');
+//Cashier Routes
+Volt::route('/cashier/dashboard', 'cashier.dashboard')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.dashboard');
+
+
+//Maintenance Staff Routes
+Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.dashboard');
+
+
+//Security Guard Routes
+Volt::route('/security/dashboard', 'security.dashboard')
+    ->middleware(['auth', 'active', 'role:Security Guard'])
+    ->name('security.dashboard');
