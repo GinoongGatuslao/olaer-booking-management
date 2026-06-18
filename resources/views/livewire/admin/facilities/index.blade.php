@@ -7,10 +7,11 @@ use App\Models\FacilityPrice;
 use App\Models\FacilityType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{computed, layout, state, title};
+use function Livewire\Volt\{computed, layout, state, title, updated, usesPagination};
 
 layout('layouts.app');
 title('Facility Management - Olaer Spring Resort');
+usesPagination();
 
 state([
     'search' => '',
@@ -89,7 +90,7 @@ $facilities = computed(function () {
             $query->where('facility_status', $this->statusFilter);
         })
         ->orderBy($sortField, $sortDirection)
-        ->get();
+        ->paginate(10);
 });
 
 $sortBy = function (string $field): void {
@@ -106,12 +107,26 @@ $sortBy = function (string $field): void {
 
     if ($this->sortField === $field) {
         $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        $this->resetPage();
         return;
     }
 
     $this->sortField = $field;
     $this->sortDirection = 'asc';
+    $this->resetPage();
 };
+
+updated([
+    'search' => function (): void {
+        $this->resetPage();
+    },
+    'typeFilter' => function (): void {
+        $this->resetPage();
+    },
+    'statusFilter' => function (): void {
+        $this->resetPage();
+    },
+]);
 
 $createNew = function (): void {
     $this->resetForm();
@@ -525,6 +540,10 @@ $getStatusBadgeClass = function (string $status): string {
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                    <flux:pagination :paginator="$this->facilities" />
                 </div>
             </div>
         </section>
