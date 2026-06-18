@@ -3,10 +3,11 @@
 use App\Models\Amenity;
 use App\Models\AmenityName;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{computed, layout, state, title};
+use function Livewire\Volt\{computed, layout, state, title, updated, usesPagination};
 
 layout('layouts.app');
 title('Amenity Management - Olaer Spring Resort');
+usesPagination();
 
 state([
     'search' => '',
@@ -25,7 +26,7 @@ $amenities = computed(function () {
     $search = trim($this->search);
     $sortDirection = $this->sortDirection === 'desc' ? 'desc' : 'asc';
 
-    $amenities = Amenity::query()
+    $query = Amenity::query()
         ->with('amenityName')
         ->withCount([
             'facilityAmenities',
@@ -46,26 +47,22 @@ $amenities = computed(function () {
         })
         ->when($this->typeFilter !== '', function ($query) {
             $query->where('amenity_type', $this->typeFilter);
-        })
-        ->get();
+        });
 
-    return match ($this->sortField) {
-        'amenity_description' => $sortDirection === 'asc'
-            ? $amenities->sortBy('amenity_description', SORT_NATURAL | SORT_FLAG_CASE)->values()
-            : $amenities->sortByDesc('amenity_description', SORT_NATURAL | SORT_FLAG_CASE)->values(),
-        'amenity_type' => $sortDirection === 'asc'
-            ? $amenities->sortBy('amenity_type', SORT_NATURAL | SORT_FLAG_CASE)->values()
-            : $amenities->sortByDesc('amenity_type', SORT_NATURAL | SORT_FLAG_CASE)->values(),
-        'amenity_price' => $sortDirection === 'asc'
-            ? $amenities->sortBy(fn (Amenity $amenity) => (float) $amenity->amenity_price)->values()
-            : $amenities->sortByDesc(fn (Amenity $amenity) => (float) $amenity->amenity_price)->values(),
-        'usage' => $sortDirection === 'asc'
-            ? $amenities->sortBy(fn (Amenity $amenity) => $amenity->facility_amenities_count + $amenity->amenity_request_details_count + $amenity->fines_count)->values()
-            : $amenities->sortByDesc(fn (Amenity $amenity) => $amenity->facility_amenities_count + $amenity->amenity_request_details_count + $amenity->fines_count)->values(),
-        default => $sortDirection === 'asc'
-            ? $amenities->sortBy(fn (Amenity $amenity) => $amenity->amenityName?->amenity_name ?? '', SORT_NATURAL | SORT_FLAG_CASE)->values()
-            : $amenities->sortByDesc(fn (Amenity $amenity) => $amenity->amenityName?->amenity_name ?? '', SORT_NATURAL | SORT_FLAG_CASE)->values(),
+    match ($this->sortField) {
+        'amenity_description', 'amenity_type', 'amenity_price' => $query->orderBy($this->sortField, $sortDirection),
+        'usage' => $query->orderByRaw('(facility_amenities_count + amenity_request_details_count + fines_count) ' . $sortDirection),
+        default => $query->orderBy(
+            AmenityName::query()
+                ->select('amenity_name')
+                ->whereColumn('tbl_amenity_name.amenity_name_id', 'tbl_amenity.amenity_name_id'),
+            $sortDirection,
+        ),
     };
+
+    return $query
+        ->orderBy('amenity_id')
+        ->paginate(5);
 });
 
 $createNew = function (): void {
@@ -111,12 +108,23 @@ $sortBy = function (string $field): void {
 
     if ($this->sortField === $field) {
         $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        $this->resetPage();
         return;
     }
 
     $this->sortField = $field;
     $this->sortDirection = 'asc';
+    $this->resetPage();
 };
+
+updated([
+    'search' => function (): void {
+        $this->resetPage();
+    },
+    'typeFilter' => function (): void {
+        $this->resetPage();
+    },
+]);
 
 $save = function (): void {
     $validated = $this->validate([
@@ -353,6 +361,10 @@ $getUsageSummary = function (Amenity $amenity): string {
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                    <flux:pagination :paginator="$this->amenities" />
                 </div>
             </div>
         </section>

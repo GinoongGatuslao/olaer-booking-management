@@ -90,7 +90,7 @@ $facilities = computed(function () {
             $query->where('facility_status', $this->statusFilter);
         })
         ->orderBy($sortField, $sortDirection)
-        ->paginate(10);
+        ->paginate(5);
 });
 
 $sortBy = function (string $field): void {
