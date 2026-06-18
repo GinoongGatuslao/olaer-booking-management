@@ -24,8 +24,7 @@ Volt::route('/dashboard', 'dashboard')
     ->middleware(['auth', 'active'])
     ->name('dashboard');
 
-
-//Admin Routes
+// Admin Routes
 Volt::route('/admin/dashboard', 'admin.dashboard')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.dashboard');
@@ -54,19 +53,25 @@ Volt::route('/admin/users', 'admin.users.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.users.index');
 
-//Cashier Routes
+// Cashier Routes
 Volt::route('/cashier/dashboard', 'cashier.dashboard')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.dashboard');
 
+Volt::route('/cashier/entrance-slips', 'cashier.entrance-slips.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.entrance-slips.index');
 
-//Maintenance Staff Routes
+// Maintenance Staff Routes
 Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.dashboard');
 
-
-//Security Guard Routes
+// Security Guard Routes
 Volt::route('/security/dashboard', 'security.dashboard')
     ->middleware(['auth', 'active', 'role:Security Guard'])
     ->name('security.dashboard');
+
+Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
+    ->middleware(['auth', 'active', 'role:Security Guard'])
+    ->name('security.entrance-slips.create');
