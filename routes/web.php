@@ -62,6 +62,21 @@ Volt::route('/cashier/entrance-slips', 'cashier.entrance-slips.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.entrance-slips.index');
 
+Volt::route('/cashier/reservations', 'cashier.reservations.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.reservations.index');
+
+Volt::route('/cashier/bookings', 'cashier.bookings.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.bookings.index');
+
+Volt::route('/cashier/check-ins', 'cashier.check-ins.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.check-ins.index');
+
+Volt::route('/cashier/check-outs', 'cashier.check-outs.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.check-outs.index');
 // Maintenance Staff Routes
 Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
