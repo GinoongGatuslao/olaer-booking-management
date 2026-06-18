@@ -29,17 +29,9 @@ state([
 ]);
 
 $discounts = computed(function () {
-    $allowedSorts = [
-        'discount_name',
-        'discount_amount',
-        'discount_start',
-        'discount_end',
-        'status',
-    ];
+    $allowedSorts = ['discount_name', 'discount_amount', 'discount_start', 'discount_end', 'status'];
 
-    $sortField = in_array($this->sortField, $allowedSorts, true)
-        ? $this->sortField
-        : 'discount_name';
+    $sortField = in_array($this->sortField, $allowedSorts, true) ? $this->sortField : 'discount_name';
 
     $sortDirection = $this->sortDirection === 'desc' ? 'desc' : 'asc';
 
@@ -48,8 +40,7 @@ $discounts = computed(function () {
             $search = '%' . trim($this->search) . '%';
 
             $query->where(function ($query) use ($search) {
-                $query->where('discount_name', 'like', $search)
-                    ->orWhere('status', 'like', $search);
+                $query->where('discount_name', 'like', $search)->orWhere('status', 'like', $search);
             });
         })
         ->orderBy($sortField, $sortDirection)
@@ -57,15 +48,9 @@ $discounts = computed(function () {
 });
 
 $sortBy = function (string $field): void {
-    $allowedSorts = [
-        'discount_name',
-        'discount_amount',
-        'discount_start',
-        'discount_end',
-        'status',
-    ];
+    $allowedSorts = ['discount_name', 'discount_amount', 'discount_start', 'discount_end', 'status'];
 
-    if (! in_array($field, $allowedSorts, true)) {
+    if (!in_array($field, $allowedSorts, true)) {
         return;
     }
 
@@ -122,40 +107,38 @@ $resetForm = function (): void {
 };
 
 $save = function (): void {
-    $validated = $this->validate([
-        'editingId' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
-        'discountName' => ['required', 'string', 'max:50'],
-        'discountPercent' => ['required', 'integer', 'min:1', 'max:100'],
-        'discountStart' => ['nullable', 'date'],
-        'discountEnd' => ['nullable', 'date', 'after_or_equal:discountStart'],
-        'status' => ['required', Rule::in(['Active', 'Inactive'])],
-        'appToAdult' => ['boolean'],
-        'appToChildren' => ['boolean'],
-        'appToScPwd' => ['boolean'],
-        'appToCottage' => ['boolean'],
-        'appToRoom' => ['boolean'],
-        'appToFunctionHall' => ['boolean'],
-    ], [
-        'discountName.required' => 'Discount name is required.',
-        'discountName.max' => 'Discount name must not exceed 50 characters.',
-        'discountPercent.required' => 'Discount percentage is required.',
-        'discountPercent.integer' => 'Discount percentage must be a whole number.',
-        'discountPercent.min' => 'Discount percentage must be at least 1%.',
-        'discountPercent.max' => 'Discount percentage cannot exceed 100%.',
-        'discountStart.date' => 'Discount start must be a valid date and time.',
-        'discountEnd.date' => 'Discount end must be a valid date and time.',
-        'discountEnd.after_or_equal' => 'Discount end must be after or equal to discount start.',
-        'status.in' => 'Status must be Active or Inactive.',
-    ]);
+    $validated = $this->validate(
+        [
+            'editingId' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
+            'discountName' => ['required', 'string', 'max:50'],
+            'discountPercent' => ['required', 'integer', 'min:1', 'max:100'],
+            'discountStart' => ['nullable', 'date'],
+            'discountEnd' => ['nullable', 'date', 'after_or_equal:discountStart'],
+            'status' => ['required', Rule::in(['Active', 'Inactive'])],
+            'appToAdult' => ['boolean'],
+            'appToChildren' => ['boolean'],
+            'appToScPwd' => ['boolean'],
+            'appToCottage' => ['boolean'],
+            'appToRoom' => ['boolean'],
+            'appToFunctionHall' => ['boolean'],
+        ],
+        [
+            'discountName.required' => 'Discount name is required.',
+            'discountName.max' => 'Discount name must not exceed 50 characters.',
+            'discountPercent.required' => 'Discount percentage is required.',
+            'discountPercent.integer' => 'Discount percentage must be a whole number.',
+            'discountPercent.min' => 'Discount percentage must be at least 1%.',
+            'discountPercent.max' => 'Discount percentage cannot exceed 100%.',
+            'discountStart.date' => 'Discount start must be a valid date and time.',
+            'discountEnd.date' => 'Discount end must be a valid date and time.',
+            'discountEnd.after_or_equal' => 'Discount end must be after or equal to discount start.',
+            'status.in' => 'Status must be Active or Inactive.',
+        ],
+    );
 
-    $hasApplicability = $this->appToAdult
-        || $this->appToChildren
-        || $this->appToScPwd
-        || $this->appToCottage
-        || $this->appToRoom
-        || $this->appToFunctionHall;
+    $hasApplicability = $this->appToAdult || $this->appToChildren || $this->appToScPwd || $this->appToCottage || $this->appToRoom || $this->appToFunctionHall;
 
-    if (! $hasApplicability) {
+    if (!$hasApplicability) {
         $this->addError('applicability', 'Choose at least one category where this discount applies.');
         return;
     }
@@ -171,12 +154,8 @@ $save = function (): void {
         'app_to_cottage' => (bool) $validated['appToCottage'],
         'app_to_room' => (bool) $validated['appToRoom'],
         'app_to_function_hall' => (bool) $validated['appToFunctionHall'],
-        'discount_start' => filled($validated['discountStart'])
-            ? Carbon::parse($validated['discountStart'])->format('Y-m-d H:i:s')
-            : null,
-        'discount_end' => filled($validated['discountEnd'])
-            ? Carbon::parse($validated['discountEnd'])->format('Y-m-d H:i:s')
-            : null,
+        'discount_start' => filled($validated['discountStart']) ? Carbon::parse($validated['discountStart'])->format('Y-m-d H:i:s') : null,
+        'discount_end' => filled($validated['discountEnd']) ? Carbon::parse($validated['discountEnd'])->format('Y-m-d H:i:s') : null,
         'status' => $validated['status'],
     ];
 
@@ -240,21 +219,25 @@ $getSortIcon = function (string $field): string {
             </p>
         </div>
 
-        <a href="{{ route('admin.dashboard') }}" class="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
+        <a href="{{ route('admin.dashboard') }}"
+            class="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
             Back to dashboard
         </a>
     </div>
 
     @if (session('success'))
-        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
+        <div
+            class="rounded-xl border border-green-300 bg-green-100 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
             {{ session('success') }}
         </div>
     @endif
 
     <div class="grid gap-6 xl:grid-cols-3">
         <section class="xl:col-span-2">
-            <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div class="flex flex-col gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:items-end sm:justify-between">
+            <div
+                class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div
+                    class="flex flex-col gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h2 class="font-semibold">Discount list</h2>
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -263,42 +246,44 @@ $getSortIcon = function (string $field): string {
                     </div>
 
                     <div class="w-full sm:w-72">
-                        <flux:input
-                            wire:model.live.debounce.300ms="search"
-                            label="Search"
-                            placeholder="Name or status"
-                            clearable
-                        />
+                        <flux:input wire:model.live.debounce.300ms="search" label="Search" placeholder="Name or status"
+                            clearable />
                     </div>
                 </div>
 
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-zinc-200 text-left text-sm dark:divide-zinc-800">
-                        <thead class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-950/60 dark:text-zinc-400">
+                        <thead
+                            class="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-950/60 dark:text-zinc-400">
                             <tr>
                                 <th class="px-5 py-3 font-semibold">
-                                    <button type="button" wire:click="sortBy('discount_name')" class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
+                                    <button type="button" wire:click="sortBy('discount_name')"
+                                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
                                         Name <span>{{ $this->getSortIcon('discount_name') }}</span>
                                     </button>
                                 </th>
                                 <th class="px-5 py-3 font-semibold">
-                                    <button type="button" wire:click="sortBy('discount_amount')" class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
+                                    <button type="button" wire:click="sortBy('discount_amount')"
+                                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
                                         Discount <span>{{ $this->getSortIcon('discount_amount') }}</span>
                                     </button>
                                 </th>
                                 <th class="px-5 py-3 font-semibold">Applies to</th>
                                 <th class="px-5 py-3 font-semibold">
-                                    <button type="button" wire:click="sortBy('discount_start')" class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
+                                    <button type="button" wire:click="sortBy('discount_start')"
+                                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
                                         Start <span>{{ $this->getSortIcon('discount_start') }}</span>
                                     </button>
                                 </th>
                                 <th class="px-5 py-3 font-semibold">
-                                    <button type="button" wire:click="sortBy('discount_end')" class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
+                                    <button type="button" wire:click="sortBy('discount_end')"
+                                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
                                         End <span>{{ $this->getSortIcon('discount_end') }}</span>
                                     </button>
                                 </th>
                                 <th class="px-5 py-3 font-semibold">
-                                    <button type="button" wire:click="sortBy('status')" class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
+                                    <button type="button" wire:click="sortBy('status')"
+                                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-white">
                                         Status <span>{{ $this->getSortIcon('status') }}</span>
                                     </button>
                                 </th>
@@ -324,17 +309,14 @@ $getSortIcon = function (string $field): string {
                                         {{ $discount->discount_end?->format('M d, Y h:i A') ?? 'No end' }}
                                     </td>
                                     <td class="px-5 py-4">
-                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium {{ $discount->status === 'Active' ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20 dark:bg-green-950/40 dark:text-green-300' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-600/10 dark:bg-zinc-800 dark:text-zinc-300' }}">
+                                        <span
+                                            class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium {{ $discount->status === 'Active' ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20 dark:bg-green-950/40 dark:text-green-300' : 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-600/10 dark:bg-zinc-800 dark:text-zinc-300' }}">
                                             {{ $discount->status }}
                                         </span>
                                     </td>
                                     <td class="px-5 py-4 text-right">
-                                        <flux:button
-                                            type="button"
-                                            size="sm"
-                                            variant="subtle"
-                                            wire:click="startEditing({{ $discount->discount_id }})"
-                                        >
+                                        <flux:button type="button" size="sm" variant="subtle"
+                                            wire:click="startEditing({{ $discount->discount_id }})">
                                             Edit
                                         </flux:button>
                                     </td>
@@ -353,7 +335,8 @@ $getSortIcon = function (string $field): string {
         </section>
 
         <section>
-            <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div
+                class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h2 class="font-semibold">{{ $editingId ? 'Edit discount' : 'Create discount' }}</h2>
@@ -368,48 +351,33 @@ $getSortIcon = function (string $field): string {
                 </div>
 
                 <form wire:submit="save" class="mt-5 space-y-4">
-                    <flux:input
-                        wire:model="discountName"
-                        label="Discount name"
-                        placeholder="Christmas Promo"
-                    />
+                    <flux:input wire:model="discountName" label="Discount name" placeholder="Christmas Promo" />
                     @error('discountName')
                         <p class="-mt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
 
-                    <flux:input
-                        wire:model="discountPercent"
-                        type="number"
-                        step="1"
-                        min="1"
-                        max="100"
-                        label="Discount percentage"
-                        placeholder="10"
-                    />
+                    <flux:input wire:model="discountPercent" type="number" step="1" min="1" max="100"
+                        label="Discount percentage" placeholder="10" />
                     @error('discountPercent')
                         <p class="-mt-3 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
 
                     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Start date and time</label>
-                            <input
-                                wire:model="discountStart"
-                                type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
-                            />
+                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Start date
+                                and time</label>
+                            <input wire:model="discountStart" type="datetime-local"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white" />
                             @error('discountStart')
                                 <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                             @enderror
                         </div>
 
                         <div>
-                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">End date and time</label>
-                            <input
-                                wire:model="discountEnd"
-                                type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
-                            />
+                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">End date and
+                                time</label>
+                            <input wire:model="discountEnd" type="datetime-local"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white" />
                             @error('discountEnd')
                                 <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                             @enderror
@@ -418,10 +386,8 @@ $getSortIcon = function (string $field): string {
 
                     <div>
                         <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</label>
-                        <select
-                            wire:model="status"
-                            class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
-                        >
+                        <select wire:model="status"
+                            class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white">
                             <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
                         </select>
@@ -433,33 +399,45 @@ $getSortIcon = function (string $field): string {
                     <div>
                         <p class="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">Applies to</p>
                         <div class="grid gap-2 text-sm text-zinc-700 dark:text-zinc-300 sm:grid-cols-2">
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToAdult" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToAdult" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Adults
                             </label>
 
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToChildren" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToChildren" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Children
                             </label>
 
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToScPwd" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToScPwd" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Senior/PWD
                             </label>
 
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToCottage" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToCottage" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Cottages
                             </label>
 
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToRoom" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToRoom" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Rooms
                             </label>
 
-                            <label class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                                <input wire:model="appToFunctionHall" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
+                            <label
+                                class="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                                <input wire:model="appToFunctionHall" type="checkbox"
+                                    class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-700" />
                                 Function Halls
                             </label>
                         </div>

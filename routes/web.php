@@ -37,6 +37,10 @@ Volt::route('/admin/entrance-fees', 'admin.entrance-fees.index')
 Volt::route('/admin/discounts', 'admin.discounts.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.discounts.index');
+
+Volt::route('/admin/facilities', 'admin.facilities.index')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.facilities.index');
 //Cashier Routes
 Volt::route('/cashier/dashboard', 'cashier.dashboard')
     ->middleware(['auth', 'active', 'role:Cashier'])
