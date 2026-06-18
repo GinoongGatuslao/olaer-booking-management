@@ -3,45 +3,68 @@
 use App\Models\Address;
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{computed, layout, state, title};
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Component;
 
-layout('layouts.app');
-title('User Management - Olaer Spring Resort');
+new #[Layout('layouts.app'), Title('User Management - Olaer Spring Resort')] class extends Component {
+    public string $search = '';
 
-state([
-    'search' => '',
-    'roleFilter' => '',
-    'statusFilter' => '',
-    'sortField' => 'full_name',
-    'sortDirection' => 'asc',
+    public string $roleFilter = '';
 
-    'editingUserId' => null,
-    'firstName' => '',
-    'middleName' => '',
-    'lastName' => '',
-    'username' => '',
-    'email' => '',
-    'contactNo' => '',
-    'status' => 'Active',
-    'roleId' => '',
-    'province' => '',
-    'city' => '',
-    'barangay' => '',
-    'purok' => '',
-    'password' => '',
-    'passwordConfirmation' => '',
-]);
+    public string $statusFilter = '';
 
-$roles = computed(function () {
+    public string $sortField = 'full_name';
+
+    public string $sortDirection = 'asc';
+
+    public ?int $editingUserId = null;
+
+    public string $firstName = '';
+
+    public string $middleName = '';
+
+    public string $lastName = '';
+
+    public string $username = '';
+
+    public string $email = '';
+
+    public string $contactNo = '';
+
+    public string $status = 'Active';
+
+    public string $roleId = '';
+
+    public string $province = '';
+
+    public string $city = '';
+
+    public string $barangay = '';
+
+    public string $purok = '';
+
+    public string $password = '';
+
+    public string $passwordConfirmation = '';
+
+    #[Computed]
+    public function roles(): EloquentCollection
+    {
     return Role::query()
         ->orderBy('role_name')
         ->get();
-});
+    }
 
-$users = computed(function () {
+    #[Computed]
+    public function users(): Collection
+    {
     $search = trim($this->search);
     $sortDirection = $this->sortDirection === 'desc' ? 'desc' : 'asc';
 
@@ -97,13 +120,15 @@ $users = computed(function () {
             ? $users->sortBy(fn (User $user) => $this->getFullName($user), SORT_NATURAL | SORT_FLAG_CASE)->values()
             : $users->sortByDesc(fn (User $user) => $this->getFullName($user), SORT_NATURAL | SORT_FLAG_CASE)->values(),
     };
-});
+    }
 
-$createNewUser = function (): void {
+    public function createNewUser(): void
+    {
     $this->resetForm();
-};
+    }
 
-$startEditingUser = function (int $userId): void {
+    public function startEditingUser(int $userId): void
+    {
     $user = User::query()
         ->with(['address', 'role'])
         ->findOrFail($userId);
@@ -125,9 +150,10 @@ $startEditingUser = function (int $userId): void {
     $this->passwordConfirmation = '';
 
     $this->resetValidation();
-};
+    }
 
-$resetForm = function (): void {
+    public function resetForm(): void
+    {
     $this->editingUserId = null;
     $this->firstName = '';
     $this->middleName = '';
@@ -145,9 +171,10 @@ $resetForm = function (): void {
     $this->passwordConfirmation = '';
 
     $this->resetValidation();
-};
+    }
 
-$sortBy = function (string $field): void {
+    public function sortBy(string $field): void
+    {
     $allowedSorts = [
         'full_name',
         'username',
@@ -168,9 +195,10 @@ $sortBy = function (string $field): void {
 
     $this->sortField = $field;
     $this->sortDirection = 'asc';
-};
+    }
 
-$saveUser = function (): void {
+    public function saveUser(): void
+    {
     $validated = $this->validate([
         'editingUserId' => ['nullable', 'integer', 'exists:tbl_user,user_id'],
         'firstName' => ['required', 'string', 'max:50'],
@@ -281,9 +309,10 @@ $saveUser = function (): void {
 
     session()->flash('success', $this->editingUserId ? 'User account updated successfully.' : 'User account created successfully.');
     $this->resetForm();
-};
+    }
 
-$toggleStatus = function (int $userId): void {
+    public function toggleStatus(int $userId): void
+    {
     if ((int) $userId === (int) Auth::id()) {
         session()->flash('error', 'You cannot activate/deactivate your own account while logged in.');
         return;
@@ -295,17 +324,19 @@ $toggleStatus = function (int $userId): void {
     ]);
 
     session()->flash('success', $user->full_name . ' is now ' . $user->status . '.');
-};
+    }
 
-$getFullName = function (User $user): string {
+    public function getFullName(User $user): string
+    {
     return trim(implode(' ', array_filter([
         $user->first_name,
         $user->middle_name,
         $user->last_name,
     ])));
-};
+    }
 
-$getAddressLine = function (User $user): string {
+    public function getAddressLine(User $user): string
+    {
     if (! $user->address) {
         return 'No address set';
     }
@@ -316,25 +347,28 @@ $getAddressLine = function (User $user): string {
         $user->address->city,
         $user->address->province,
     ])));
-};
+    }
 
-$getSortIcon = function (string $field): string {
+    public function getSortIcon(string $field): string
+    {
     if ($this->sortField !== $field) {
         return '↕';
     }
 
     return $this->sortDirection === 'asc' ? '↑' : '↓';
-};
+    }
 
-$getStatusBadgeClass = function (string $status): string {
+    public function getStatusBadgeClass(string $status): string
+    {
     return match ($status) {
         'Active' => 'bg-green-50 text-green-700 ring-1 ring-green-600/20 dark:bg-green-950/40 dark:text-green-300',
         'Inactive' => 'bg-red-50 text-red-700 ring-1 ring-red-600/20 dark:bg-red-950/40 dark:text-red-300',
         default => 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-600/10 dark:bg-zinc-800 dark:text-zinc-300',
     };
-};
+    }
 
-$getRoleBadgeClass = function (?string $roleName): string {
+    public function getRoleBadgeClass(?string $roleName): string
+    {
     return match ($roleName) {
         'Admin' => 'bg-zinc-900 text-white ring-1 ring-zinc-700 dark:bg-white dark:text-zinc-900',
         'Manager' => 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20 dark:bg-indigo-950/40 dark:text-indigo-300',
@@ -343,6 +377,7 @@ $getRoleBadgeClass = function (?string $roleName): string {
         'Security Guard' => 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 dark:bg-emerald-950/40 dark:text-emerald-300',
         default => 'bg-zinc-100 text-zinc-700 ring-1 ring-zinc-600/10 dark:bg-zinc-800 dark:text-zinc-300',
     };
+    }
 };
 
 ?>
@@ -507,7 +542,7 @@ $getRoleBadgeClass = function (?string $roleName): string {
                                                 variant="subtle"
                                                 wire:click="toggleStatus({{ $user->user_id }})"
                                                 wire:confirm="{{ $user->status === 'Active' ? 'Deactivate this account?' : 'Activate this account?' }}"
-                                                @disabled((int) $user->user_id === (int) auth()->id())
+                                                :disabled="(int) $user->user_id === (int) auth()->id()"
                                             >
                                                 {{ $user->status === 'Active' ? 'Deactivate' : 'Activate' }}
                                             </flux:button>
