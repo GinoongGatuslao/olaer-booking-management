@@ -224,7 +224,7 @@ new #[Layout('layouts.app'), Title('User Management - Olaer Spring Resort')] cla
         'barangay' => ['nullable', 'string', 'max:50'],
         'purok' => ['nullable', 'string', 'max:50'],
         'password' => [$this->editingUserId ? 'nullable' : 'required', 'string', 'min:8', 'max:255'],
-        'passwordConfirmation' => [$this->editingUserId || $this->password !== '' ? 'required' : 'nullable', 'same:password'],
+        'passwordConfirmation' => [! $this->editingUserId || $this->password !== '' ? 'required' : 'nullable', 'same:password'],
     ], [
         'firstName.required' => 'First name is required.',
         'lastName.required' => 'Last name is required.',
@@ -643,8 +643,8 @@ new #[Layout('layouts.app'), Title('User Management - Olaer Spring Resort')] cla
                         </p>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:input wire:model="password" type="password" label="Password" autocomplete="new-password" />
-                            <flux:input wire:model="passwordConfirmation" type="password" label="Confirm password" autocomplete="new-password" />
+                            <flux:input wire:model="password" type="password" label="Password" autocomplete="new-password" viewable />
+                            <flux:input wire:model="passwordConfirmation" type="password" label="Confirm password" autocomplete="new-password" viewable />
                         </div>
                     </div>
 
