@@ -21,6 +21,7 @@ class GuestFine extends Model
         'facility_id',
         'total_charge',
         'date_checked',
+        'reported_by_user_id',
     ];
 
     protected function casts(): array
@@ -45,5 +46,10 @@ class GuestFine extends Model
     public function facility(): BelongsTo
     {
         return $this->belongsTo(Facility::class, 'facility_id', 'facility_id');
+    }
+
+    public function reportedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reported_by_user_id', 'user_id');
     }
 }

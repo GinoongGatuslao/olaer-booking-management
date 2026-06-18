@@ -87,6 +87,10 @@ class BookingWorkflowService
                 'status' => 'Booked',
                 'discount_id' => $discountId,
                 'user_id' => (int) $data['user_id'],
+                'base_price' => $quote['base_price'],
+                'discount_amount' => $quote['discount_amount'],
+                'extra_guest_fee' => $quote['extra_guest_fee'],
+                'line_total' => $quote['total'],
             ]);
 
             foreach ($extraGuests as $extraGuest) {
@@ -166,9 +170,15 @@ class BookingWorkflowService
             $newPrice = $this->quoteService->priceForFacilityRate($newFacilityId, (string) $detail->rate_type);
             $upgradeCharge = max(0, round($newPrice - $oldPrice, 2));
 
+            $newLineTotal = $detail->line_total !== null
+                ? round((float) $detail->line_total + $upgradeCharge, 2)
+                : null;
+
             $detail->update([
                 'facility_id' => $newFacilityId,
                 'status' => 'Transferred',
+                'base_price' => $detail->base_price !== null ? round((float) $detail->base_price + $upgradeCharge, 2) : null,
+                'line_total' => $newLineTotal,
             ]);
 
             if ($upgradeCharge > 0) {
@@ -194,12 +204,15 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('Only Day Rate cottage bookings can be extended using this rule.');
             }
 
+            $charge = BookingQuoteService::COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE;
+
             $detail->update([
                 'rate_type' => 'Day + Night Extension',
                 'status' => 'Extended',
+                'extra_guest_fee' => round((float) ($detail->extra_guest_fee ?? 0) + $charge, 2),
+                'line_total' => $detail->line_total !== null ? round((float) $detail->line_total + $charge, 2) : null,
             ]);
 
-            $charge = BookingQuoteService::COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE;
             $detail->booking->increment('total_price', $charge);
             $detail->booking->increment('amount_due', $charge);
         });

@@ -21,12 +21,16 @@ class AmenityRequestDetail extends Model
         'facility_id',
         'amenity_id',
         'amenity_quantity',
+        'unit_price',
+        'line_total',
     ];
 
     protected function casts(): array
     {
         return [
             'amenity_quantity' => 'integer',
+            'unit_price' => 'decimal:2',
+            'line_total' => 'decimal:2',
         ];
     }
 

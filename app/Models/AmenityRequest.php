@@ -21,6 +21,9 @@ class AmenityRequest extends Model
         'total_price',
         'date_created',
         'user_id',
+        'assigned_to_user_id',
+        'delivered_at',
+        'cancelled_at',
     ];
 
     protected function casts(): array
@@ -28,6 +31,8 @@ class AmenityRequest extends Model
         return [
             'total_price' => 'decimal:2',
             'date_created' => 'date',
+            'delivered_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -36,9 +41,20 @@ class AmenityRequest extends Model
         return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }
 
+    /**
+     * The staff account that created the request.
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
+
+    /**
+     * Maintenance staff assigned to deliver the request.
+     */
+    public function assignedTo(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to_user_id', 'user_id');
     }
 
     public function details(): HasMany

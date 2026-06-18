@@ -26,6 +26,10 @@ class BookingDetail extends Model
         'status',
         'discount_id',
         'user_id',
+        'base_price',
+        'discount_amount',
+        'extra_guest_fee',
+        'line_total',
     ];
 
     protected function casts(): array
@@ -33,6 +37,10 @@ class BookingDetail extends Model
         return [
             'check_in_date' => 'date',
             'check_out_date' => 'date',
+            'base_price' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
+            'extra_guest_fee' => 'decimal:2',
+            'line_total' => 'decimal:2',
         ];
     }
 

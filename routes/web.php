@@ -77,10 +77,31 @@ Volt::route('/cashier/check-ins', 'cashier.check-ins.index')
 Volt::route('/cashier/check-outs', 'cashier.check-outs.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.check-outs.index');
+
+Volt::route('/cashier/payments', 'cashier.payments.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.payments.index');
+
+Volt::route('/cashier/amenity-requests', 'cashier.amenity-requests.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.amenity-requests.index');
+
+Volt::route('/cashier/billings', 'cashier.billings.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.billings.index');
+
 // Maintenance Staff Routes
 Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.dashboard');
+
+Volt::route('/maintenance/facility-inspections', 'maintenance.facility-inspections.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.facility-inspections.index');
+
+Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.amenity-requests.index');
 
 // Security Guard Routes
 Volt::route('/security/dashboard', 'security.dashboard')

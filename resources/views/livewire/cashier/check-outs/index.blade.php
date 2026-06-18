@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BookingDetail;
-use App\Models\Fine;
+use App\Models\FacilityInspection;
 use App\Models\GuestFine;
 use App\Services\CheckOutWorkflowService;
 use Illuminate\Database\Eloquent\Collection;
@@ -23,17 +23,12 @@ new class extends Component {
     public string $selectedLabel = '';
     public float $selectedBookingAmountDue = 0.00;
 
-    public ?int $fineId = null;
-    public ?int $fineFacilityId = null;
-    public int $fineQuantity = 1;
-
     public function with(): array
     {
         return [
             'bookingDetails' => $this->bookingDetails(),
-            'fines' => $this->fines(),
             'selectedGuestFines' => $this->selectedGuestFines(),
-            'selectedBookingFacilities' => $this->selectedBookingFacilities(),
+            'selectedInspection' => $this->selectedInspection(),
         ];
     }
 
@@ -69,7 +64,7 @@ new class extends Component {
     public function selectCheckOut(int $bookingDetailsId): void
     {
         $detail = BookingDetail::query()
-            ->with(['booking.guest', 'booking.details.facility', 'facility'])
+            ->with(['booking.guest', 'facility'])
             ->findOrFail($bookingDetailsId);
 
         $guest = $detail->booking->guest;
@@ -79,9 +74,6 @@ new class extends Component {
         $this->selectedBookingId = (int) $detail->booking_id;
         $this->selectedBookingAmountDue = (float) $detail->booking->amount_due;
         $this->selectedLabel = $detail->booking->b_ref_no . ' - ' . $guest->first_name . ' ' . $guest->last_name . ' - ' . $facilityName;
-        $this->fineId = null;
-        $this->fineFacilityId = $detail->facility_id !== null ? (int) $detail->facility_id : null;
-        $this->fineQuantity = 1;
     }
 
     public function cancelSelection(): void
@@ -90,35 +82,6 @@ new class extends Component {
         $this->selectedBookingId = null;
         $this->selectedLabel = '';
         $this->selectedBookingAmountDue = 0.00;
-        $this->fineId = null;
-        $this->fineFacilityId = null;
-        $this->fineQuantity = 1;
-    }
-
-    public function addFine(CheckOutWorkflowService $checkOutWorkflow): void
-    {
-        $validated = $this->validate([
-            'selectedBookingDetailsId' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
-            'fineId' => ['required', 'integer', 'exists:tbl_fine,fine_id'],
-            'fineFacilityId' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'fineQuantity' => ['required', 'integer', 'min:1', 'max:100'],
-        ]);
-
-        try {
-            $checkOutWorkflow->recordFineForBookingDetail(
-                (int) $validated['selectedBookingDetailsId'],
-                (int) $validated['fineId'],
-                (int) $validated['fineFacilityId'],
-                (int) $validated['fineQuantity']
-            );
-
-            $this->refreshSelectedAmountDue();
-            $this->fineId = null;
-            $this->fineQuantity = 1;
-            session()->flash('success', 'Fine recorded. The guest balance was updated.');
-        } catch (\Throwable $exception) {
-            $this->addError('checkOut', $exception->getMessage());
-        }
     }
 
     public function confirmCheckOut(CheckOutWorkflowService $checkOutWorkflow): void
@@ -135,13 +98,13 @@ new class extends Component {
 
             $this->cancelSelection();
             $this->resetPage();
-            session()->flash('success', 'Guest checked out successfully.');
+            session()->flash('success', 'Guest checked out successfully. Facility is now available.');
         } catch (\Throwable $exception) {
             $this->addError('checkOut', $exception->getMessage());
         }
     }
 
-    public function formatFineLabel(?Fine $fine): string
+    public function formatFineLabel(?\App\Models\Fine $fine): string
     {
         if ($fine === null) {
             return 'Unknown fine';
@@ -167,20 +130,13 @@ new class extends Component {
         return (string) $fine->situational_fine . ' - ' . $charge;
     }
 
-    private function refreshSelectedAmountDue(): void
+    public function sortIndicator(string $field): string
     {
-        if ($this->selectedBookingDetailsId === null) {
-            $this->selectedBookingAmountDue = 0.00;
-            return;
+        if ($this->sortField !== $field) {
+            return '';
         }
 
-        $detail = BookingDetail::query()
-            ->with('booking')
-            ->find($this->selectedBookingDetailsId);
-
-        $this->selectedBookingAmountDue = $detail !== null && $detail->booking !== null
-            ? (float) $detail->booking->amount_due
-            : 0.00;
+        return $this->sortDirection === 'asc' ? '↑' : '↓';
     }
 
     private function bookingDetails(): LengthAwarePaginator
@@ -231,54 +187,36 @@ new class extends Component {
         return $query->paginate(10);
     }
 
-    private function fines(): Collection
-    {
-        return Fine::query()
-            ->with(['amenity.amenityName', 'damageType'])
-            ->orderBy('fine_type')
-            ->orderBy('fine_id')
-            ->get();
-    }
-
     private function selectedGuestFines(): Collection
     {
         if ($this->selectedBookingId === null) {
             return new Collection();
         }
 
+        $detail = BookingDetail::query()->find($this->selectedBookingDetailsId);
+
+        if ($detail === null) {
+            return new Collection();
+        }
+
         return GuestFine::query()
-            ->with(['fine.amenity.amenityName', 'fine.damageType', 'facility'])
+            ->with(['fine.amenity.amenityName', 'fine.damageType', 'facility', 'reportedBy'])
             ->where('booking_id', $this->selectedBookingId)
+            ->where('facility_id', $detail->facility_id)
             ->latest('guest_fine_id')
             ->get();
     }
 
-    private function selectedBookingFacilities(): array
+    private function selectedInspection(): ?FacilityInspection
     {
-        if ($this->selectedBookingId === null) {
-            return [];
+        if ($this->selectedBookingDetailsId === null) {
+            return null;
         }
 
-        $details = BookingDetail::query()
-            ->with('facility')
-            ->where('booking_id', $this->selectedBookingId)
-            ->whereNotNull('facility_id')
-            ->get();
-
-        $facilities = [];
-
-        foreach ($details as $detail) {
-            if ($detail->facility === null) {
-                continue;
-            }
-
-            $facilities[] = [
-                'facility_id' => (int) $detail->facility_id,
-                'label' => (string) $detail->facility->facility_name,
-            ];
-        }
-
-        return $facilities;
+        return FacilityInspection::query()
+            ->with('inspectedBy')
+            ->where('booking_details_id', $this->selectedBookingDetailsId)
+            ->first();
     }
 };
 ?>
@@ -287,7 +225,7 @@ new class extends Component {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Cashier Check-out</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Inspect checked-in guests, record fines when needed, and release facilities after the bill is settled.</p>
+            <p class="text-sm text-zinc-600 dark:text-zinc-400">Verify maintenance inspection and payment status before releasing the facility.</p>
         </div>
     </div>
 
@@ -312,136 +250,114 @@ new class extends Component {
                     <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
                         Current balance: <span class="font-semibold">₱{{ number_format($selectedBookingAmountDue, 2) }}</span>
                     </p>
+
+                    @if ($selectedInspection === null)
+                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Maintenance inspection required before check-out.</p>
+                    @else
+                        <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                            Inspection: <span class="font-semibold">{{ $selectedInspection->inspection_status }}</span>
+                            by {{ $selectedInspection->inspectedBy?->first_name }} {{ $selectedInspection->inspectedBy?->last_name }}
+                            @if ($selectedInspection->inspected_at)
+                                on {{ $selectedInspection->inspected_at->format('M d, Y h:i A') }}
+                            @endif
+                        </p>
+                        @if ($selectedInspection->remarks)
+                            <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">Remarks: {{ $selectedInspection->remarks }}</p>
+                        @endif
+                    @endif
+
                     @if ($selectedBookingAmountDue > 0)
-                        <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">Settle this balance in the Payment module before check-out.</p>
+                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Settle this balance in the Payment module before check-out.</p>
                     @endif
                 </div>
 
                 <div class="flex gap-2">
-                    @if ($selectedBookingAmountDue <= 0)
+                    @if ($selectedInspection !== null && $selectedBookingAmountDue <= 0)
                         <flux:button variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
                     @else
-                        <flux:button variant="primary" disabled>Payment Required</flux:button>
+                        <flux:button variant="primary" disabled>Not Ready</flux:button>
                     @endif
                     <flux:button variant="ghost" wire:click="cancelSelection">Cancel</flux:button>
                 </div>
             </div>
 
-            <div class="mt-4 grid gap-3 lg:grid-cols-4">
-                <flux:select label="Fine" wire:model.live="fineId">
-                    <option value="">Select fine</option>
-                    @foreach ($fines as $fine)
-                        <option value="{{ $fine->fine_id }}">{{ $this->formatFineLabel($fine) }}</option>
-                    @endforeach
-                </flux:select>
-
-                <flux:select label="Facility" wire:model.live="fineFacilityId">
-                    <option value="">Select facility</option>
-                    @foreach ($selectedBookingFacilities as $facility)
-                        <option value="{{ $facility['facility_id'] }}">{{ $facility['label'] }}</option>
-                    @endforeach
-                </flux:select>
-
-                <flux:input label="Quantity" type="number" min="1" wire:model.live="fineQuantity" />
-
-                <div class="flex items-end">
-                    <flux:button wire:click="addFine">Record Fine</flux:button>
-                </div>
-            </div>
-
-            @if ($selectedGuestFines->isNotEmpty())
-                <div class="mt-4 overflow-hidden rounded-lg border border-amber-200 bg-white dark:border-amber-900 dark:bg-zinc-900">
-                    <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                        <thead class="bg-zinc-50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
+            <div class="mt-4">
+                <h2 class="text-sm font-semibold text-amber-950 dark:text-amber-50">Fines reported by maintenance</h2>
+                <div class="mt-2 overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-900">
+                    <table class="min-w-full divide-y divide-amber-200 text-sm dark:divide-amber-900">
+                        <thead>
                             <tr>
-                                <th class="px-3 py-2">Fine</th>
-                                <th class="px-3 py-2">Facility</th>
-                                <th class="px-3 py-2">Qty</th>
-                                <th class="px-3 py-2">Charge</th>
-                                <th class="px-3 py-2">Date Checked</th>
+                                <th class="px-3 py-2 text-left">Fine</th>
+                                <th class="px-3 py-2 text-left">Qty</th>
+                                <th class="px-3 py-2 text-left">Charge</th>
+                                <th class="px-3 py-2 text-left">Reported by</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                            @foreach ($selectedGuestFines as $guestFine)
+                        <tbody class="divide-y divide-amber-200 dark:divide-amber-900">
+                            @forelse ($selectedGuestFines as $guestFine)
                                 <tr>
-                                    <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300">{{ $this->formatFineLabel($guestFine->fine) }}</td>
-                                    <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300">{{ $guestFine->facility !== null ? $guestFine->facility->facility_name : 'No facility' }}</td>
-                                    <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300">{{ $guestFine->quantity }}</td>
-                                    <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300">₱{{ number_format((float) $guestFine->total_charge, 2) }}</td>
-                                    <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300">{{ optional($guestFine->date_checked)->format('M d, Y') ?? $guestFine->date_checked }}</td>
+                                    <td class="px-3 py-2">{{ $this->formatFineLabel($guestFine->fine) }}</td>
+                                    <td class="px-3 py-2">{{ $guestFine->quantity }}</td>
+                                    <td class="px-3 py-2">₱{{ number_format((float) $guestFine->total_charge, 2) }}</td>
+                                    <td class="px-3 py-2">{{ $guestFine->reportedBy?->first_name }} {{ $guestFine->reportedBy?->last_name }}</td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="px-3 py-4 text-center text-amber-800 dark:text-amber-200">No fines recorded for this facility.</td>
+                                </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
-            @endif
+            </div>
         </div>
     @endif
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div class="grid gap-3 md:grid-cols-3">
-            <flux:input label="Search" placeholder="Reference, guest, contact, facility" wire:model.live.debounce.300ms="search" />
-
-            <flux:select label="List" wire:model.live="statusFilter">
-                <option value="eligible">Ready for check-out</option>
-                <option value="checked_out">Already checked-out</option>
+            <flux:input label="Search" placeholder="Reference, guest, contact, facility..." wire:model.live.debounce.300ms="search" />
+            <flux:select label="Status" wire:model.live="statusFilter">
+                <option value="eligible">Checked-in / Pending check-out</option>
+                <option value="checked_out">Checked-out history</option>
             </flux:select>
         </div>
-    </div>
 
-    <div class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="overflow-x-auto">
+        <div class="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
             <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                <thead class="bg-zinc-50 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
+                <thead class="bg-zinc-50 dark:bg-zinc-900">
                     <tr>
-                        <th class="px-4 py-3"><button wire:click="sortBy('b_ref_no')">Reference</button></th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('guest_name')">Guest</button></th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('facility_name')">Facility</button></th>
-                        <th class="px-4 py-3">Rate</th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('check_in_date')">Check-in</button></th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('check_out_date')">Check-out</button></th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('amount_due')">Due</button></th>
-                        <th class="px-4 py-3"><button wire:click="sortBy('status')">Status</button></th>
-                        <th class="px-4 py-3 text-right">Action</th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('b_ref_no')">Ref {{ $this->sortIndicator('b_ref_no') }}</button></th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('guest_name')">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('facility_name')">Facility {{ $this->sortIndicator('facility_name') }}</button></th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_in_date')">Check-in {{ $this->sortIndicator('check_in_date') }}</button></th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_out_date')">Check-out {{ $this->sortIndicator('check_out_date') }}</button></th>
+                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('amount_due')">Balance {{ $this->sortIndicator('amount_due') }}</button></th>
+                        <th class="px-3 py-2 text-left">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
                     @forelse ($bookingDetails as $detail)
-                        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                            <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{{ $detail->booking->b_ref_no }}</td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                                {{ $detail->booking->guest->first_name }} {{ $detail->booking->guest->last_name }}
-                                <div class="text-xs text-zinc-500">{{ $detail->booking->guest->contact_no }}</div>
-                            </td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                                {{ $detail->facility !== null ? $detail->facility->facility_name : 'No facility' }}
-                                <div class="text-xs text-zinc-500">{{ $detail->facility !== null && $detail->facility->facilityType !== null ? $detail->facility->facilityType->facility_type : '' }}</div>
-                            </td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">{{ $detail->rate_type }}</td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">{{ optional($detail->check_in_date)->format('M d, Y') ?? $detail->check_in_date }}</td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">{{ optional($detail->check_out_date)->format('M d, Y') ?? $detail->check_out_date }}</td>
-                            <td class="px-4 py-3 text-zinc-700 dark:text-zinc-300">₱{{ number_format((float) $detail->booking->amount_due, 2) }}</td>
-                            <td class="px-4 py-3">
-                                <flux:badge>{{ $detail->status }}</flux:badge>
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                @if ($statusFilter === 'eligible')
-                                    <flux:button size="sm" wire:click="selectCheckOut({{ $detail->booking_details_id }})">Inspect / Check-out</flux:button>
-                                @else
-                                    <span class="text-xs text-zinc-500">Released</span>
-                                @endif
+                        <tr>
+                            <td class="px-3 py-2 font-medium">{{ $detail->booking->b_ref_no }}</td>
+                            <td class="px-3 py-2">{{ $detail->booking->guest->first_name }} {{ $detail->booking->guest->last_name }}</td>
+                            <td class="px-3 py-2">{{ $detail->facility?->facility_name ?? 'No facility' }}</td>
+                            <td class="px-3 py-2">{{ $detail->check_in_date?->format('M d, Y') }}</td>
+                            <td class="px-3 py-2">{{ $detail->check_out_date?->format('M d, Y') }}</td>
+                            <td class="px-3 py-2">₱{{ number_format((float) $detail->booking->amount_due, 2) }}</td>
+                            <td class="px-3 py-2">
+                                <flux:button size="sm" wire:click="selectCheckOut({{ $detail->booking_details_id }})">View</flux:button>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="px-4 py-8 text-center text-sm text-zinc-500">No booking details found.</td>
+                            <td colspan="7" class="px-3 py-8 text-center text-zinc-500">No check-out records found.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <div class="mt-4">
             {{ $bookingDetails->links() }}
         </div>
     </div>

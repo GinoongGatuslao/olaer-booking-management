@@ -1,0 +1,183 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Booking;
+use App\Models\EntranceSlip;
+use App\Models\ModeOfPayment;
+use App\Models\Payment;
+use App\Models\Reservation;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+use Throwable;
+
+class PaymentWorkflowService
+{
+    public function recordCashierPayment(array $data): Payment
+    {
+        $targetType = (string) ($data['target_type'] ?? '');
+        $targetId = (int) ($data['target_id'] ?? 0);
+        $amountPaid = round((float) ($data['amount_paid'] ?? 0), 2);
+        $modeOfPaymentId = (int) ($data['mode_of_payment_id'] ?? 0);
+        $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
+        $cashierUserId = (int) ($data['user_id'] ?? 0);
+
+        if (! in_array($targetType, ['booking', 'reservation', 'entrance_slip'], true)) {
+            throw new InvalidArgumentException('Invalid payment target.');
+        }
+
+        if ($targetId < 1) {
+            throw new InvalidArgumentException('Select a valid payable record.');
+        }
+
+        if ($amountPaid <= 0) {
+            throw new InvalidArgumentException('Payment amount must be greater than zero.');
+        }
+
+        if ($cashierUserId < 1) {
+            throw new InvalidArgumentException('A logged-in cashier is required to record payment.');
+        }
+
+        $mode = ModeOfPayment::query()->findOrFail($modeOfPaymentId);
+        $modeName = strtolower(trim((string) $mode->mode_of_payment));
+
+        if ($modeName === 'gcash' && $referenceNumber === '') {
+            throw new InvalidArgumentException('GCash payments require a reference number.');
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $target = $this->lockTarget($targetType, $targetId);
+            $amountDue = round((float) $target->amount_due, 2);
+
+            $this->guardTargetIsPayable($targetType, $target, $amountDue, $amountPaid);
+
+            $newAmountDue = max(round($amountDue - $amountPaid, 2), 0.00);
+
+            $paymentPayload = [
+                'p_ref_no' => $this->newReference(),
+                'booking_id' => $targetType === 'booking' ? $targetId : null,
+                'reservation_id' => $targetType === 'reservation' ? $targetId : null,
+                'entrance_slip_id' => $targetType === 'entrance_slip' ? $targetId : null,
+                'mode_of_payment_id' => $mode->mode_of_payment_id,
+                'reference_number' => $referenceNumber !== '' ? $referenceNumber : null,
+                'proof_of_payment_path' => null,
+                'amount_paid' => $amountPaid,
+                'date_paid' => Carbon::today()->toDateString(),
+                'user_id' => $cashierUserId,
+                'payment_status' => 'Verified',
+                'verified_by_user_id' => $cashierUserId,
+                'verified_at' => Carbon::now(),
+            ];
+
+            $payment = Payment::query()->create($paymentPayload);
+
+            $this->applyPaymentToTarget($targetType, $target, $newAmountDue, $cashierUserId);
+
+            DB::commit();
+
+            return $payment->fresh(['booking.guest', 'reservation.guest', 'entranceSlip.guest', 'modeOfPayment', 'user']);
+        } catch (Throwable $exception) {
+            DB::rollBack();
+            throw $exception;
+        }
+    }
+
+    private function lockTarget(string $targetType, int $targetId): Model
+    {
+        return match ($targetType) {
+            'booking' => Booking::query()->lockForUpdate()->findOrFail($targetId),
+            'reservation' => Reservation::query()->lockForUpdate()->findOrFail($targetId),
+            'entrance_slip' => EntranceSlip::query()->lockForUpdate()->findOrFail($targetId),
+            default => throw new InvalidArgumentException('Invalid payment target.'),
+        };
+    }
+
+    private function guardTargetIsPayable(string $targetType, Model $target, float $amountDue, float $amountPaid): void
+    {
+        if ($amountDue <= 0) {
+            throw new InvalidArgumentException('This record has no unpaid balance.');
+        }
+
+        if ($amountPaid > $amountDue) {
+            throw new InvalidArgumentException('Payment amount cannot be greater than the unpaid balance.');
+        }
+
+        if ($targetType === 'booking') {
+            $status = (string) $target->status;
+
+            if (in_array($status, ['Cancelled', 'Checked-out'], true)) {
+                throw new InvalidArgumentException('This booking can no longer accept payments.');
+            }
+
+            return;
+        }
+
+        if ($targetType === 'reservation') {
+            $status = (string) $target->status;
+
+            if (in_array($status, ['Cancelled', 'Converted', 'No-show'], true)) {
+                throw new InvalidArgumentException('This reservation can no longer accept payments.');
+            }
+
+            return;
+        }
+
+        if ($targetType === 'entrance_slip') {
+            $status = (string) $target->status;
+
+            if ($status === 'Paid') {
+                throw new InvalidArgumentException('This entrance slip is already paid.');
+            }
+
+            if (abs($amountPaid - $amountDue) > 0.009) {
+                throw new InvalidArgumentException('Entrance slips must be paid in full.');
+            }
+        }
+    }
+
+    private function applyPaymentToTarget(string $targetType, Model $target, float $newAmountDue, int $cashierUserId): void
+    {
+        if ($targetType === 'booking') {
+            $target->update([
+                'amount_due' => $newAmountDue,
+            ]);
+
+            if ($newAmountDue <= 0) {
+                app(AmenityRequestWorkflowService::class)->releasePaidRequestsForBooking((int) $target->booking_id);
+            }
+
+            return;
+        }
+
+        if ($targetType === 'reservation') {
+            $target->update([
+                'amount_due' => $newAmountDue,
+                'status' => $newAmountDue <= 0 ? 'Paid' : $target->status,
+            ]);
+
+            return;
+        }
+
+        if ($targetType === 'entrance_slip') {
+            $target->update([
+                'amount_due' => $newAmountDue,
+                'handled_by_user_id' => $cashierUserId,
+                'status' => $newAmountDue <= 0 ? 'Paid' : 'Unpaid',
+            ]);
+        }
+    }
+
+    private function newReference(): string
+    {
+        do {
+            $reference = 'P' . now()->format('ymdHis') . strtoupper(Str::random(4));
+        } while (Payment::query()->where('p_ref_no', $reference)->exists());
+
+        return $reference;
+    }
+}
