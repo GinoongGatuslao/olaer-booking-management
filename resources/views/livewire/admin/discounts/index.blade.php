@@ -3,10 +3,11 @@
 use App\Models\Discount;
 use Carbon\Carbon;
 use Illuminate\Validation\Rule;
-use function Livewire\Volt\{computed, layout, state, title};
+use function Livewire\Volt\{computed, layout, state, title, updated, usesPagination};
 
 layout('layouts.app');
 title('Discount Management - Olaer Spring Resort');
+usesPagination();
 
 state([
     'search' => '',
@@ -44,7 +45,7 @@ $discounts = computed(function () {
             });
         })
         ->orderBy($sortField, $sortDirection)
-        ->get();
+        ->paginate(2);
 });
 
 $sortBy = function (string $field): void {
@@ -56,12 +57,20 @@ $sortBy = function (string $field): void {
 
     if ($this->sortField === $field) {
         $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        $this->resetPage();
         return;
     }
 
     $this->sortField = $field;
     $this->sortDirection = 'asc';
+    $this->resetPage();
 };
+
+updated([
+    'search' => function (): void {
+        $this->resetPage();
+    },
+]);
 
 $createNew = function (): void {
     $this->resetForm();
@@ -330,6 +339,10 @@ $getSortIcon = function (string $field): string {
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                    <flux:pagination :paginator="$this->discounts" />
                 </div>
             </div>
         </section>
