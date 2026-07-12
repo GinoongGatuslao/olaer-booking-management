@@ -15,14 +15,28 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Resort')] class extends Component
 {
+    use WithPagination;
+
+    #[Url(as: 'q', except: '')]
     public string $search = '';
+
+    #[Url(as: 'status', except: 'Active')]
     public string $statusFilter = 'Active';
+
+    #[Url(as: 'sort', except: 'reservation_id')]
     public string $sortField = 'reservation_id';
+
+    #[Url(as: 'direction', except: 'desc')]
     public string $sortDirection = 'desc';
+
+    #[Url(as: 'per_page', except: 10)]
+    public int $perPage = 10;
 
     public bool $showCreateForm = false;
 
@@ -67,7 +81,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->rescheduleCheckOutDate = $today;
     }
 
-    public function reservations(): Collection
+    public function reservations()
     {
         $query = Reservation::query()
             ->with([
@@ -110,7 +124,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $sortField = in_array($this->sortField, $allowedSorts, true) ? $this->sortField : 'reservation_id';
         $sortDirection = $this->sortDirection === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderBy($sortField, $sortDirection)->get();
+        $perPage = in_array($this->perPage, [10, 25, 50, 100], true)
+            ? $this->perPage
+            : 10;
+
+        return $query
+            ->orderBy($sortField, $sortDirection)
+            ->paginate($perPage);
     }
 
     public function facilityTypes(): Collection
@@ -285,6 +305,36 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         return $available;
     }
 
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPerPage(): void
+    {
+        if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
+            $this->perPage = 10;
+        }
+
+        $this->resetPage();
+    }
+
+    public function clearListFilters(): void
+    {
+        $this->search = '';
+        $this->statusFilter = 'Active';
+        $this->sortField = 'reservation_id';
+        $this->sortDirection = 'desc';
+        $this->perPage = 10;
+
+        $this->resetPage();
+    }
+
     public function sortBy(string $field): void
     {
         $allowedSorts = [
@@ -303,11 +353,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         if ($this->sortField === $field) {
             $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
-            return;
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
         }
 
-        $this->sortField = $field;
-        $this->sortDirection = 'asc';
+        $this->resetPage();
     }
 
     public function updatedFacilityTypeId(): void
@@ -877,8 +928,14 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <h2 class="font-semibold">Reservation list</h2>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Search by reference, guest name, contact number, or email.</p>
             </div>
-            <div class="grid gap-3 md:grid-cols-2">
-                <flux:input wire:model.live.debounce.300ms="search" label="Search" placeholder="R260618ABCDE / Guest name" />
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    label="Search"
+                    placeholder="Reference, guest, contact, or email"
+                    clearable
+                />
+
                 <div class="space-y-2">
                     <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Status</label>
                     <select wire:model.live="statusFilter" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
@@ -889,8 +946,28 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         <option value="All">All</option>
                     </select>
                 </div>
+
+                <flux:select wire:model.live="perPage" label="Rows per page">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+
+                <div class="flex items-end">
+                    <flux:button
+                        type="button"
+                        wire:click="clearListFilters"
+                        variant="ghost"
+                        class="w-full"
+                    >
+                        Clear Filters
+                    </flux:button>
+                </div>
             </div>
         </div>
+
+        @php($reservations = $this->reservations())
 
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
@@ -908,7 +985,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    @forelse ($this->reservations() as $reservation)
+                    @forelse ($reservations as $reservation)
                         @php($detail = $reservation->details->first())
                         <tr>
                             <td class="px-4 py-3 font-medium">{{ $reservation->r_ref_no }}</td>
@@ -951,6 +1028,20 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     @endforelse
                 </tbody>
             </table>
+        </div>
+
+        <div class="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+            <p class="text-sm text-zinc-500">
+                Showing
+                {{ $reservations->firstItem() ?? 0 }}
+                to
+                {{ $reservations->lastItem() ?? 0 }}
+                of
+                {{ $reservations->total() }}
+                reservations
+            </p>
+
+            {{ $reservations->links() }}
         </div>
     </section>
 </div>

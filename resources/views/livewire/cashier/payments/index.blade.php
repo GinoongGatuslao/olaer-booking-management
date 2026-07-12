@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -19,10 +20,41 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 {
     use WithPagination;
 
-    public string $search = '';
+    #[Url(as: 'payable_q', except: '')]
+    public string $payableSearch = '';
+
+    #[Url(as: 'payable_type', except: 'booking')]
     public string $targetType = 'booking';
+
+    #[Url(as: 'payable_per_page', except: 10)]
+    public int $payablePerPage = 10;
+
+    #[Url(as: 'payment_q', except: '')]
+    public string $historySearch = '';
+
+    #[Url(as: 'payment_status', except: '')]
+    public string $historyStatusFilter = '';
+
+    #[Url(as: 'payment_mode', except: '')]
+    public string $historyModeFilter = '';
+
+    #[Url(as: 'payment_target', except: '')]
+    public string $historyTargetFilter = '';
+
+    #[Url(as: 'date_from', except: '')]
+    public string $historyDateFrom = '';
+
+    #[Url(as: 'date_to', except: '')]
+    public string $historyDateTo = '';
+
+    #[Url(as: 'payment_sort', except: 'date_paid')]
     public string $historySortField = 'date_paid';
+
+    #[Url(as: 'payment_direction', except: 'desc')]
     public string $historySortDirection = 'desc';
+
+    #[Url(as: 'payment_per_page', except: 10)]
+    public int $historyPerPage = 10;
 
     public ?int $selectedTargetId = null;
     public string $selectedTargetLabel = '';
@@ -36,12 +68,16 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function mount(): void
     {
-        $firstMode = ModeOfPayment::query()->orderBy('mode_of_payment_id')->first();
+        $firstMode = ModeOfPayment::query()
+            ->orderBy('mode_of_payment_id')
+            ->first();
 
         if ($firstMode !== null) {
             $this->modeOfPaymentId = (string) $firstMode->mode_of_payment_id;
         }
 
+        // Preserves the Booking Workspace action:
+        // /cashier/payments?booking={booking_id}
         $bookingId = request()->integer('booking');
 
         if ($bookingId > 0) {
@@ -59,15 +95,87 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         ];
     }
 
-    public function updatedSearch(): void
+    public function updatedPayableSearch(): void
     {
-        $this->resetPage();
+        $this->resetPage('payablesPage');
     }
 
     public function updatedTargetType(): void
     {
         $this->clearSelection();
-        $this->resetPage();
+        $this->resetPage('payablesPage');
+    }
+
+    public function updatedPayablePerPage(): void
+    {
+        if (! in_array($this->payablePerPage, [10, 25, 50, 100], true)) {
+            $this->payablePerPage = 10;
+        }
+
+        $this->resetPage('payablesPage');
+    }
+
+    public function updatedHistorySearch(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryStatusFilter(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryModeFilter(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryTargetFilter(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryDateFrom(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryDateTo(): void
+    {
+        $this->resetPage('paymentsPage');
+    }
+
+    public function updatedHistoryPerPage(): void
+    {
+        if (! in_array($this->historyPerPage, [10, 25, 50, 100], true)) {
+            $this->historyPerPage = 10;
+        }
+
+        $this->resetPage('paymentsPage');
+    }
+
+    public function clearPayableFilters(): void
+    {
+        $this->payableSearch = '';
+        $this->targetType = 'booking';
+        $this->payablePerPage = 10;
+        $this->clearSelection();
+        $this->resetPage('payablesPage');
+    }
+
+    public function clearHistoryFilters(): void
+    {
+        $this->historySearch = '';
+        $this->historyStatusFilter = '';
+        $this->historyModeFilter = '';
+        $this->historyTargetFilter = '';
+        $this->historyDateFrom = '';
+        $this->historyDateTo = '';
+        $this->historySortField = 'date_paid';
+        $this->historySortDirection = 'desc';
+        $this->historyPerPage = 10;
+
+        $this->resetPage('paymentsPage');
     }
 
     public function selectPayable(string $type, int $id): void
@@ -79,7 +187,11 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $record = $this->findPayableRecord($type, $id);
 
         if ($record === null) {
-            session()->flash('error', 'Selected payable record was not found or has no unpaid balance.');
+            session()->flash(
+                'error',
+                'Selected payable record was not found or has no unpaid balance.',
+            );
+
             return;
         }
 
@@ -89,6 +201,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->selectedTargetLabel = $this->payableLabel($type, $record);
         $this->amountPaid = number_format($this->selectedAmountDue, 2, '.', '');
         $this->referenceNumber = '';
+
         $this->resetValidation();
     }
 
@@ -99,16 +212,24 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->selectedAmountDue = 0.00;
         $this->amountPaid = '';
         $this->referenceNumber = '';
+
         $this->resetValidation();
     }
 
     public function recordPayment(PaymentWorkflowService $paymentWorkflow): void
     {
         $validated = $this->validate([
-            'targetType' => ['required', Rule::in(['booking', 'reservation', 'entrance_slip'])],
+            'targetType' => [
+                'required',
+                Rule::in(['booking', 'reservation', 'entrance_slip']),
+            ],
             'selectedTargetId' => ['required', 'integer', 'min:1'],
             'amountPaid' => ['required', 'numeric', 'gt:0'],
-            'modeOfPaymentId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
+            'modeOfPaymentId' => [
+                'required',
+                'integer',
+                'exists:tbl_mode_of_payment,mode_of_payment_id',
+            ],
             'referenceNumber' => ['nullable', 'string', 'max:50'],
         ]);
 
@@ -124,8 +245,13 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
             $this->selectedPaymentId = (int) $payment->payment_id;
             $this->clearSelection();
-            $this->resetPage();
-            session()->flash('success', 'Payment recorded successfully. Receipt is ready for viewing/printing.');
+            $this->resetPage('payablesPage');
+            $this->resetPage('paymentsPage');
+
+            session()->flash(
+                'success',
+                'Payment recorded successfully. The receipt is ready.',
+            );
         } catch (\Throwable $exception) {
             $this->addError('payment', $exception->getMessage());
         }
@@ -133,10 +259,9 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function viewReceipt(int $paymentId): void
     {
-        $payment = Payment::query()->find($paymentId);
-
-        if ($payment === null) {
+        if (! Payment::query()->whereKey($paymentId)->exists()) {
             session()->flash('error', 'Payment record not found.');
+
             return;
         }
 
@@ -150,26 +275,33 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function sortHistoryBy(string $field): void
     {
-        $allowed = ['p_ref_no', 'date_paid', 'amount_paid', 'payment_status'];
+        $allowed = [
+            'p_ref_no',
+            'date_paid',
+            'amount_paid',
+            'payment_status',
+        ];
 
         if (! in_array($field, $allowed, true)) {
             return;
         }
 
         if ($this->historySortField === $field) {
-            $this->historySortDirection = $this->historySortDirection === 'asc' ? 'desc' : 'asc';
+            $this->historySortDirection = $this->historySortDirection === 'asc'
+                ? 'desc'
+                : 'asc';
         } else {
             $this->historySortField = $field;
             $this->historySortDirection = 'asc';
         }
 
-        $this->resetPage();
+        $this->resetPage('paymentsPage');
     }
 
     public function sortIndicator(string $field): string
     {
         if ($this->historySortField !== $field) {
-            return '';
+            return '↕';
         }
 
         return $this->historySortDirection === 'asc' ? '↑' : '↓';
@@ -178,26 +310,31 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     public function paymentTargetLabel(?Payment $payment): string
     {
         if ($payment === null) {
-            return 'Unknown';
+            return 'Unknown transaction';
         }
 
         if ($payment->booking !== null) {
-            $guest = $payment->booking->guest;
-            return 'Booking ' . $payment->booking->b_ref_no . ' - ' . trim($guest?->first_name . ' ' . $guest?->last_name);
+            return 'Booking '
+                .$payment->booking->b_ref_no
+                .' — '
+                .$this->guestName($payment->booking->guest);
         }
 
         if ($payment->reservation !== null) {
-            $guest = $payment->reservation->guest;
-            return 'Reservation ' . $payment->reservation->r_ref_no . ' - ' . trim($guest?->first_name . ' ' . $guest?->last_name);
+            return 'Reservation '
+                .$payment->reservation->r_ref_no
+                .' — '
+                .$this->guestName($payment->reservation->guest);
         }
 
         if ($payment->entranceSlip !== null) {
-            $guest = $payment->entranceSlip->guest;
-            $guestName = $guest !== null ? trim($guest->first_name . ' ' . $guest->last_name) : 'Walk-in guests';
-            return 'Entrance Slip #' . $payment->entranceSlip->entrance_slip_id . ' - ' . $guestName;
+            return 'Entrance Slip #'
+                .$payment->entranceSlip->entrance_slip_id
+                .' — '
+                .$this->guestName($payment->entranceSlip->guest, 'Walk-in guests');
         }
 
-        return 'Unknown target';
+        return 'Unknown transaction';
     }
 
     public function payableTypeLabel(string $type): string
@@ -213,18 +350,82 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     public function payableLabel(string $type, mixed $record): string
     {
         if ($type === 'booking') {
-            $guest = $record->guest;
-            return 'Booking ' . $record->b_ref_no . ' - ' . trim($guest?->first_name . ' ' . $guest?->last_name);
+            return 'Booking '
+                .$record->b_ref_no
+                .' — '
+                .$this->guestName($record->guest);
         }
 
         if ($type === 'reservation') {
-            $guest = $record->guest;
-            return 'Reservation ' . $record->r_ref_no . ' - ' . trim($guest?->first_name . ' ' . $guest?->last_name);
+            return 'Reservation '
+                .$record->r_ref_no
+                .' — '
+                .$this->guestName($record->guest);
         }
 
-        $guest = $record->guest;
-        $guestName = $guest !== null ? trim($guest->first_name . ' ' . $guest->last_name) : 'Walk-in guests';
-        return 'Entrance Slip #' . $record->entrance_slip_id . ' - ' . $guestName;
+        return 'Entrance Slip #'
+            .$record->entrance_slip_id
+            .' — '
+            .$this->guestName($record->guest, 'Walk-in guests');
+    }
+
+    public function paymentStatusColor(string $status): string
+    {
+        return match (strtolower($status)) {
+            'verified', 'paid' => 'green',
+            'pending' => 'amber',
+            'rejected' => 'red',
+            default => 'zinc',
+        };
+    }
+
+    public function handledBy(Payment $payment): string
+    {
+        $staff = $payment->verifier ?? $payment->user;
+
+        if ($staff === null) {
+            return 'Guest submission';
+        }
+
+        return $staff->full_name
+            ?? trim(implode(' ', array_filter([
+                $staff->first_name,
+                $staff->middle_name,
+                $staff->last_name,
+            ])))
+            ?: $staff->username;
+    }
+
+    public function targetTypeOf(Payment $payment): string
+    {
+        if ($payment->booking_id !== null) {
+            return 'Booking';
+        }
+
+        if ($payment->reservation_id !== null) {
+            return 'Reservation';
+        }
+
+        if ($payment->entrance_slip_id !== null) {
+            return 'Entrance Slip';
+        }
+
+        return 'Unknown';
+    }
+
+    private function guestName(mixed $guest, string $fallback = 'Unknown guest'): string
+    {
+        if ($guest === null) {
+            return $fallback;
+        }
+
+        return $guest->full_name
+            ?? trim(implode(' ', array_filter([
+                $guest->first_name,
+                $guest->middle_name,
+                $guest->last_name,
+            ])))
+            ?: $fallback;
     }
 
     private function modeOfPayments(): Collection
@@ -238,22 +439,123 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     {
         $query = Payment::query()
             ->select('tbl_payment.*')
-            ->leftJoin('tbl_booking as payment_booking', 'payment_booking.booking_id', '=', 'tbl_payment.booking_id')
-            ->leftJoin('tbl_guest as booking_guest', 'booking_guest.guest_id', '=', 'payment_booking.guest_id')
-            ->leftJoin('tbl_reservation as payment_reservation', 'payment_reservation.reservation_id', '=', 'tbl_payment.reservation_id')
-            ->leftJoin('tbl_guest as reservation_guest', 'reservation_guest.guest_id', '=', 'payment_reservation.guest_id')
-            ->leftJoin('tbl_entrance_slip as payment_entrance_slip', 'payment_entrance_slip.entrance_slip_id', '=', 'tbl_payment.entrance_slip_id')
-            ->leftJoin('tbl_guest as entrance_guest', 'entrance_guest.guest_id', '=', 'payment_entrance_slip.guest_id')
-            ->with(['booking.guest', 'reservation.guest', 'entranceSlip.guest', 'modeOfPayment', 'user']);
+            ->leftJoin(
+                'tbl_booking as payment_booking',
+                'payment_booking.booking_id',
+                '=',
+                'tbl_payment.booking_id',
+            )
+            ->leftJoin(
+                'tbl_guest as booking_guest',
+                'booking_guest.guest_id',
+                '=',
+                'payment_booking.guest_id',
+            )
+            ->leftJoin(
+                'tbl_reservation as payment_reservation',
+                'payment_reservation.reservation_id',
+                '=',
+                'tbl_payment.reservation_id',
+            )
+            ->leftJoin(
+                'tbl_guest as reservation_guest',
+                'reservation_guest.guest_id',
+                '=',
+                'payment_reservation.guest_id',
+            )
+            ->leftJoin(
+                'tbl_entrance_slip as payment_entrance_slip',
+                'payment_entrance_slip.entrance_slip_id',
+                '=',
+                'tbl_payment.entrance_slip_id',
+            )
+            ->leftJoin(
+                'tbl_guest as entrance_guest',
+                'entrance_guest.guest_id',
+                '=',
+                'payment_entrance_slip.guest_id',
+            )
+            ->with([
+                'booking.guest',
+                'reservation.guest',
+                'entranceSlip.guest',
+                'modeOfPayment',
+                'user',
+                'verifier',
+            ]);
 
-        $searchText = trim($this->search);
+        $searchText = trim($this->historySearch);
 
         if ($searchText !== '') {
-            $needle = '%' . $searchText . '%';
+            $needle = '%'.$searchText.'%';
+            $numeric = ctype_digit($searchText)
+                ? (int) $searchText
+                : null;
 
-            $query->whereRaw(
-                '(tbl_payment.p_ref_no LIKE ? OR tbl_payment.reference_number LIKE ? OR payment_booking.b_ref_no LIKE ? OR payment_reservation.r_ref_no LIKE ? OR booking_guest.first_name LIKE ? OR booking_guest.last_name LIKE ? OR reservation_guest.first_name LIKE ? OR reservation_guest.last_name LIKE ? OR entrance_guest.first_name LIKE ? OR entrance_guest.last_name LIKE ?)',
-                [$needle, $needle, $needle, $needle, $needle, $needle, $needle, $needle, $needle, $needle]
+            $query->where(function ($query) use ($needle, $numeric): void {
+                $query->where('tbl_payment.p_ref_no', 'like', $needle)
+                    ->orWhere('tbl_payment.reference_number', 'like', $needle)
+                    ->orWhere('payment_booking.b_ref_no', 'like', $needle)
+                    ->orWhere('payment_reservation.r_ref_no', 'like', $needle)
+                    ->orWhere('booking_guest.first_name', 'like', $needle)
+                    ->orWhere('booking_guest.middle_name', 'like', $needle)
+                    ->orWhere('booking_guest.last_name', 'like', $needle)
+                    ->orWhere('booking_guest.contact_no', 'like', $needle)
+                    ->orWhere('booking_guest.email', 'like', $needle)
+                    ->orWhere('reservation_guest.first_name', 'like', $needle)
+                    ->orWhere('reservation_guest.middle_name', 'like', $needle)
+                    ->orWhere('reservation_guest.last_name', 'like', $needle)
+                    ->orWhere('reservation_guest.contact_no', 'like', $needle)
+                    ->orWhere('reservation_guest.email', 'like', $needle)
+                    ->orWhere('entrance_guest.first_name', 'like', $needle)
+                    ->orWhere('entrance_guest.middle_name', 'like', $needle)
+                    ->orWhere('entrance_guest.last_name', 'like', $needle)
+                    ->orWhere('entrance_guest.contact_no', 'like', $needle)
+                    ->orWhere('entrance_guest.email', 'like', $needle);
+
+                if ($numeric !== null) {
+                    $query->orWhere(
+                        'payment_entrance_slip.entrance_slip_id',
+                        $numeric,
+                    );
+                }
+            });
+        }
+
+        if ($this->historyStatusFilter !== '') {
+            $query->where(
+                'tbl_payment.payment_status',
+                $this->historyStatusFilter,
+            );
+        }
+
+        if ($this->historyModeFilter !== '') {
+            $query->where(
+                'tbl_payment.mode_of_payment_id',
+                $this->historyModeFilter,
+            );
+        }
+
+        match ($this->historyTargetFilter) {
+            'booking' => $query->whereNotNull('tbl_payment.booking_id'),
+            'reservation' => $query->whereNotNull('tbl_payment.reservation_id'),
+            'entrance_slip' => $query->whereNotNull('tbl_payment.entrance_slip_id'),
+            default => null,
+        };
+
+        if ($this->historyDateFrom !== '') {
+            $query->whereDate(
+                'tbl_payment.date_paid',
+                '>=',
+                $this->historyDateFrom,
+            );
+        }
+
+        if ($this->historyDateTo !== '') {
+            $query->whereDate(
+                'tbl_payment.date_paid',
+                '<=',
+                $this->historyDateTo,
             );
         }
 
@@ -264,115 +566,198 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             'payment_status' => 'tbl_payment.payment_status',
         ];
 
-        $sortColumn = $sortMap[$this->historySortField] ?? 'tbl_payment.date_paid';
-        $direction = $this->historySortDirection === 'asc' ? 'asc' : 'desc';
+        $sortColumn = $sortMap[$this->historySortField]
+            ?? 'tbl_payment.date_paid';
+
+        $direction = $this->historySortDirection === 'asc'
+            ? 'asc'
+            : 'desc';
+
+        $perPage = in_array($this->historyPerPage, [10, 25, 50, 100], true)
+            ? $this->historyPerPage
+            : 10;
 
         return $query
             ->orderBy($sortColumn, $direction)
             ->orderBy('tbl_payment.payment_id', 'desc')
-            ->paginate(10, ['*'], 'paymentsPage');
+            ->paginate($perPage, ['*'], 'paymentsPage');
     }
 
-    private function payables(): Collection
+    private function payables(): LengthAwarePaginator
     {
         return match ($this->targetType) {
             'booking' => $this->payableBookings(),
             'reservation' => $this->payableReservations(),
             'entrance_slip' => $this->payableEntranceSlips(),
-            default => collect(),
+            default => $this->payableBookings(),
         };
     }
 
-    private function payableBookings(): Collection
+    private function payableBookings(): LengthAwarePaginator
     {
         $query = Booking::query()
             ->select('tbl_booking.*')
-            ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_booking.guest_id')
+            ->join(
+                'tbl_guest',
+                'tbl_guest.guest_id',
+                '=',
+                'tbl_booking.guest_id',
+            )
             ->with(['guest', 'details.facility'])
             ->where('tbl_booking.amount_due', '>', 0)
-            ->whereNotIn('tbl_booking.status', ['Cancelled', 'Checked-out']);
+            ->whereNotIn(
+                'tbl_booking.status',
+                ['Cancelled', 'Payment Rejected', 'Checked-out'],
+            );
 
-        $searchText = trim($this->search);
+        $searchText = trim($this->payableSearch);
 
         if ($searchText !== '') {
-            $needle = '%' . $searchText . '%';
+            $needle = '%'.$searchText.'%';
 
-            $query->whereRaw(
-                '(tbl_booking.b_ref_no LIKE ? OR tbl_guest.first_name LIKE ? OR tbl_guest.last_name LIKE ? OR tbl_guest.contact_no LIKE ?)',
-                [$needle, $needle, $needle, $needle]
-            );
+            $query->where(function ($query) use ($needle): void {
+                $query->where('tbl_booking.b_ref_no', 'like', $needle)
+                    ->orWhere('tbl_guest.first_name', 'like', $needle)
+                    ->orWhere('tbl_guest.middle_name', 'like', $needle)
+                    ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhere('tbl_guest.contact_no', 'like', $needle)
+                    ->orWhere('tbl_guest.email', 'like', $needle);
+            });
         }
 
         return $query
             ->orderByDesc('tbl_booking.booking_id')
-            ->limit(50)
-            ->get();
+            ->paginate(
+                $this->validPayablePerPage(),
+                ['tbl_booking.*'],
+                'payablesPage',
+            );
     }
 
-    private function payableReservations(): Collection
+    private function payableReservations(): LengthAwarePaginator
     {
         $query = Reservation::query()
             ->select('tbl_reservation.*')
-            ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_reservation.guest_id')
+            ->join(
+                'tbl_guest',
+                'tbl_guest.guest_id',
+                '=',
+                'tbl_reservation.guest_id',
+            )
             ->with(['guest', 'details.facility'])
             ->where('tbl_reservation.amount_due', '>', 0)
-            ->whereNotIn('tbl_reservation.status', ['Cancelled', 'Converted', 'No-show']);
+            ->whereNotIn(
+                'tbl_reservation.status',
+                ['Cancelled', 'Converted', 'No-show'],
+            );
 
-        $searchText = trim($this->search);
+        $searchText = trim($this->payableSearch);
 
         if ($searchText !== '') {
-            $needle = '%' . $searchText . '%';
+            $needle = '%'.$searchText.'%';
 
-            $query->whereRaw(
-                '(tbl_reservation.r_ref_no LIKE ? OR tbl_guest.first_name LIKE ? OR tbl_guest.last_name LIKE ? OR tbl_guest.contact_no LIKE ?)',
-                [$needle, $needle, $needle, $needle]
-            );
+            $query->where(function ($query) use ($needle): void {
+                $query->where('tbl_reservation.r_ref_no', 'like', $needle)
+                    ->orWhere('tbl_guest.first_name', 'like', $needle)
+                    ->orWhere('tbl_guest.middle_name', 'like', $needle)
+                    ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhere('tbl_guest.contact_no', 'like', $needle)
+                    ->orWhere('tbl_guest.email', 'like', $needle);
+            });
         }
 
         return $query
             ->orderByDesc('tbl_reservation.reservation_id')
-            ->limit(50)
-            ->get();
+            ->paginate(
+                $this->validPayablePerPage(),
+                ['tbl_reservation.*'],
+                'payablesPage',
+            );
     }
 
-    private function payableEntranceSlips(): Collection
+    private function payableEntranceSlips(): LengthAwarePaginator
     {
         $query = EntranceSlip::query()
             ->select('tbl_entrance_slip.*')
-            ->leftJoin('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_entrance_slip.guest_id')
-            ->with(['guest'])
+            ->leftJoin(
+                'tbl_guest',
+                'tbl_guest.guest_id',
+                '=',
+                'tbl_entrance_slip.guest_id',
+            )
+            ->with('guest')
             ->where('tbl_entrance_slip.amount_due', '>', 0)
             ->where('tbl_entrance_slip.status', '!=', 'Paid');
 
-        $searchText = trim($this->search);
+        $searchText = trim($this->payableSearch);
 
         if ($searchText !== '') {
-            $needle = '%' . $searchText . '%';
-            $numeric = ctype_digit($searchText) ? (int) $searchText : -1;
+            $needle = '%'.$searchText.'%';
+            $numeric = ctype_digit($searchText)
+                ? (int) $searchText
+                : null;
 
-            $query->whereRaw(
-                '(tbl_entrance_slip.entrance_slip_id = ? OR tbl_guest.first_name LIKE ? OR tbl_guest.last_name LIKE ? OR tbl_guest.contact_no LIKE ?)',
-                [$numeric, $needle, $needle, $needle]
-            );
+            $query->where(function ($query) use ($needle, $numeric): void {
+                $query->where('tbl_guest.first_name', 'like', $needle)
+                    ->orWhere('tbl_guest.middle_name', 'like', $needle)
+                    ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhere('tbl_guest.contact_no', 'like', $needle)
+                    ->orWhere('tbl_guest.email', 'like', $needle);
+
+                if ($numeric !== null) {
+                    $query->orWhere(
+                        'tbl_entrance_slip.entrance_slip_id',
+                        $numeric,
+                    );
+                }
+            });
         }
 
         return $query
             ->orderByDesc('tbl_entrance_slip.entrance_slip_id')
-            ->limit(50)
-            ->get();
+            ->paginate(
+                $this->validPayablePerPage(),
+                ['tbl_entrance_slip.*'],
+                'payablesPage',
+            );
+    }
+
+    private function validPayablePerPage(): int
+    {
+        return in_array($this->payablePerPage, [10, 25, 50, 100], true)
+            ? $this->payablePerPage
+            : 10;
     }
 
     private function findPayableRecord(string $type, int $id): mixed
     {
         if ($type === 'booking') {
-            return Booking::query()->with('guest')->where('amount_due', '>', 0)->find($id);
+            return Booking::query()
+                ->with('guest')
+                ->where('amount_due', '>', 0)
+                ->whereNotIn(
+                    'status',
+                    ['Cancelled', 'Payment Rejected', 'Checked-out'],
+                )
+                ->find($id);
         }
 
         if ($type === 'reservation') {
-            return Reservation::query()->with('guest')->where('amount_due', '>', 0)->find($id);
+            return Reservation::query()
+                ->with('guest')
+                ->where('amount_due', '>', 0)
+                ->whereNotIn(
+                    'status',
+                    ['Cancelled', 'Converted', 'No-show'],
+                )
+                ->find($id);
         }
 
-        return EntranceSlip::query()->with('guest')->where('amount_due', '>', 0)->find($id);
+        return EntranceSlip::query()
+            ->with('guest')
+            ->where('amount_due', '>', 0)
+            ->where('status', '!=', 'Paid')
+            ->find($id);
     }
 
     private function selectedPayment(): ?Payment
@@ -382,203 +767,562 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         }
 
         return Payment::query()
-            ->with(['booking.guest', 'reservation.guest', 'entranceSlip.guest', 'modeOfPayment', 'user'])
+            ->with([
+                'booking.guest',
+                'reservation.guest',
+                'entranceSlip.guest',
+                'modeOfPayment',
+                'user',
+                'verifier',
+            ])
             ->find($this->selectedPaymentId);
     }
 };
+
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-            <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Cashier Payment Management</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Record verified cashier payments for bookings, reservations, and entrance slips.</p>
+            <h1 class="text-2xl font-bold tracking-tight">Payment Management</h1>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Record cashier payments and review paginated payment history.
+            </p>
         </div>
+
+        @if (Route::has('cashier.dashboard'))
+            <flux:button
+                href="{{ route('cashier.dashboard') }}"
+                wire:navigate
+                variant="ghost"
+            >
+                Back to Dashboard
+            </flux:button>
+        @endif
     </div>
 
     @if (session('success'))
-        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
             {{ session('success') }}
         </div>
     @endif
 
     @if (session('error'))
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             {{ session('error') }}
         </div>
     @endif
 
     @error('payment')
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             {{ $message }}
         </div>
     @enderror
 
     @if ($selectedPayment !== null)
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 print:border-0 print:shadow-none">
+        <flux:card class="print:border-0 print:shadow-none">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Payment Receipt</h2>
-                    <p class="text-sm text-zinc-600 dark:text-zinc-400">Receipt No: <span class="font-medium">{{ $selectedPayment->p_ref_no }}</span></p>
+                    <h2 class="text-lg font-semibold">Payment Receipt</h2>
+                    <p class="text-sm text-zinc-500">
+                        Receipt: <span class="font-medium">{{ $selectedPayment->p_ref_no }}</span>
+                    </p>
                 </div>
-                <div class="flex gap-2 print:hidden">
-                    <flux:button onclick="window.print()">Print</flux:button>
-                    <flux:button variant="ghost" wire:click="clearReceipt">Close</flux:button>
+
+                <div class="flex flex-wrap gap-2 print:hidden">
+                    @if (Route::has('print.payment'))
+                        <flux:button
+                            href="{{ route('print.payment', $selectedPayment) }}"
+                            target="_blank"
+                            variant="primary"
+                        >
+                            Print Receipt
+                        </flux:button>
+                    @else
+                        <flux:button onclick="window.print()" variant="primary">
+                            Print
+                        </flux:button>
+                    @endif
+
+                    <flux:button wire:click="clearReceipt" variant="ghost">
+                        Close
+                    </flux:button>
                 </div>
             </div>
 
-            <div class="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <dl class="mt-5 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Transaction</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $this->paymentTargetLabel($selectedPayment) }}</p>
+                    <dt class="text-zinc-500">Transaction</dt>
+                    <dd class="mt-1 font-medium">{{ $this->paymentTargetLabel($selectedPayment) }}</dd>
                 </div>
+
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Amount Paid</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">₱{{ number_format((float) $selectedPayment->amount_paid, 2) }}</p>
+                    <dt class="text-zinc-500">Amount paid</dt>
+                    <dd class="mt-1 font-medium">₱{{ number_format((float) $selectedPayment->amount_paid, 2) }}</dd>
                 </div>
+
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Mode of Payment</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $selectedPayment->modeOfPayment?->mode_of_payment ?? 'N/A' }}</p>
+                    <dt class="text-zinc-500">Mode</dt>
+                    <dd class="mt-1 font-medium">{{ $selectedPayment->modeOfPayment?->mode_of_payment ?? 'N/A' }}</dd>
                 </div>
+
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Reference Number</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $selectedPayment->reference_number ?: 'N/A' }}</p>
+                    <dt class="text-zinc-500">Status</dt>
+                    <dd class="mt-1">
+                        <flux:badge
+                            color="{{ $this->paymentStatusColor((string) $selectedPayment->payment_status) }}"
+                            size="sm"
+                        >
+                            {{ $selectedPayment->payment_status }}
+                        </flux:badge>
+                    </dd>
                 </div>
+
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Date Paid</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $selectedPayment->date_paid?->format('M d, Y') }}</p>
+                    <dt class="text-zinc-500">External reference</dt>
+                    <dd class="mt-1 font-medium">{{ $selectedPayment->reference_number ?: 'N/A' }}</dd>
                 </div>
+
                 <div>
-                    <p class="text-zinc-500 dark:text-zinc-400">Handled By</p>
-                    <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $selectedPayment->user?->first_name }} {{ $selectedPayment->user?->last_name }}</p>
+                    <dt class="text-zinc-500">Date paid</dt>
+                    <dd class="mt-1 font-medium">{{ $selectedPayment->date_paid?->format('M d, Y') ?? 'N/A' }}</dd>
                 </div>
-            </div>
-        </div>
+
+                <div>
+                    <dt class="text-zinc-500">Handled or verified by</dt>
+                    <dd class="mt-1 font-medium">{{ $this->handledBy($selectedPayment) }}</dd>
+                </div>
+
+                <div>
+                    <dt class="text-zinc-500">Target type</dt>
+                    <dd class="mt-1 font-medium">{{ $this->targetTypeOf($selectedPayment) }}</dd>
+                </div>
+            </dl>
+        </flux:card>
     @endif
 
     @if ($selectedTargetId !== null)
-        <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950">
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950/40">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                    <p class="text-sm font-medium text-blue-900 dark:text-blue-100">Selected payable</p>
-                    <p class="text-sm text-blue-800 dark:text-blue-200">{{ $selectedTargetLabel }}</p>
-                    <p class="mt-1 text-sm text-blue-800 dark:text-blue-200">Balance: <span class="font-semibold">₱{{ number_format($selectedAmountDue, 2) }}</span></p>
+                    <p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                        Selected payable
+                    </p>
+
+                    <p class="mt-1 text-sm text-blue-800 dark:text-blue-200">
+                        {{ $selectedTargetLabel }}
+                    </p>
+
+                    <p class="mt-1 text-sm text-blue-800 dark:text-blue-200">
+                        Balance:
+                        <span class="font-semibold">
+                            ₱{{ number_format($selectedAmountDue, 2) }}
+                        </span>
+                    </p>
                 </div>
-                <flux:button variant="ghost" wire:click="clearSelection">Cancel</flux:button>
+
+                <flux:button wire:click="clearSelection" variant="ghost">
+                    Cancel
+                </flux:button>
             </div>
 
-            <div class="mt-4 grid gap-3 md:grid-cols-4">
-                <flux:input label="Amount paid" type="number" min="0.01" step="0.01" wire:model="amountPaid" />
-                <flux:select label="Mode of payment" wire:model="modeOfPaymentId">
+            <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <flux:input
+                    wire:model="amountPaid"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    label="Amount paid"
+                />
+
+                <flux:select
+                    wire:model="modeOfPaymentId"
+                    label="Mode of payment"
+                >
                     @foreach ($modeOfPayments as $mode)
-                        <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
+                        <option value="{{ $mode->mode_of_payment_id }}">
+                            {{ $mode->mode_of_payment }}
+                        </option>
                     @endforeach
                 </flux:select>
-                <flux:input label="GCash reference no." placeholder="Required for GCash" wire:model="referenceNumber" />
+
+                <flux:input
+                    wire:model="referenceNumber"
+                    label="GCash reference number"
+                    placeholder="Required for GCash"
+                />
+
                 <div class="flex items-end">
-                    <flux:button variant="primary" wire:click="recordPayment" class="w-full">Record Payment</flux:button>
+                    <flux:button
+                        wire:click="recordPayment"
+                        variant="primary"
+                        class="w-full"
+                    >
+                        Record Payment
+                    </flux:button>
                 </div>
             </div>
 
-            @error('amountPaid') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-            @error('modeOfPaymentId') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-            @error('referenceNumber') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
+            @error('amountPaid')
+                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+            @enderror
+
+            @error('modeOfPaymentId')
+                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+            @enderror
+
+            @error('referenceNumber')
+                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+            @enderror
         </div>
     @endif
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div class="grid gap-3 md:grid-cols-3">
-            <flux:input label="Search" placeholder="Guest, reference, contact..." wire:model.live.debounce.300ms="search" />
-            <flux:select label="Payable type" wire:model.live="targetType">
-                <option value="booking">Bookings</option>
-                <option value="reservation">Reservations</option>
-                <option value="entrance_slip">Entrance Slips</option>
-            </flux:select>
+    <flux:card class="overflow-hidden p-0">
+        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
+            <div>
+                <h2 class="text-lg font-semibold">Unpaid records</h2>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    Select a booking, reservation, or entrance slip to record payment.
+                </p>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <flux:input
+                    wire:model.live.debounce.300ms="payableSearch"
+                    label="Search unpaid records"
+                    placeholder="Reference, guest, contact, or email"
+                    clearable
+                />
+
+                <flux:select wire:model.live="targetType" label="Payable type">
+                    <option value="booking">Bookings</option>
+                    <option value="reservation">Reservations</option>
+                    <option value="entrance_slip">Entrance Slips</option>
+                </flux:select>
+
+                <flux:select
+                    wire:model.live="payablePerPage"
+                    label="Rows per page"
+                >
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+
+                <div class="flex items-end">
+                    <flux:button
+                        wire:click="clearPayableFilters"
+                        variant="ghost"
+                        class="w-full"
+                    >
+                        Clear Filters
+                    </flux:button>
+                </div>
+            </div>
         </div>
 
-        <div class="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                <thead class="bg-zinc-50 dark:bg-zinc-900">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[58rem] text-left text-sm">
+                <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <tr>
-                        <th class="px-3 py-2 text-left">Type</th>
-                        <th class="px-3 py-2 text-left">Reference / Guest</th>
-                        <th class="px-3 py-2 text-left">Facility / Details</th>
-                        <th class="px-3 py-2 text-left">Balance</th>
-                        <th class="px-3 py-2 text-left">Action</th>
+                        <th class="px-5 py-3">Type</th>
+                        <th class="px-5 py-3">Reference and guest</th>
+                        <th class="px-5 py-3">Facility or headcount</th>
+                        <th class="px-5 py-3">Balance</th>
+                        <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($payables as $payable)
-                        <tr>
-                            <td class="px-3 py-2">{{ $this->payableTypeLabel($targetType) }}</td>
-                            <td class="px-3 py-2 font-medium">{{ $this->payableLabel($targetType, $payable) }}</td>
-                            <td class="px-3 py-2 text-zinc-600 dark:text-zinc-400">
-                                @if ($targetType === 'booking')
-                                    {{ $payable->details->pluck('facility.facility_name')->filter()->implode(', ') ?: 'No facility' }}
-                                @elseif ($targetType === 'reservation')
-                                    {{ $payable->details->pluck('facility.facility_name')->filter()->implode(', ') ?: 'No facility' }}
+                        <tr wire:key="payable-{{ $targetType }}-{{ $targetType === 'booking' ? $payable->booking_id : ($targetType === 'reservation' ? $payable->reservation_id : $payable->entrance_slip_id) }}">
+                            <td class="px-5 py-4">
+                                {{ $this->payableTypeLabel($targetType) }}
+                            </td>
+
+                            <td class="px-5 py-4 font-medium">
+                                {{ $this->payableLabel($targetType, $payable) }}
+                            </td>
+
+                            <td class="max-w-md px-5 py-4 text-zinc-600 dark:text-zinc-300">
+                                @if ($targetType === 'booking' || $targetType === 'reservation')
+                                    {{ $payable->details
+                                        ->pluck('facility.facility_name')
+                                        ->filter()
+                                        ->implode(', ') ?: 'No facility' }}
                                 @else
-                                    Adult: {{ $payable->no_of_adult }}, Child: {{ $payable->no_of_children }}, Senior/PWD: {{ $payable->no_of_PWD_SC }}
+                                    Adult {{ $payable->no_of_adult }},
+                                    Child {{ $payable->no_of_children }},
+                                    Senior/PWD {{ $payable->no_of_PWD_SC }}
                                 @endif
                             </td>
-                            <td class="px-3 py-2">₱{{ number_format((float) $payable->amount_due, 2) }}</td>
-                            <td class="px-3 py-2">
-                                <flux:button size="sm" wire:click="selectPayable('{{ $targetType }}', {{ $targetType === 'booking' ? $payable->booking_id : ($targetType === 'reservation' ? $payable->reservation_id : $payable->entrance_slip_id) }})">Pay</flux:button>
+
+                            <td class="px-5 py-4 font-semibold">
+                                ₱{{ number_format((float) $payable->amount_due, 2) }}
+                            </td>
+
+                            <td class="px-5 py-4 text-right">
+                                <flux:button
+                                    wire:click="selectPayable(
+                                        '{{ $targetType }}',
+                                        {{ $targetType === 'booking'
+                                            ? $payable->booking_id
+                                            : ($targetType === 'reservation'
+                                                ? $payable->reservation_id
+                                                : $payable->entrance_slip_id) }}
+                                    )"
+                                    size="sm"
+                                    variant="primary"
+                                >
+                                    Pay
+                                </flux:button>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-3 py-8 text-center text-zinc-500">No unpaid {{ strtolower($this->payableTypeLabel($targetType)) }} records found.</td>
+                            <td colspan="5" class="px-5 py-12 text-center text-zinc-500">
+                                No unpaid {{ strtolower($this->payableTypeLabel($targetType)) }} records match the current filters.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-    </div>
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div class="mb-4">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Payment History</h2>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Verified cashier payments and recorded GCash reference numbers.</p>
+        <div class="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+            <p class="text-sm text-zinc-500">
+                Showing
+                {{ $payables->firstItem() ?? 0 }}
+                to
+                {{ $payables->lastItem() ?? 0 }}
+                of
+                {{ $payables->total() }}
+                unpaid records
+            </p>
+
+            {{ $payables->links() }}
+        </div>
+    </flux:card>
+
+    <flux:card class="overflow-hidden p-0">
+        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
+            <div>
+                <h2 class="text-lg font-semibold">Payment history</h2>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    Verified, pending, and rejected payment records.
+                </p>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+                <flux:input
+                    wire:model.live.debounce.300ms="historySearch"
+                    label="Search history"
+                    placeholder="Receipt, transaction, guest, or reference"
+                    clearable
+                />
+
+                <flux:select
+                    wire:model.live="historyStatusFilter"
+                    label="Status"
+                >
+                    <option value="">All statuses</option>
+                    <option value="Verified">Verified</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Rejected">Rejected</option>
+                </flux:select>
+
+                <flux:select
+                    wire:model.live="historyModeFilter"
+                    label="Mode"
+                >
+                    <option value="">All modes</option>
+                    @foreach ($modeOfPayments as $mode)
+                        <option value="{{ $mode->mode_of_payment_id }}">
+                            {{ $mode->mode_of_payment }}
+                        </option>
+                    @endforeach
+                </flux:select>
+
+                <flux:select
+                    wire:model.live="historyTargetFilter"
+                    label="Target"
+                >
+                    <option value="">All targets</option>
+                    <option value="booking">Booking</option>
+                    <option value="reservation">Reservation</option>
+                    <option value="entrance_slip">Entrance Slip</option>
+                </flux:select>
+
+                <flux:input
+                    wire:model.live="historyDateFrom"
+                    type="date"
+                    label="From"
+                />
+
+                <flux:input
+                    wire:model.live="historyDateTo"
+                    type="date"
+                    label="To"
+                />
+
+                <flux:select
+                    wire:model.live="historyPerPage"
+                    label="Rows"
+                >
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+
+                <div class="flex items-end">
+                    <flux:button
+                        wire:click="clearHistoryFilters"
+                        variant="ghost"
+                        class="w-full"
+                    >
+                        Clear
+                    </flux:button>
+                </div>
+            </div>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                <thead class="bg-zinc-50 dark:bg-zinc-900">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[88rem] text-left text-sm">
+                <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <tr>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortHistoryBy('p_ref_no')">Receipt {{ $this->sortIndicator('p_ref_no') }}</button></th>
-                        <th class="px-3 py-2 text-left">Transaction</th>
-                        <th class="px-3 py-2 text-left">Mode</th>
-                        <th class="px-3 py-2 text-left">Reference</th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortHistoryBy('amount_paid')">Amount {{ $this->sortIndicator('amount_paid') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortHistoryBy('date_paid')">Date {{ $this->sortIndicator('date_paid') }}</button></th>
-                        <th class="px-3 py-2 text-left">Action</th>
+                        <th class="px-5 py-3">
+                            <button
+                                wire:click="sortHistoryBy('p_ref_no')"
+                                class="font-semibold hover:text-zinc-950 dark:hover:text-white"
+                            >
+                                Receipt {{ $this->sortIndicator('p_ref_no') }}
+                            </button>
+                        </th>
+                        <th class="px-5 py-3">Transaction</th>
+                        <th class="px-5 py-3">Target</th>
+                        <th class="px-5 py-3">Mode</th>
+                        <th class="px-5 py-3">External reference</th>
+                        <th class="px-5 py-3">
+                            <button
+                                wire:click="sortHistoryBy('amount_paid')"
+                                class="font-semibold hover:text-zinc-950 dark:hover:text-white"
+                            >
+                                Amount {{ $this->sortIndicator('amount_paid') }}
+                            </button>
+                        </th>
+                        <th class="px-5 py-3">
+                            <button
+                                wire:click="sortHistoryBy('date_paid')"
+                                class="font-semibold hover:text-zinc-950 dark:hover:text-white"
+                            >
+                                Date {{ $this->sortIndicator('date_paid') }}
+                            </button>
+                        </th>
+                        <th class="px-5 py-3">
+                            <button
+                                wire:click="sortHistoryBy('payment_status')"
+                                class="font-semibold hover:text-zinc-950 dark:hover:text-white"
+                            >
+                                Status {{ $this->sortIndicator('payment_status') }}
+                            </button>
+                        </th>
+                        <th class="px-5 py-3">Handled by</th>
+                        <th class="px-5 py-3 text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($payments as $payment)
-                        <tr>
-                            <td class="px-3 py-2 font-medium">{{ $payment->p_ref_no }}</td>
-                            <td class="px-3 py-2">{{ $this->paymentTargetLabel($payment) }}</td>
-                            <td class="px-3 py-2">{{ $payment->modeOfPayment?->mode_of_payment ?? 'N/A' }}</td>
-                            <td class="px-3 py-2">{{ $payment->reference_number ?: 'N/A' }}</td>
-                            <td class="px-3 py-2">₱{{ number_format((float) $payment->amount_paid, 2) }}</td>
-                            <td class="px-3 py-2">{{ $payment->date_paid?->format('M d, Y') }}</td>
-                            <td class="px-3 py-2">
-                                <flux:button size="sm" wire:click="viewReceipt({{ $payment->payment_id }})">Receipt</flux:button>
+                        <tr wire:key="payment-history-{{ $payment->payment_id }}">
+                            <td class="px-5 py-4 font-medium">
+                                {{ $payment->p_ref_no }}
+                            </td>
+
+                            <td class="max-w-md px-5 py-4">
+                                {{ $this->paymentTargetLabel($payment) }}
+                            </td>
+
+                            <td class="px-5 py-4">
+                                {{ $this->targetTypeOf($payment) }}
+                            </td>
+
+                            <td class="px-5 py-4">
+                                {{ $payment->modeOfPayment?->mode_of_payment ?? 'N/A' }}
+                            </td>
+
+                            <td class="px-5 py-4">
+                                {{ $payment->reference_number ?: 'N/A' }}
+                            </td>
+
+                            <td class="px-5 py-4 font-semibold">
+                                ₱{{ number_format((float) $payment->amount_paid, 2) }}
+                            </td>
+
+                            <td class="px-5 py-4">
+                                {{ $payment->date_paid?->format('M d, Y') ?? 'N/A' }}
+                            </td>
+
+                            <td class="px-5 py-4">
+                                <flux:badge
+                                    color="{{ $this->paymentStatusColor((string) $payment->payment_status) }}"
+                                    size="sm"
+                                >
+                                    {{ $payment->payment_status }}
+                                </flux:badge>
+                            </td>
+
+                            <td class="px-5 py-4">
+                                {{ $this->handledBy($payment) }}
+                            </td>
+
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    @if ($payment->booking_id && Route::has('cashier.bookings.show'))
+                                        <flux:button
+                                            href="{{ route('cashier.bookings.show', $payment->booking_id) }}"
+                                            wire:navigate
+                                            size="sm"
+                                            variant="ghost"
+                                        >
+                                            Booking
+                                        </flux:button>
+                                    @endif
+
+                                    <flux:button
+                                        wire:click="viewReceipt({{ $payment->payment_id }})"
+                                        size="sm"
+                                        variant="primary"
+                                    >
+                                        Receipt
+                                    </flux:button>
+                                </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-8 text-center text-zinc-500">No payment records found.</td>
+                            <td colspan="10" class="px-5 py-12 text-center text-zinc-500">
+                                No payment record matches the selected filters.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="mt-4">
+        <div class="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+            <p class="text-sm text-zinc-500">
+                Showing
+                {{ $payments->firstItem() ?? 0 }}
+                to
+                {{ $payments->lastItem() ?? 0 }}
+                of
+                {{ $payments->total() }}
+                payment records
+            </p>
+
             {{ $payments->links() }}
         </div>
-    </div>
+    </flux:card>
 </div>
