@@ -125,7 +125,10 @@ Volt::route('/cashier/action-center', 'cashier.action-center.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.action-center');
 
-
+Volt::route('/cashier/bookings/{booking}/details', 'cashier.bookings.show')
+    ->whereNumber('booking')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.bookings.show');
 
 // Maintenance Staff Routes
 Volt::route('/maintenance/dashboard', 'maintenance.dashboard.index')

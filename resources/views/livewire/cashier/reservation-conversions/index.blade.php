@@ -17,6 +17,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public string $referenceNumber = '';
     public ?string $successMessage = null;
     public ?string $errorMessage = null;
+    public ?int $convertedBookingId = null;
 
     public function reservations()
     {
@@ -106,6 +107,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             ]);
 
             $this->successMessage = 'Reservation converted to booking. Booking reference: ' . $booking->b_ref_no;
+            $this->convertedBookingId = (int) $booking->booking_id;
             $this->selectedReservationId = null;
             $this->paymentAmount = '';
             $this->modeOfPaymentId = null;
@@ -119,6 +121,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     {
         $this->successMessage = null;
         $this->errorMessage = null;
+        $this->convertedBookingId = null;
     }
 };
 ?>
@@ -139,8 +142,19 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     </div>
 
     @if ($successMessage)
-        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
-            {{ $successMessage }}
+        <div class="flex flex-col gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200 sm:flex-row sm:items-center sm:justify-between">
+            <span>{{ $successMessage }}</span>
+
+            @if ($convertedBookingId && Route::has('cashier.bookings.show'))
+                <flux:button
+                    href="{{ route('cashier.bookings.show', $convertedBookingId) }}"
+                    wire:navigate
+                    size="sm"
+                    variant="primary"
+                >
+                    View Booking
+                </flux:button>
+            @endif
         </div>
     @endif
 
