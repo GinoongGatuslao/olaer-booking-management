@@ -63,6 +63,9 @@ Volt::route('/admin/reports', 'admin.reports.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.reports.index');
 
+Volt::route('/admin/activity-logs', 'admin.activity-logs.index')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.activity-logs.index');
 
 
 // Cashier Routes
