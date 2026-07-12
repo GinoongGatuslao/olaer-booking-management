@@ -16,6 +16,15 @@ new class extends Component {
     public ?int $selectedBookingId = null;
     public ?string $errorMessage = null;
 
+    public function mount(): void
+    {
+        $bookingId = request()->integer('booking');
+
+        if ($bookingId > 0) {
+            $this->selectBooking($bookingId);
+        }
+    }
+
     public function with(): array
     {
         return [

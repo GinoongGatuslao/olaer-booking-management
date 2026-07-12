@@ -31,6 +31,40 @@ new class extends Component {
     ];
     public array $editItems = [];
 
+    public function mount(): void
+    {
+        $bookingId = request()->integer('booking');
+
+        if ($bookingId <= 0) {
+            return;
+        }
+
+        $booking = Booking::query()
+            ->with('details')
+            ->whereKey($bookingId)
+            ->whereIn('status', ['Checked-in', 'Partially Checked-in'])
+            ->whereHas('details', fn ($query) => $query->where('status', 'Checked-in'))
+            ->first();
+
+        if ($booking === null) {
+            return;
+        }
+
+        $this->showCreateForm = true;
+        $this->form['booking_id'] = (string) $booking->booking_id;
+
+        $checkedInFacilityIds = $booking->details
+            ->where('status', 'Checked-in')
+            ->pluck('facility_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($checkedInFacilityIds->count() === 1) {
+            $this->form['facility_id'] = (string) $checkedInFacilityIds->first();
+        }
+    }
+
     public function with(): array
     {
         return [

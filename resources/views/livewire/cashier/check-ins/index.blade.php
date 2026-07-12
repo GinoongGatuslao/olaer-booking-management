@@ -16,6 +16,35 @@ new class extends Component {
     public ?int $selectedBookingDetailsId = null;
     public string $selectedLabel = '';
 
+    public function mount(): void
+    {
+        $bookingId = request()->integer('booking');
+
+        if ($bookingId <= 0) {
+            return;
+        }
+
+        $eligibleDetails = BookingDetail::query()
+            ->with('booking')
+            ->where('booking_id', $bookingId)
+            ->whereIn('status', ['Booked', 'Rescheduled', 'Transferred', 'Extended'])
+            ->whereHas('booking', function ($query): void {
+                $query->where('amount_due', '<=', 0)
+                    ->whereNotIn('status', ['Cancelled', 'Checked-out']);
+            })
+            ->get();
+
+        $bookingReference = $eligibleDetails->first()?->booking?->b_ref_no;
+
+        if (filled($bookingReference)) {
+            $this->search = (string) $bookingReference;
+        }
+
+        if ($eligibleDetails->count() === 1) {
+            $this->selectCheckIn((int) $eligibleDetails->first()->booking_details_id);
+        }
+    }
+
     public function with(): array
     {
         return [

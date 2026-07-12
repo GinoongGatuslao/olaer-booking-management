@@ -41,6 +41,12 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         if ($firstMode !== null) {
             $this->modeOfPaymentId = (string) $firstMode->mode_of_payment_id;
         }
+
+        $bookingId = request()->integer('booking');
+
+        if ($bookingId > 0) {
+            $this->selectPayable('booking', $bookingId);
+        }
     }
 
     public function with(): array
