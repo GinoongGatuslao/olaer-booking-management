@@ -58,7 +58,13 @@ class BookingAvailabilityService
         }
 
         if (Schema::hasColumn('tbl_booking_details', 'status')) {
-            $query->whereNotIn('status', ['Cancelled', 'Checked-out', 'Transferred']);
+            $query->whereNotIn('status', [
+                'Cancelled',
+                'Checked-out',
+                'Transferred',
+                'Payment Rejected',
+                'Rejected',
+            ]);
         }
 
         return $query->exists();
@@ -81,7 +87,7 @@ class BookingAvailabilityService
 
         if (Schema::hasTable('tbl_reservation') && Schema::hasColumn('tbl_reservation', 'status')) {
             $query->join('tbl_reservation', 'tbl_reservation.reservation_id', '=', 'tbl_reservation_details.reservation_id')
-                ->whereNotIn('tbl_reservation.status', ['Cancelled', 'Converted']);
+                ->whereNotIn('tbl_reservation.status', ['Cancelled', 'Converted', 'Payment Rejected', 'Rejected']);
         }
 
         return $query->exists();

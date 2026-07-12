@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingDetail;
-use App\Models\FacilityInspection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Throwable;
@@ -70,12 +69,11 @@ class CheckOutWorkflowService
             throw new InvalidArgumentException('This booking detail has no assigned facility.');
         }
 
-        $hasInspection = FacilityInspection::query()
-            ->where('booking_details_id', $detail->booking_details_id)
-            ->exists();
+        $inspectionRequestIsCompleted = app(CheckOutInspectionRequestService::class)
+            ->completedRequestExistsForDetail((int) $detail->booking_details_id);
 
-        if (! $hasInspection) {
-            throw new InvalidArgumentException('Maintenance inspection is required before check-out.');
+        if (! $inspectionRequestIsCompleted) {
+            throw new InvalidArgumentException('A completed maintenance inspection request is required before check-out.');
         }
 
         if ((float) $booking->amount_due > 0) {

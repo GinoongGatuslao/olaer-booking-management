@@ -6,6 +6,7 @@ use App\Models\Discount;
 use App\Models\Facility;
 use App\Models\FacilityPrice;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
 class ReservationQuoteService
@@ -46,11 +47,12 @@ class ReservationQuoteService
                 throw new InvalidArgumentException('The selected discount does not apply to this facility.');
             }
 
-            if (! $this->discountIsCurrentlyValid($discount)) {
+            if (! $this->discountIsValidForDate($discount, $checkInDate)) {
                 throw new InvalidArgumentException('The selected discount is inactive or outside its validity period.');
             }
 
-            $discountAmount = round($basePrice * (float) $discount->discount_amount, 2);
+            $discountRate = $this->normalizeDiscountRate((float) $discount->discount_amount);
+            $discountAmount = round($basePrice * $discountRate, 2);
             $discountName = $discount->discount_name;
         }
 
@@ -80,10 +82,6 @@ class ReservationQuoteService
 
         if ($end->lessThan($start)) {
             throw new InvalidArgumentException('Check-out date cannot be before check-in date.');
-        }
-
-        if (strtolower($rateType) === 'overnight') {
-            return (int) max($start->diffInDays($end), 1);
         }
 
         return (int) max($start->diffInDays($end), 1);
@@ -116,22 +114,27 @@ class ReservationQuoteService
         };
     }
 
-    private function discountIsCurrentlyValid(Discount $discount): bool
+    private function discountIsValidForDate(Discount $discount, string $checkInDate): bool
     {
         if ($discount->status !== 'Active') {
             return false;
         }
 
-        $now = now();
+        $effectiveAt = Carbon::parse($checkInDate)->setTime(12, 0, 0);
 
-        if ($discount->discount_start && $now->lt($discount->discount_start)) {
+        if ($discount->discount_start && $effectiveAt->lt(Carbon::parse($discount->discount_start))) {
             return false;
         }
 
-        if ($discount->discount_end && $now->gt($discount->discount_end)) {
+        if ($discount->discount_end && $effectiveAt->gt(Carbon::parse($discount->discount_end))) {
             return false;
         }
 
         return true;
+    }
+
+    private function normalizeDiscountRate(float $value): float
+    {
+        return $value > 1 ? min($value / 100, 1) : max($value, 0);
     }
 }

@@ -1,11 +1,10 @@
 <?php
 
+use App\Http\Controllers\PrintDocumentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
-
-Route::view('/', 'welcome')->name('home');
 
 Volt::route('/login', 'auth.login')
     ->middleware('guest')
@@ -20,9 +19,16 @@ Route::post('/logout', function (Request $request) {
     return redirect()->route('login');
 })->middleware('auth')->name('logout');
 
+Volt::route('/forgot-password', 'auth.forgot-password')
+    ->middleware('guest')
+    ->name('password.request');
+
 Volt::route('/dashboard', 'dashboard')
     ->middleware(['auth', 'active'])
     ->name('dashboard');
+
+
+
 
 // Admin Routes
 Volt::route('/admin/dashboard', 'admin.dashboard')
@@ -53,8 +59,14 @@ Volt::route('/admin/users', 'admin.users.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.users.index');
 
+Volt::route('/admin/reports', 'admin.reports.index')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.reports.index');
+
+
+
 // Cashier Routes
-Volt::route('/cashier/dashboard', 'cashier.dashboard')
+Volt::route('/cashier/dashboard', 'cashier.dashboard.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.dashboard');
 
@@ -90,8 +102,30 @@ Volt::route('/cashier/billings', 'cashier.billings.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.billings.index');
 
+Volt::route('/cashier/reports', 'cashier.reports.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.reports.index');
+
+Volt::route('/cashier/gcash-verifications', 'cashier.gcash-verifications.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.gcash-verifications.index');
+
+Volt::route('/cashier/reservation-conversions', 'cashier.reservation-conversions.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.reservation-conversions.index');
+
+Volt::route('/cashier/notifications', 'cashier.notifications.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.notifications.index');
+
+Volt::route('/cashier/action-center', 'cashier.action-center.index')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.action-center');
+
+
+
 // Maintenance Staff Routes
-Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
+Volt::route('/maintenance/dashboard', 'maintenance.dashboard.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.dashboard');
 
@@ -103,6 +137,16 @@ Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.amenity-requests.index');
 
+Volt::route('/maintenance/notifications', 'maintenance.notifications.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.notifications.index');
+
+Volt::route('/maintenance/action-center', 'maintenance.action-center.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.action-center');
+
+
+
 // Security Guard Routes
 Volt::route('/security/dashboard', 'security.dashboard')
     ->middleware(['auth', 'active', 'role:Security Guard'])
@@ -111,3 +155,46 @@ Volt::route('/security/dashboard', 'security.dashboard')
 Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
     ->middleware(['auth', 'active', 'role:Security Guard'])
     ->name('security.entrance-slips.create');
+
+
+
+//Guest Routes
+Volt::route('/', 'guest.home')
+    ->name('guest.home');
+
+Volt::route('/reserve', 'guest.reservations.create')
+    ->name('guest.reservations.create');
+
+Volt::route('/book', 'guest.bookings.create')
+    ->name('guest.bookings.create');
+
+Volt::route('/reservation/manage', 'guest.reservations.manage')
+    ->name('guest.reservations.manage');
+
+Volt::route('/confirmation', 'guest.confirmations.lookup')
+    ->name('guest.confirmations.lookup');
+
+
+
+//Print
+Route::middleware(['auth', 'active'])->prefix('print')->name('print.')->group(function () {
+    Route::get('/entrance-slip/{entranceSlip}', [PrintDocumentController::class, 'entranceSlip'])
+        ->middleware('role:Admin,Manager,Cashier,Security Guard')
+        ->name('entrance-slip');
+
+    Route::get('/reservation/{reservation}', [PrintDocumentController::class, 'reservationConfirmation'])
+        ->middleware('role:Admin,Manager,Cashier')
+        ->name('reservation');
+
+    Route::get('/booking/{booking}', [PrintDocumentController::class, 'bookingConfirmation'])
+        ->middleware('role:Admin,Manager,Cashier')
+        ->name('booking');
+
+    Route::get('/payment/{payment}', [PrintDocumentController::class, 'paymentReceipt'])
+        ->middleware('role:Admin,Manager,Cashier')
+        ->name('payment');
+
+    Route::get('/billing/{booking}', [PrintDocumentController::class, 'billingStatement'])
+        ->middleware('role:Admin,Manager,Cashier')
+        ->name('billing');
+});

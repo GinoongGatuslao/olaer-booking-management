@@ -1,43 +1,283 @@
 <?php
 
 use App\Models\EntranceSlip;
-use function Livewire\Volt\{computed, layout, title};
+use App\Services\SecurityDashboardService;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Volt\Component;
 
-layout('layouts.app');
-title('Security Dashboard - Olaer Spring Resort');
+new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')] class extends Component
+{
+    #[Computed]
+    public function overview(): array
+    {
+        return app(SecurityDashboardService::class)
+            ->overview((int) auth()->id());
+    }
 
-$todaySlips = computed(fn () => EntranceSlip::whereDate('created_at', today())->count());
-$unpaidSlips = computed(fn () => EntranceSlip::where('status', 'Unpaid')->count());
-$paidSlips = computed(fn () => EntranceSlip::where('status', 'Paid')->count());
-$totalTouristsToday = computed(fn () => EntranceSlip::whereDate('created_at', today())->sum('no_of_Tourist'));
+    #[Computed]
+    public function admittedBreakdown(): array
+    {
+        return app(SecurityDashboardService::class)
+            ->admittedGuestBreakdown();
+    }
+
+    #[Computed]
+    public function recentSlips()
+    {
+        return app(SecurityDashboardService::class)
+            ->myRecentSlips((int) auth()->id());
+    }
+
+    public function slipNumber(EntranceSlip $slip): string
+    {
+        return app(SecurityDashboardService::class)
+            ->formatSlipNumber($slip);
+    }
+
+    public function createdTime(?string $time): string
+    {
+        return app(SecurityDashboardService::class)
+            ->formatCreatedTime($time);
+    }
+
+    public function totalGuests(EntranceSlip $slip): int
+    {
+        return app(SecurityDashboardService::class)
+            ->totalGuests($slip);
+    }
+};
 
 ?>
 
-<div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-bold tracking-tight">Security Dashboard</h1>
-        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Initial counters for entrance slip operations.</p>
+<div wire:poll.15s class="space-y-6">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">Security Guard Dashboard</h1>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                Entrance monitoring for today. Payment statuses refresh automatically every 15 seconds.
+            </p>
+        </div>
+
+        @if (Route::has('security.entrance-slips.create'))
+            <flux:button
+                href="{{ route('security.entrance-slips.create') }}"
+                wire:navigate
+                variant="primary"
+            >
+                Create Entrance Slip
+            </flux:button>
+        @endif
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-sm text-zinc-500">Slips Created Today</p>
-            <p class="mt-2 text-2xl font-semibold">{{ $this->todaySlips }}</p>
-        </div>
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <flux:card>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">Slips I created today</p>
+            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_slips_today'] }}</p>
+            <p class="mt-1 text-xs text-zinc-500">
+                Resort total: {{ $this->overview['resort_slips_today'] }}
+            </p>
+        </flux:card>
 
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-sm text-zinc-500">Unpaid Slips</p>
-            <p class="mt-2 text-2xl font-semibold">{{ $this->unpaidSlips }}</p>
-        </div>
+        <flux:card>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">Paid entrance slips</p>
+            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['paid_slips_today'] }}</p>
+            <p class="mt-1 text-xs text-zinc-500">Paid slips count as admitted guests.</p>
+        </flux:card>
 
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-sm text-zinc-500">Paid Slips</p>
-            <p class="mt-2 text-2xl font-semibold">{{ $this->paidSlips }}</p>
-        </div>
+        <flux:card>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">Unpaid entrance slips</p>
+            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['unpaid_slips_today'] }}</p>
+            <p class="mt-1 text-xs text-zinc-500">
+                Mine: {{ $this->overview['my_unpaid_slips_today'] }}
+            </p>
+        </flux:card>
 
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-sm text-zinc-500">Tourists Today</p>
-            <p class="mt-2 text-2xl font-semibold">{{ $this->totalTouristsToday }}</p>
-        </div>
+        <flux:card>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">Admitted guests today</p>
+            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['admitted_guests_today'] }}</p>
+            <p class="mt-1 text-xs text-zinc-500">
+                Tourists: {{ $this->overview['tourists_today'] }}
+            </p>
+        </flux:card>
     </div>
+
+    <div class="grid gap-6 xl:grid-cols-2">
+        <flux:card>
+            <div class="mb-4">
+                <h2 class="text-lg font-semibold">Paid guest-category breakdown</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                    Only paid slips are included because only paid guests are considered admitted.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Adults</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['adult'] }}</p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Children</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['children'] }}</p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Senior / PWD</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['pwd_sc'] }}</p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Male</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['male'] }}</p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Female</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['female'] }}</p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500">Tourists</p>
+                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['tourist'] }}</p>
+                </div>
+            </div>
+        </flux:card>
+
+        <flux:card>
+            <div class="mb-4">
+                <h2 class="text-lg font-semibold">Operational reminder</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                    The security guard creates the entrance slip. The cashier handles and verifies payment.
+                </p>
+            </div>
+
+            <div class="space-y-3 text-sm">
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="font-medium">1. Record the correct headcount</p>
+                    <p class="mt-1 text-zinc-500">
+                        Adult + Children + Senior/PWD must equal Male + Female.
+                    </p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="font-medium">2. Direct the guest to the cashier</p>
+                    <p class="mt-1 text-zinc-500">
+                        An unpaid slip does not yet represent an admitted guest.
+                    </p>
+                </div>
+
+                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                    <p class="font-medium">3. Confirm payment status</p>
+                    <p class="mt-1 text-zinc-500">
+                        This dashboard changes the slip status automatically after cashier payment.
+                    </p>
+                </div>
+            </div>
+        </flux:card>
+    </div>
+
+    <flux:card>
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-lg font-semibold">My entrance slips today</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                    Recent slips created using your account.
+                </p>
+            </div>
+
+            @if (Route::has('security.entrance-slips.create'))
+                <flux:button
+                    href="{{ route('security.entrance-slips.create') }}"
+                    wire:navigate
+                    size="sm"
+                    variant="ghost"
+                >
+                    New Slip
+                </flux:button>
+            @endif
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[56rem] text-left text-sm">
+                <thead class="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
+                    <tr>
+                        <th class="px-2 py-3">Slip</th>
+                        <th class="px-2 py-3">Time</th>
+                        <th class="px-2 py-3">Guests</th>
+                        <th class="px-2 py-3">Breakdown</th>
+                        <th class="px-2 py-3">Total</th>
+                        <th class="px-2 py-3">Status</th>
+                        <th class="px-2 py-3">Handled by</th>
+                        <th class="px-2 py-3 text-right">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    @forelse ($this->recentSlips as $slip)
+                        <tr wire:key="security-slip-{{ $slip->entrance_slip_id }}">
+                            <td class="px-2 py-3 font-medium">
+                                {{ $this->slipNumber($slip) }}
+                            </td>
+
+                            <td class="px-2 py-3">
+                                {{ $this->createdTime($slip->time_created) }}
+                            </td>
+
+                            <td class="px-2 py-3 font-medium">
+                                {{ $this->totalGuests($slip) }}
+                            </td>
+
+                            <td class="px-2 py-3 text-xs text-zinc-500">
+                                A {{ $slip->no_of_adult }}
+                                · C {{ $slip->no_of_children }}
+                                · SC/PWD {{ $slip->no_of_PWD_SC }}
+                                <br>
+                                M {{ $slip->no_of_Male }}
+                                · F {{ $slip->no_of_Female }}
+                                · T {{ $slip->no_of_Tourist }}
+                            </td>
+
+                            <td class="px-2 py-3 font-medium">
+                                ₱{{ number_format((float) $slip->total_price, 2) }}
+                            </td>
+
+                            <td class="px-2 py-3">
+                                <flux:badge
+                                    color="{{ $slip->status === 'Paid' ? 'green' : 'amber' }}"
+                                    size="sm"
+                                >
+                                    {{ $slip->status }}
+                                </flux:badge>
+                            </td>
+
+                            <td class="px-2 py-3 text-zinc-500">
+                                {{ $slip->handledBy?->full_name ?? 'Waiting for cashier' }}
+                            </td>
+
+                            <td class="px-2 py-3 text-right">
+                                @if (Route::has('print.entrance-slip'))
+                                    <flux:button
+                                        href="{{ route('print.entrance-slip', $slip) }}"
+                                        target="_blank"
+                                        size="sm"
+                                        variant="ghost"
+                                    >
+                                        Print
+                                    </flux:button>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="px-2 py-10 text-center text-zinc-500">
+                                You have not created an entrance slip today.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </flux:card>
 </div>

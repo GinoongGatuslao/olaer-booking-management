@@ -3,8 +3,10 @@
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
 use App\Models\Fine;
+use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
 use App\Services\FacilityInspectionWorkflowService;
+use App\Services\CheckOutInspectionRequestService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +17,7 @@ new class extends Component {
     use WithPagination;
 
     public string $search = '';
-    public string $statusFilter = 'checked_in';
+    public string $statusFilter = 'pending';
     public string $sortField = 'check_out_date';
     public string $sortDirection = 'asc';
 
@@ -26,6 +28,20 @@ new class extends Component {
     public ?int $fineId = null;
     public int $fineQuantity = 1;
     public string $remarks = '';
+
+
+    public function mount(): void
+    {
+        $requestId = (int) request()->query('request', 0);
+
+        if ($requestId < 1) {
+            return;
+        }
+
+        $inspectionRequest = app(CheckOutInspectionRequestService::class)->acceptRequest($requestId, (int) Auth::id());
+        $this->statusFilter = 'active';
+        $this->selectInspection((int) $inspectionRequest->booking_details_id);
+    }
 
     public function with(): array
     {
@@ -115,7 +131,7 @@ new class extends Component {
                 trim((string) $validated['remarks']) !== '' ? trim((string) $validated['remarks']) : null
             );
 
-            session()->flash('success', 'Inspection saved as cleared. Inclusive amenities and delivered requested amenities were recorded as complete.');
+            session()->flash('success', 'Inspection saved as cleared. The cashier can now proceed if the balance is zero.');
         } catch (\Throwable $exception) {
             $this->addError('inspection', $exception->getMessage());
         }
@@ -146,7 +162,7 @@ new class extends Component {
 
             $this->fineId = null;
             $this->fineQuantity = 1;
-            session()->flash('success', 'Fine recorded. The cashier must collect the added balance before check-out.');
+            session()->flash('success', 'Fine recorded and sent to cashier billing. The cashier must collect the added balance before check-out.');
         } catch (\Throwable $exception) {
             $this->addError('inspection', $exception->getMessage());
         }
@@ -209,18 +225,19 @@ new class extends Component {
             ->join('tbl_booking', 'tbl_booking.booking_id', '=', 'tbl_booking_details.booking_id')
             ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_booking.guest_id')
             ->leftJoin('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_booking_details.facility_id')
+            ->join('tbl_facility_inspection_request', 'tbl_facility_inspection_request.booking_details_id', '=', 'tbl_booking_details.booking_details_id')
             ->leftJoin('tbl_facility_inspection', 'tbl_facility_inspection.booking_details_id', '=', 'tbl_booking_details.booking_details_id')
             ->with(['booking.guest', 'facility.facilityType']);
 
-        if ($this->statusFilter === 'inspected') {
-            $query->whereNotNull('tbl_facility_inspection.facility_inspection_id')
-                ->where('tbl_booking_details.status', 'Checked-in');
-        } elseif ($this->statusFilter === 'not_inspected') {
-            $query->whereNull('tbl_facility_inspection.facility_inspection_id')
-                ->where('tbl_booking_details.status', 'Checked-in');
+        if ($this->statusFilter === 'completed') {
+            $query->where('tbl_facility_inspection_request.status', 'Completed');
+        } elseif ($this->statusFilter === 'active') {
+            $query->whereIn('tbl_facility_inspection_request.status', ['Pending', 'In Progress']);
         } else {
-            $query->where('tbl_booking_details.status', 'Checked-in');
+            $query->where('tbl_facility_inspection_request.status', 'Pending');
         }
+
+        $query->where('tbl_booking_details.status', 'Checked-in');
 
         $searchText = trim($this->search);
 
@@ -320,7 +337,7 @@ new class extends Component {
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Facility Inspections</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Inspect inclusive amenities and delivered amenity-request items before cashier check-out.</p>
+            <p class="text-sm text-zinc-600 dark:text-zinc-400">Inspect only facilities that the cashier has requested for check-out inspection.</p>
         </div>
     </div>
 
@@ -476,9 +493,9 @@ new class extends Component {
         <div class="grid gap-3 md:grid-cols-3">
             <flux:input label="Search" placeholder="Reference, guest, contact, facility..." wire:model.live.debounce.300ms="search" />
             <flux:select label="Filter" wire:model.live="statusFilter">
-                <option value="checked_in">All checked-in</option>
-                <option value="not_inspected">Not inspected</option>
-                <option value="inspected">Already inspected</option>
+                <option value="pending">Pending requests</option>
+                <option value="active">Pending / In progress</option>
+                <option value="completed">Completed requests</option>
             </flux:select>
         </div>
 
@@ -508,7 +525,7 @@ new class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-3 py-8 text-center text-zinc-500">No checked-in facilities found.</td>
+                            <td colspan="6" class="px-3 py-8 text-center text-zinc-500">No inspection requests found.</td>
                         </tr>
                     @endforelse
                 </tbody>

@@ -2,8 +2,10 @@
 
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
+use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
 use App\Services\CheckOutWorkflowService;
+use App\Services\CheckOutInspectionRequestService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +31,7 @@ new class extends Component {
             'bookingDetails' => $this->bookingDetails(),
             'selectedGuestFines' => $this->selectedGuestFines(),
             'selectedInspection' => $this->selectedInspection(),
+            'selectedInspectionRequest' => $this->selectedInspectionRequest(),
         ];
     }
 
@@ -82,6 +85,25 @@ new class extends Component {
         $this->selectedBookingId = null;
         $this->selectedLabel = '';
         $this->selectedBookingAmountDue = 0.00;
+    }
+
+
+    public function sendInspectionRequest(CheckOutInspectionRequestService $inspectionRequestService): void
+    {
+        $validated = $this->validate([
+            'selectedBookingDetailsId' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
+        ]);
+
+        try {
+            $inspectionRequestService->requestInspection(
+                (int) $validated['selectedBookingDetailsId'],
+                (int) Auth::id()
+            );
+
+            session()->flash('success', 'Inspection request sent to maintenance.');
+        } catch (\Throwable $exception) {
+            $this->addError('checkOut', $exception->getMessage());
+        }
     }
 
     public function confirmCheckOut(CheckOutWorkflowService $checkOutWorkflow): void
@@ -207,6 +229,20 @@ new class extends Component {
             ->get();
     }
 
+
+    private function selectedInspectionRequest(): ?FacilityInspectionRequest
+    {
+        if ($this->selectedBookingDetailsId === null) {
+            return null;
+        }
+
+        return FacilityInspectionRequest::query()
+            ->with(['requestedBy', 'assignedTo', 'inspection'])
+            ->where('booking_details_id', $this->selectedBookingDetailsId)
+            ->latest('facility_inspection_request_id')
+            ->first();
+    }
+
     private function selectedInspection(): ?FacilityInspection
     {
         if ($this->selectedBookingDetailsId === null) {
@@ -251,11 +287,23 @@ new class extends Component {
                         Current balance: <span class="font-semibold">₱{{ number_format($selectedBookingAmountDue, 2) }}</span>
                     </p>
 
-                    @if ($selectedInspection === null)
-                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Maintenance inspection required before check-out.</p>
+                    @if ($selectedInspectionRequest === null)
+                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">No inspection request has been sent yet.</p>
                     @else
                         <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                            Inspection: <span class="font-semibold">{{ $selectedInspection->inspection_status }}</span>
+                            Inspection request: <span class="font-semibold">{{ $selectedInspectionRequest->status }}</span>
+                            requested by {{ $selectedInspectionRequest->requestedBy?->first_name }} {{ $selectedInspectionRequest->requestedBy?->last_name }}
+                            @if ($selectedInspectionRequest->requested_at)
+                                on {{ $selectedInspectionRequest->requested_at->format('M d, Y h:i A') }}
+                            @endif
+                        </p>
+                    @endif
+
+                    @if ($selectedInspection === null)
+                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Maintenance inspection result is still required before check-out.</p>
+                    @else
+                        <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                            Inspection result: <span class="font-semibold">{{ $selectedInspection->inspection_status }}</span>
                             by {{ $selectedInspection->inspectedBy?->first_name }} {{ $selectedInspection->inspectedBy?->last_name }}
                             @if ($selectedInspection->inspected_at)
                                 on {{ $selectedInspection->inspected_at->format('M d, Y h:i A') }}
@@ -271,8 +319,14 @@ new class extends Component {
                     @endif
                 </div>
 
-                <div class="flex gap-2">
-                    @if ($selectedInspection !== null && $selectedBookingAmountDue <= 0)
+                <div class="flex flex-wrap gap-2">
+                    @if ($selectedInspectionRequest === null)
+                        <flux:button wire:click="sendInspectionRequest">Send Inspection Request</flux:button>
+                    @elseif ($selectedInspectionRequest->status !== 'Completed')
+                        <flux:button disabled>Waiting for Maintenance</flux:button>
+                    @endif
+
+                    @if ($selectedInspectionRequest !== null && $selectedInspectionRequest->status === 'Completed' && $selectedInspection !== null && $selectedBookingAmountDue <= 0)
                         <flux:button variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
                     @else
                         <flux:button variant="primary" disabled>Not Ready</flux:button>

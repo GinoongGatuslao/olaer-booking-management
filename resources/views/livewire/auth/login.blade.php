@@ -21,12 +21,15 @@ rules([
 $login = function () {
     $this->validate();
 
-    $ok = Auth::attempt([
-        'username' => $this->username,
-        'password' => $this->password,
-    ], (bool) $this->remember);
+    $ok = Auth::attempt(
+        [
+            'username' => $this->username,
+            'password' => $this->password,
+        ],
+        (bool) $this->remember,
+    );
 
-    if (! $ok) {
+    if (!$ok) {
         throw ValidationException::withMessages([
             'username' => 'The username or password is incorrect.',
         ]);
@@ -80,11 +83,19 @@ $login = function () {
                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                 @enderror
             </div>
+            <div class="flex justify-between">
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="remember"
+                        class="rounded border-zinc-300 text-zinc-900 shadow-sm focus:ring-zinc-500">
+                    <span>Remember me</span>
+                </label>
+                <a href="{{ route('password.request') }}" wire:navigate
+                    class="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300">
+                    Forgot password?
+                </a>
+            </div>
 
-            <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                <input type="checkbox" wire:model="remember" class="rounded border-zinc-300 text-zinc-900 shadow-sm focus:ring-zinc-500">
-                <span>Remember me</span>
-            </label>
+
 
             <flux:button type="submit" variant="primary" class="w-full">
                 Login

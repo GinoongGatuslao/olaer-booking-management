@@ -16,6 +16,7 @@ class FacilityInspection extends Model
     protected $primaryKey = 'facility_inspection_id';
 
     protected $fillable = [
+        'facility_inspection_request_id',
         'booking_details_id',
         'booking_id',
         'facility_id',
@@ -32,11 +33,17 @@ class FacilityInspection extends Model
         ];
     }
 
+    public function request(): BelongsTo
+    {
+        return $this->belongsTo(FacilityInspectionRequest::class, 'facility_inspection_request_id', 'facility_inspection_request_id');
+    }
+
     public function bookingDetail(): BelongsTo
     {
         return $this->belongsTo(BookingDetail::class, 'booking_details_id', 'booking_details_id');
     }
 
+    public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }

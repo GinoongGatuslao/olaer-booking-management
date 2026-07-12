@@ -92,6 +92,7 @@ class FacilityInspectionWorkflowService
             $this->guardNoExistingFines($booking, $detail);
 
             $inspection = $this->upsertInspection($detail, $booking, $maintenanceUserId, 'Cleared', $remarks);
+            app(CheckOutInspectionRequestService::class)->markLatestRequestCompleted($bookingDetailsId, $maintenanceUserId);
 
             foreach ($this->checklistFor($bookingDetailsId) as $item) {
                 $inspection->items()->updateOrCreate(
@@ -161,6 +162,7 @@ class FacilityInspectionWorkflowService
 
             $totalCharge = round(((float) $fine->fine_charge) * $quantity, 2);
             $inspection = $this->upsertInspection($detail, $booking, $maintenanceUserId, 'Damage Found', $remarks);
+            app(CheckOutInspectionRequestService::class)->markLatestRequestCompleted($bookingDetailsId, $maintenanceUserId);
 
             if ($sourceItem !== null) {
                 $inspection->items()->updateOrCreate(
