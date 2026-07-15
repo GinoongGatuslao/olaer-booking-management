@@ -21,6 +21,7 @@ class ReservationToBookingWorkflowService
     public function __construct(
         private readonly ReservationQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityScheduleLockService $scheduleLock,
     ) {}
 
     /**
@@ -38,6 +39,13 @@ class ReservationToBookingWorkflowService
                 ->findOrFail($reservationId);
 
             $this->guardConvertible($reservation);
+
+            $this->scheduleLock->lockMany(
+                $reservation->details
+                    ->pluck('facility_id')
+                    ->map(fn ($facilityId): int => (int) $facilityId)
+                    ->all(),
+            );
 
             $amountDue = round((float) $reservation->amount_due, 2);
             $paymentAmount = round((float) ($data['payment_amount'] ?? 0), 2);

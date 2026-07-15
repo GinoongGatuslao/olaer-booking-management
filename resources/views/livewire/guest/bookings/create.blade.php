@@ -4,8 +4,10 @@ use App\Models\Booking;
 use App\Models\Facility;
 use App\Services\PublicBookingSearchService;
 use App\Services\PublicBookingWorkflowService;
+use App\Services\GcashProofStorageService;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -99,7 +101,9 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
         $this->setExactPaymentAmountFromQuote();
     }
 
-    public function save(): void
+    public function save(
+        GcashProofStorageService $proofStorage,
+    ): void
     {
         $this->success_message = null;
         $this->error_message = null;
@@ -147,8 +151,12 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             ]);
         }
 
+        $proofPath = null;
+
         try {
-            $proofPath = $this->proof_of_payment->store('gcash-proofs', 'public');
+            $proofPath = $proofStorage->store(
+                $this->proof_of_payment,
+            );
 
             $booking = app(PublicBookingWorkflowService::class)
                 ->createGuestBookingWithPendingGcash([
@@ -159,7 +167,19 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             $this->created_booking_id = (int) $booking->booking_id;
             $this->success_message = 'Booking submitted. Your payment proof is pending cashier verification.';
         } catch (InvalidArgumentException $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
             $this->error_message = $exception->getMessage();
+        } catch (Throwable $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
+            report($exception);
+
+            $this->error_message = 'The booking could not be submitted. Please try again or contact the resort.';
         }
     }
 

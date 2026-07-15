@@ -20,6 +20,7 @@ class PublicBookingWorkflowService
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityScheduleLockService $scheduleLock,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -30,6 +31,9 @@ class PublicBookingWorkflowService
             $rateType = (string) $data['rate_type'];
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
+
+            $this->scheduleLock->lockOne($facilityId);
+
             $totalGuestCount = max(
                 1,
                 (int) ($data['total_guest_count'] ?? 1),

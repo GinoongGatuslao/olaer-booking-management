@@ -4,7 +4,7 @@ use App\Models\Payment;
 use App\Services\GcashPaymentVerificationService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Route;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -15,11 +15,8 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     use WithPagination;
 
     public string $search = '';
-
     public string $statusFilter = 'Pending';
-
     public ?int $selectedPaymentId = null;
-
     public string $rejectionReason = '';
 
     public function with(): array
@@ -51,7 +48,6 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     {
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
-
             return;
         }
 
@@ -73,7 +69,6 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     {
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
-
             return;
         }
 
@@ -108,7 +103,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
         }
 
         if (filled($this->search)) {
-            $term = '%'.trim($this->search).'%';
+            $term = '%' . trim($this->search) . '%';
             $query->where(function ($query) use ($term): void {
                 $query->where('p_ref_no', 'like', $term)
                     ->orWhere('reference_number', 'like', $term)
@@ -142,11 +137,15 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function proofUrl(?Payment $payment): ?string
     {
-        if (! $payment || blank($payment->proof_of_payment_path)) {
+        if (
+            ! $payment
+            || blank($payment->proof_of_payment_path)
+            || ! Route::has('payments.gcash-proof')
+        ) {
             return null;
         }
 
-        return Storage::disk('public')->url((string) $payment->proof_of_payment_path);
+        return route('payments.gcash-proof', $payment);
     }
 };
 ?>
@@ -251,14 +250,6 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     <div>
                         <p class="text-xs uppercase tracking-wide text-zinc-500">Booking reference</p>
                         <p class="font-medium text-zinc-950 dark:text-white">{{ $booking?->b_ref_no }}</p>
-                    </div>
-
-                    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/30">
-                        <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">GCash reference number</p>
-                        <p class="mt-1 font-semibold tracking-wide text-emerald-950 dark:text-emerald-100">
-                            {{ $selectedPayment->reference_number ?: 'No reference provided' }}
-                        </p>
-                        <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">Match this with the uploaded proof before verifying.</p>
                     </div>
 
                     <div>

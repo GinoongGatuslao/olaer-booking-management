@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\GcashProofController;
 use App\Http\Controllers\PrintDocumentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -180,6 +181,19 @@ Volt::route('/reservation/manage', 'guest.reservations.manage')
 Volt::route('/confirmation', 'guest.confirmations.lookup')
     ->name('guest.confirmations.lookup');
 
+
+//secure gcash routes
+Route::get(
+    '/secure/gcash-proofs/{payment}',
+    GcashProofController::class,
+)
+    ->whereNumber('payment')
+    ->middleware([
+        'auth',
+        'active',
+        'role:Admin,Manager,Cashier',
+    ])
+    ->name('payments.gcash-proof');
 
 
 //Print
