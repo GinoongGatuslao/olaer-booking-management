@@ -25,6 +25,7 @@ class GuestReservationManagementService
     public function __construct(
         private readonly ReservationQuoteService $quoteService,
         private readonly DiscountResolverService $discountResolver,
+        private readonly FacilityOccupancyService $occupancy,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -176,7 +177,8 @@ class GuestReservationManagementService
         ?string $checkInDate,
         ?string $checkOutDate,
         int $extraGuestCount = 0,
-        ?int $preferredDiscountId = null
+        ?int $preferredDiscountId = null,
+        ?int $totalGuestCount = null,
     ): ?array {
         if (! $facilityId || blank($rateType) || blank($checkInDate) || blank($checkOutDate)) {
             return null;
@@ -191,6 +193,7 @@ class GuestReservationManagementService
             checkOutDate: (string) $checkOutDate,
             discountId: $discount?->discount_id,
             extraGuestCount: $extraGuestCount,
+            totalGuestCount: $totalGuestCount,
         );
     }
 
@@ -215,8 +218,23 @@ class GuestReservationManagementService
             $rateType = (string) $data['rate_type'];
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
-            $extraGuests = $this->cleanExtraGuests($data['extra_guests'] ?? []);
-            $extraGuestCount = count($extraGuests);
+            $totalGuestCount = max(
+                1,
+                (int) ($data['total_guest_count'] ?? 1),
+            );
+            $extraGuests = $this->cleanExtraGuests(
+                $data['extra_guests'] ?? [],
+            );
+            $occupancy = $this->occupancy->forFacilityId(
+                $facilityId,
+                $totalGuestCount,
+            );
+            $this->occupancy->assertNamedPaidExtraGuests(
+                $extraGuests,
+                $occupancy['paid_extra_guest_count'],
+            );
+            $extraGuestCount =
+                $occupancy['paid_extra_guest_count'];
 
             if (! $this->isFacilityAvailable($facilityId, $checkInDate, $checkOutDate, (int) $detail->reservation_details_id)) {
                 throw new InvalidArgumentException('Selected facility is not available for the selected date range.');
@@ -234,13 +252,14 @@ class GuestReservationManagementService
                 checkInDate: $checkInDate,
                 checkOutDate: $checkOutDate,
                 discountId: $discount?->discount_id,
-                extraGuestCount: $extraGuestCount,
+                totalGuestCount: $totalGuestCount,
             );
 
             $reservation->update([
                 'total_price' => $quote['total_price'],
                 'amount_due' => $quote['amount_due'],
                 'no_of_extra_guests' => $extraGuestCount,
+                'total_guest_count' => $totalGuestCount,
             ]);
 
             $detail->update([

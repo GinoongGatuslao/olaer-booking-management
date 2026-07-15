@@ -2,6 +2,12 @@
     $guest = $reservation->guest;
     $detail = $reservation->details->first();
     $facility = $detail?->facility;
+    $facilityType = strtolower(
+        (string) $facility?->facilityType?->facility_type
+    );
+    $legacyTotalGuests = $facilityType === 'room'
+        ? 4 + (int) $reservation->no_of_extra_guests
+        : 1 + (int) $reservation->no_of_extra_guests;
     $discount = $detail?->discount;
 @endphp
 
@@ -61,7 +67,11 @@
                 </tr>
             @endif
             <tr>
-                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Extra Guests</td>
+                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Total Guests</td>
+                <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $reservation->total_guest_count ?? max(1, $legacyTotalGuests) }}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Paid Room Extra Guests</td>
                 <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $reservation->no_of_extra_guests }}</td>
             </tr>
             <tr>
@@ -80,7 +90,7 @@
     </table>
 
     @if ($reservation->extraGuests->isNotEmpty())
-        <h3 style="font-size: 16px; margin-top: 20px;">Extra Guest Names</h3>
+        <h3 style="font-size: 16px; margin-top: 20px;">Paid Room Extra Guest Names</h3>
         <ul>
             @foreach ($reservation->extraGuests as $extraGuest)
                 <li>{{ trim($extraGuest->first_name . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . $extraGuest->last_name) }}</li>

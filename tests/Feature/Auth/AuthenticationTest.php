@@ -31,7 +31,7 @@ class AuthenticationTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('dashboard', absolute: false));
 
-        $this->assertAuthenticated();
+        $this->assertAuthenticatedAs($user);
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void
@@ -50,7 +50,10 @@ class AuthenticationTest extends TestCase
 
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge(): void
     {
-        $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+        $this->skipUnlessFortifyHas(
+            Features::twoFactorAuthentication(),
+            'Two-factor authentication is outside the approved Olaer capstone scope.',
+        );
 
         Features::twoFactorAuthentication([
             'confirm' => true,
@@ -72,9 +75,10 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->post(route('logout'));
+        $response = $this->actingAs($user)
+            ->post(route('logout'));
 
-        $response->assertRedirect(route('home'));
+        $response->assertRedirect(route('login'));
 
         $this->assertGuest();
     }

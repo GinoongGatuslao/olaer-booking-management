@@ -20,6 +20,7 @@ class Booking extends Model
         'guest_id',
         'booking_date',
         'no_of_extra_guests',
+        'total_guest_count',
         'total_price',
         'amount_due',
         'user_id',
@@ -33,6 +34,7 @@ class Booking extends Model
         return [
             'booking_date' => 'date',
             'no_of_extra_guests' => 'integer',
+            'total_guest_count' => 'integer',
             'total_price' => 'decimal:2',
             'amount_due' => 'decimal:2',
         ];

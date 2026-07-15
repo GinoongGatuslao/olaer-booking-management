@@ -12,6 +12,7 @@ class PublicBookingSearchService
     public function __construct(
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
+        private readonly FacilityOccupancyService $occupancy,
     ) {}
 
     public function facilityTypes(): Collection
@@ -64,8 +65,12 @@ class PublicBookingSearchService
             ->values();
     }
 
-    public function quotePreview(?int $facilityId, ?string $rateType, int $extraGuestCount = 0): ?array
-    {
+    public function quotePreview(
+        ?int $facilityId,
+        ?string $rateType,
+        int $extraGuestCount = 0,
+        ?int $totalGuestCount = null,
+    ): ?array {
         if (! $facilityId || blank($rateType)) {
             return null;
         }
@@ -75,33 +80,31 @@ class PublicBookingSearchService
             rateType: (string) $rateType,
             extraGuestCount: $extraGuestCount,
             discountId: null,
+            totalGuestCount: $totalGuestCount,
         );
+    }
+
+    public function occupancyPreview(
+        ?int $facilityId,
+        int $totalGuestCount,
+    ): ?array {
+        if (! $facilityId) {
+            return null;
+        }
+
+        return $this->occupancy->forFacilityId(
+            $facilityId,
+            $totalGuestCount,
+        );
+    }
+
+    public function maxTotalGuests(?int $facilityId): int
+    {
+        return $this->occupancy->maxTotalGuests($facilityId);
     }
 
     public function maxExtraGuests(?int $facilityId): int
     {
-        if (! $facilityId) {
-            return 0;
-        }
-
-        $facility = Facility::query()
-            ->with('facilityType')
-            ->find($facilityId);
-
-        if (! $facility) {
-            return 0;
-        }
-
-        $facilityType = strtolower((string) optional($facility->facilityType)->facility_type);
-
-        // Based on the resort rules documented in the project context: rooms include 4 guests
-        // by default and may accept paid extra guests up to the room capacity.
-        if ($facilityType === 'room') {
-            return max(0, (int) $facility->capacity - 4);
-        }
-
-        // For cottages and function halls, capacity is handled by selecting the correct facility size.
-        // No paid facility-extra-guest charge is documented for these facility types.
-        return 0;
+        return $this->occupancy->maxPaidExtraGuests($facilityId);
     }
 }

@@ -7,6 +7,7 @@ use App\Models\FacilityPrice;
 use App\Models\ModeOfPayment;
 use App\Services\BookingQuoteService;
 use App\Services\BookingWorkflowService;
+use App\Services\FacilityOccupancyService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -50,6 +51,7 @@ new class extends Component {
         'facility_id' => '',
         'rate_type' => '',
         'discount_id' => '',
+        'total_guest_count' => 1,
         'check_in_date' => '',
         'check_out_date' => '',
         'check_in_time' => '12:00',
@@ -91,6 +93,7 @@ new class extends Component {
             'paymentModes' => ModeOfPayment::query()->orderBy('mode_of_payment')->get(),
             'transferFacilities' => $this->transferFacilities(),
             'currentQuote' => $this->currentQuote(),
+            'selectedOccupancy' => $this->selectedOccupancy(),
         ];
     }
 
@@ -134,7 +137,19 @@ new class extends Component {
     {
         $this->form['rate_type'] = '';
         $this->form['discount_id'] = '';
+        $this->form['total_guest_count'] = 1;
         $this->form['payment_amount'] = '';
+        $this->syncPaidExtraGuestRows();
+    }
+
+    public function updatedFormTotalGuestCount(): void
+    {
+        $this->form['total_guest_count'] = max(
+            1,
+            (int) $this->form['total_guest_count'],
+        );
+        $this->form['payment_amount'] = '';
+        $this->syncPaidExtraGuestRows();
     }
 
     public function updatedFormRateType(): void
@@ -180,20 +195,24 @@ new class extends Component {
         $this->showCreateForm = ! $this->showCreateForm;
     }
 
-    public function addExtraGuest(): void
+    private function syncPaidExtraGuestRows(): void
     {
-        $this->extraGuests[] = [
-            'first_name' => '',
-            'middle_name' => '',
-            'last_name' => '',
-        ];
-    }
+        $occupancy = $this->selectedOccupancy();
+        $required = (int) (
+            $occupancy['paid_extra_guest_count'] ?? 0
+        );
+        $current = $this->extraGuests;
+        $rows = [];
 
-    public function removeExtraGuest(int $index): void
-    {
-        unset($this->extraGuests[$index]);
-        $this->extraGuests = array_values($this->extraGuests);
-        $this->form['payment_amount'] = '';
+        for ($index = 0; $index < $required; $index++) {
+            $rows[$index] = $current[$index] ?? [
+                'first_name' => '',
+                'middle_name' => '',
+                'last_name' => '',
+            ];
+        }
+
+        $this->extraGuests = $rows;
     }
 
     public function useQuotedAmount(): void
@@ -207,6 +226,8 @@ new class extends Component {
 
     public function createBooking(BookingWorkflowService $bookingWorkflow): void
     {
+        $this->syncPaidExtraGuestRows();
+
         $validated = $this->validate($this->createRules());
 
         try {
@@ -333,15 +354,16 @@ new class extends Component {
             'form.facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
             'form.rate_type' => ['required', 'string', 'max:50'],
             'form.discount_id' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
+            'form.total_guest_count' => ['required', 'integer', 'min:1'],
             'form.check_in_date' => ['required', 'date', 'after_or_equal:today'],
             'form.check_out_date' => ['required', 'date', 'after:form.check_in_date'],
             'form.check_in_time' => ['required', 'date_format:H:i'],
             'form.mode_of_payment_id' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
             'form.reference_number' => ['nullable', 'string', 'max:100'],
             'form.payment_amount' => ['required', 'numeric', 'min:0'],
-            'extraGuests.*.first_name' => ['nullable', 'string', 'max:50'],
+            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['nullable', 'string', 'max:50'],
+            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
         ];
     }
 
@@ -360,6 +382,7 @@ new class extends Component {
             'facility_id' => '',
             'rate_type' => '',
             'discount_id' => '',
+            'total_guest_count' => 1,
             'check_in_date' => now()->toDateString(),
             'check_out_date' => now()->addDay()->toDateString(),
             'check_in_time' => '12:00',
@@ -517,6 +540,23 @@ new class extends Component {
             ->get();
     }
 
+    private function selectedOccupancy(): ?array
+    {
+        if ($this->form['facility_id'] === '') {
+            return null;
+        }
+
+        try {
+            return app(FacilityOccupancyService::class)
+                ->forFacilityId(
+                    (int) $this->form['facility_id'],
+                    max(1, (int) $this->form['total_guest_count']),
+                );
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function currentQuote(): ?array
     {
         if ($this->form['facility_id'] === '' || $this->form['rate_type'] === '') {
@@ -525,10 +565,15 @@ new class extends Component {
 
         try {
             return app(BookingQuoteService::class)->quote(
-                (int) $this->form['facility_id'],
-                (string) $this->form['rate_type'],
-                count($this->extraGuests),
-                $this->form['discount_id'] !== '' ? (int) $this->form['discount_id'] : null
+                facilityId: (int) $this->form['facility_id'],
+                rateType: (string) $this->form['rate_type'],
+                discountId: $this->form['discount_id'] !== ''
+                    ? (int) $this->form['discount_id']
+                    : null,
+                totalGuestCount: max(
+                    1,
+                    (int) $this->form['total_guest_count'],
+                ),
             );
         } catch (Throwable) {
             return null;
@@ -645,26 +690,38 @@ new class extends Component {
                 </div>
 
                 <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <div class="mb-3 flex items-center justify-between">
-                        <div>
-                            <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Extra guests</h3>
-                            <p class="text-sm text-zinc-600 dark:text-zinc-400">Extra guest fee currently applies to room bookings at ₱100 per person.</p>
-                        </div>
-                        <flux:button type="button" size="sm" wire:click="addExtraGuest">Add Extra Guest</flux:button>
+                    <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Guest capacity</h3>
+                    <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                        Total guests includes the primary guest. Rooms include 4 guests; room guests above 4 cost ₱100 each. Cottages and function halls have no extra-guest charge but remain capacity-limited.
+                    </p>
+
+                    <div class="mt-4 max-w-xs">
+                        <flux:input
+                            label="Total guests"
+                            type="number"
+                            min="1"
+                            wire:model.live="form.total_guest_count"
+                        />
                     </div>
 
-                    <div class="space-y-3">
-                        @forelse ($extraGuests as $index => $extraGuest)
-                            <div wire:key="extra-guest-{{ $index }}" class="grid gap-3 md:grid-cols-4">
-                                <flux:input placeholder="First name" wire:model.live="extraGuests.{{ $index }}.first_name" />
-                                <flux:input placeholder="Middle name" wire:model.live="extraGuests.{{ $index }}.middle_name" />
-                                <flux:input placeholder="Last name" wire:model.live="extraGuests.{{ $index }}.last_name" />
-                                <flux:button type="button" variant="danger" wire:click="removeExtraGuest({{ $index }})">Remove</flux:button>
-                            </div>
-                        @empty
-                            <p class="text-sm text-zinc-500">No extra guests added.</p>
-                        @endforelse
-                    </div>
+                    @if ($selectedOccupancy)
+                        <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-950">
+                            Capacity: {{ $selectedOccupancy['capacity'] }} · Included: {{ $selectedOccupancy['included_guest_count'] }} · Paid room extras: {{ $selectedOccupancy['paid_extra_guest_count'] }}
+                        </div>
+                    @endif
+
+                    @if ($extraGuests !== [])
+                        <div class="mt-4 space-y-3">
+                            <p class="text-sm font-medium">Paid room extra guest names</p>
+                            @foreach ($extraGuests as $index => $extraGuest)
+                                <div wire:key="extra-guest-{{ $index }}" class="grid gap-3 md:grid-cols-3">
+                                    <flux:input placeholder="First name" wire:model="extraGuests.{{ $index }}.first_name" />
+                                    <flux:input placeholder="Middle name" wire:model="extraGuests.{{ $index }}.middle_name" />
+                                    <flux:input placeholder="Last name" wire:model="extraGuests.{{ $index }}.last_name" />
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
 
                 <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">

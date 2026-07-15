@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BookingDetail;
 use App\Models\FacilityInspectionRequest;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +23,12 @@ class CheckOutInspectionRequestService
     public function requestInspection(int $bookingDetailsId, int $cashierUserId, ?string $notes = null): FacilityInspectionRequest
     {
         return DB::transaction(function () use ($bookingDetailsId, $cashierUserId, $notes): FacilityInspectionRequest {
+            $this->guardUserRole(
+                $cashierUserId,
+                'Cashier',
+                'Only cashiers can send facility inspection requests.',
+            );
+
             $detail = BookingDetail::query()
                 ->with(['booking', 'facility'])
                 ->lockForUpdate()
@@ -90,6 +97,12 @@ class CheckOutInspectionRequestService
     public function acceptRequest(int $requestId, int $maintenanceUserId): FacilityInspectionRequest
     {
         return DB::transaction(function () use ($requestId, $maintenanceUserId): FacilityInspectionRequest {
+            $this->guardUserRole(
+                $maintenanceUserId,
+                'Maintenance Staff',
+                'Only maintenance staff can accept facility inspection requests.',
+            );
+
             $request = FacilityInspectionRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($requestId);
@@ -100,9 +113,19 @@ class CheckOutInspectionRequestService
                 ]);
             }
 
+            if (
+                $request->assigned_to_user_id !== null
+                && (int) $request->assigned_to_user_id !== $maintenanceUserId
+            ) {
+                throw ValidationException::withMessages([
+                    'inspection' => 'This inspection request is already assigned to another maintenance staff member.',
+                ]);
+            }
+
             $request->update([
                 'status' => 'In Progress',
-                'assigned_to_user_id' => $maintenanceUserId,
+                'assigned_to_user_id' => $request->assigned_to_user_id
+                    ?? $maintenanceUserId,
                 'accepted_at' => $request->accepted_at ?? now(),
             ]);
 
@@ -137,5 +160,21 @@ class CheckOutInspectionRequestService
             ->where('status', 'Completed')
             ->whereHas('inspection')
             ->exists();
+    }
+
+    private function guardUserRole(
+        int $userId,
+        string $requiredRole,
+        string $message,
+    ): void {
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($userId);
+
+        if ((string) $user->role?->role_name !== $requiredRole) {
+            throw ValidationException::withMessages([
+                'inspection' => $message,
+            ]);
+        }
     }
 }

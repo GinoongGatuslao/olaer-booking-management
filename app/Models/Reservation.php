@@ -23,6 +23,7 @@ class Reservation extends Model
         'total_price',
         'amount_due',
         'no_of_extra_guests',
+        'total_guest_count',
         'user_id',
         'status',
         'cancellation_reason',
@@ -36,6 +37,7 @@ class Reservation extends Model
             'total_price' => 'decimal:2',
             'amount_due' => 'decimal:2',
             'no_of_extra_guests' => 'integer',
+            'total_guest_count' => 'integer',
             'cancelled_at' => 'date',
         ];
     }

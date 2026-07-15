@@ -18,6 +18,7 @@ class PublicReservationWorkflowService
         private readonly FacilityAvailabilityService $availability,
         private readonly ReservationQuoteService $quoteService,
         private readonly DiscountResolverService $discountResolver,
+        private readonly FacilityOccupancyService $occupancy,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -31,8 +32,23 @@ class PublicReservationWorkflowService
             $preferredDiscountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
             $resolvedDiscount = $this->discountResolver->resolveForFacility($facilityId, $checkInDate, $preferredDiscountId);
             $discountId = $resolvedDiscount?->discount_id;
-            $extraGuests = $this->cleanExtraGuests($data['extra_guests'] ?? []);
-            $extraGuestCount = count($extraGuests);
+            $totalGuestCount = max(
+                1,
+                (int) ($data['total_guest_count'] ?? 1),
+            );
+            $extraGuests = $this->cleanExtraGuests(
+                $data['extra_guests'] ?? [],
+            );
+            $occupancy = $this->occupancy->forFacilityId(
+                $facilityId,
+                $totalGuestCount,
+            );
+            $this->occupancy->assertNamedPaidExtraGuests(
+                $extraGuests,
+                $occupancy['paid_extra_guest_count'],
+            );
+            $extraGuestCount =
+                $occupancy['paid_extra_guest_count'];
 
             if (! $this->availability->isAvailable($facilityId, $checkInDate, $checkOutDate)) {
                 throw new InvalidArgumentException('Selected facility is no longer available for the selected date range.');
@@ -44,7 +60,7 @@ class PublicReservationWorkflowService
                 checkInDate: $checkInDate,
                 checkOutDate: $checkOutDate,
                 discountId: $discountId,
-                extraGuestCount: $extraGuestCount,
+                totalGuestCount: $totalGuestCount,
             );
 
             $address = Address::query()->create([
@@ -70,6 +86,7 @@ class PublicReservationWorkflowService
                 'total_price' => $quote['total_price'],
                 'amount_due' => $quote['amount_due'],
                 'no_of_extra_guests' => $extraGuestCount,
+                'total_guest_count' => $totalGuestCount,
                 'user_id' => null,
                 'status' => 'Active',
             ]);

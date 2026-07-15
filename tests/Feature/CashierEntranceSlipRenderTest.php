@@ -24,7 +24,7 @@ class CashierEntranceSlipRenderTest extends TestCase
             ->assertSee('Entrance slip list');
     }
 
-    public function test_selected_slip_shows_discount_breakdown(): void
+    public function test_selected_slip_shows_current_discount_breakdown(): void
     {
         ModeOfPayment::query()->create([
             'mode_of_payment' => 'Cash',
@@ -82,11 +82,13 @@ class CashierEntranceSlipRenderTest extends TestCase
 
         Livewire::test('cashier.entrance-slips.index')
             ->call('selectSlip', $slip->entrance_slip_id)
-            ->assertSee('Breakdown')
-            ->assertSee('Subtotal before discounts')
-            ->assertSee('Total discounts')
-            ->assertSee('Total after discounts')
-            ->assertSee('1 discounted via Senior Citizen')
-            ->assertSee('50%');
+            ->assertSee('Entrance fee breakdown')
+            ->assertSee('Adult')
+            ->assertSee('1')
+            ->assertSee('discounted via')
+            ->assertSee('Senior Citizen')
+            ->assertSee('Total price')
+            ->assertSee('Amount due')
+            ->assertSee('150.00');
     }
 }

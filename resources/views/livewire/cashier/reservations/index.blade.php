@@ -8,6 +8,7 @@ use App\Models\FacilityType;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Services\FacilityAvailabilityService;
+use App\Services\FacilityOccupancyService;
 use App\Services\ReservationQuoteService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public string $checkInDate = '';
     public string $checkOutDate = '';
     public string $discountId = '';
+    public int $totalGuestCount = 1;
 
     public array $extraGuests = [];
 
@@ -246,7 +248,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 checkInDate: $this->checkInDate,
                 checkOutDate: $this->checkOutDate,
                 discountId: $this->discountId !== '' ? (int) $this->discountId : null,
-                extraGuestCount: count($this->extraGuests),
+                totalGuestCount: $this->totalGuestCount,
             );
         } catch (Throwable) {
             return $this->emptyQuote();
@@ -366,34 +368,69 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->facilityId = '';
         $this->rateType = '';
         $this->discountId = '';
+        $this->totalGuestCount = 1;
+        $this->extraGuests = [];
     }
 
     public function updatedRateType(): void
     {
         $this->facilityId = '';
+        $this->totalGuestCount = 1;
+        $this->extraGuests = [];
     }
 
-    public function addExtraGuest(): void
+    public function updatedFacilityId(): void
     {
-        $this->extraGuests[] = [
-            'first_name' => '',
-            'middle_name' => '',
-            'last_name' => '',
-        ];
+        $this->syncPaidExtraGuestRows();
     }
 
-    public function removeExtraGuest(int $index): void
+    public function updatedTotalGuestCount(): void
     {
-        if (! array_key_exists($index, $this->extraGuests)) {
-            return;
+        $this->totalGuestCount = max(1, $this->totalGuestCount);
+        $this->syncPaidExtraGuestRows();
+    }
+
+    public function occupancy(): ?array
+    {
+        if ($this->facilityId === '') {
+            return null;
         }
 
-        unset($this->extraGuests[$index]);
-        $this->extraGuests = array_values($this->extraGuests);
+        try {
+            return app(FacilityOccupancyService::class)
+                ->forFacilityId(
+                    (int) $this->facilityId,
+                    $this->totalGuestCount,
+                );
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function syncPaidExtraGuestRows(): void
+    {
+        $occupancy = $this->occupancy();
+        $required = (int) (
+            $occupancy['paid_extra_guest_count'] ?? 0
+        );
+        $current = $this->extraGuests;
+        $rows = [];
+
+        for ($index = 0; $index < $required; $index++) {
+            $rows[$index] = $current[$index] ?? [
+                'first_name' => '',
+                'middle_name' => '',
+                'last_name' => '',
+            ];
+        }
+
+        $this->extraGuests = $rows;
     }
 
     public function createReservation(): void
     {
+        $this->syncPaidExtraGuestRows();
+
         $validated = $this->validate([
             'guestFirstName' => ['required', 'string', 'max:50'],
             'guestMiddleName' => ['nullable', 'string', 'max:50'],
@@ -410,10 +447,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'checkInDate' => ['required', 'date'],
             'checkOutDate' => ['required', 'date', 'after_or_equal:checkInDate'],
             'discountId' => ['nullable', 'exists:tbl_discount,discount_id'],
+            'totalGuestCount' => ['required', 'integer', 'min:1'],
             'extraGuests' => ['array'],
-            'extraGuests.*.first_name' => ['required_with:extraGuests.*.last_name', 'nullable', 'string', 'max:50'],
+            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required_with:extraGuests.*.first_name', 'nullable', 'string', 'max:50'],
+            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
         ], [
             'guestContactNo.regex' => 'Contact number must be an 11-digit Philippine mobile number starting with 09.',
         ]);
@@ -430,7 +468,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 checkInDate: $validated['checkInDate'],
                 checkOutDate: $validated['checkOutDate'],
                 discountId: $this->discountId !== '' ? (int) $this->discountId : null,
-                extraGuestCount: count($this->extraGuests),
+                totalGuestCount: $this->totalGuestCount,
             );
         } catch (Throwable $exception) {
             $this->addError('facilityId', $exception->getMessage());
@@ -460,7 +498,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'reservation_date' => now()->toDateString(),
                 'total_price' => $quote['total_price'],
                 'amount_due' => $quote['amount_due'],
-                'no_of_extra_guests' => count($this->extraGuests),
+                'no_of_extra_guests' => $quote['extra_guest_count'],
+                'total_guest_count' => $quote['total_guest_count'],
                 'user_id' => auth()->id(),
                 'status' => 'Active',
             ]);
@@ -531,7 +570,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         ]);
 
         $reservation = Reservation::query()
-            ->with(['details', 'payments'])
+            ->with([
+                'details.facility.facilityType',
+                'payments',
+            ])
             ->findOrFail((int) $validated['rescheduleReservationId']);
 
         if ($reservation->status !== 'Active') {
@@ -549,6 +591,23 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             return;
         }
 
+        $currentDetail = $reservation->details->first();
+        $totalGuestCount = (int) (
+            $reservation->total_guest_count
+            ?: (
+                $currentDetail?->facility
+                    ? app(FacilityOccupancyService::class)
+                        ->legacyTotalGuestCount(
+                            $currentDetail->facility,
+                            (int) $reservation->no_of_extra_guests,
+                        )
+                    : max(
+                        1,
+                        (int) $reservation->no_of_extra_guests + 1,
+                    )
+            )
+        );
+
         try {
             $quote = app(ReservationQuoteService::class)->quote(
                 facilityId: (int) $validated['rescheduleFacilityId'],
@@ -556,7 +615,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 checkInDate: $validated['rescheduleCheckInDate'],
                 checkOutDate: $validated['rescheduleCheckOutDate'],
                 discountId: $this->rescheduleDiscountId !== '' ? (int) $this->rescheduleDiscountId : null,
-                extraGuestCount: (int) $reservation->no_of_extra_guests,
+                totalGuestCount: $totalGuestCount,
             );
         } catch (Throwable $exception) {
             $this->addError('rescheduleFacilityId', $exception->getMessage());
@@ -660,6 +719,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->checkInDate = now()->toDateString();
         $this->checkOutDate = now()->toDateString();
         $this->discountId = '';
+        $this->totalGuestCount = 1;
         $this->extraGuests = [];
         $this->resetValidation();
     }
@@ -701,6 +761,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     private function emptyQuote(): array
     {
         return [
+            'capacity' => 0,
+            'total_guest_count' => $this->totalGuestCount,
+            'included_guest_count' => 0,
+            'extra_guest_count' => 0,
             'base_units' => 0,
             'base_price' => 0.00,
             'extra_guest_charge' => 0.00,
@@ -830,28 +894,39 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 </div>
 
                 <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
-                            <h3 class="font-medium">Extra guests</h3>
-                            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Room extra guests are charged ₱100 each. Cottage/function hall extra guest billing is not added here.</p>
-                        </div>
-                        <flux:button type="button" wire:click="addExtraGuest">Add extra guest</flux:button>
+                    <h3 class="font-medium">Guest capacity</h3>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        Enter the complete party size, including the primary guest. Rooms include up to 4 guests; only guests above 4 are charged ₱100 each. Cottages and function halls have no extra-guest charge but cannot exceed facility capacity.
+                    </p>
+
+                    <div class="mt-4 max-w-xs">
+                        <flux:input
+                            wire:model.live="totalGuestCount"
+                            type="number"
+                            min="1"
+                            label="Total guests"
+                        />
                     </div>
 
-                    <div class="mt-4 space-y-3">
-                        @forelse ($extraGuests as $index => $extraGuest)
-                            <div class="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 md:grid-cols-4">
-                                <flux:input wire:model="extraGuests.{{ $index }}.first_name" label="First name" />
-                                <flux:input wire:model="extraGuests.{{ $index }}.middle_name" label="Middle name" />
-                                <flux:input wire:model="extraGuests.{{ $index }}.last_name" label="Last name" />
-                                <div class="flex items-end">
-                                    <flux:button type="button" variant="danger" wire:click="removeExtraGuest({{ $index }})">Remove</flux:button>
+                    @if ($this->occupancy())
+                        @php($occupancy = $this->occupancy())
+                        <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900">
+                            Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                        </div>
+                    @endif
+
+                    @if ($extraGuests !== [])
+                        <div class="mt-4 space-y-3">
+                            <p class="text-sm font-medium">Paid room extra guest names</p>
+                            @foreach ($extraGuests as $index => $extraGuest)
+                                <div class="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 md:grid-cols-3">
+                                    <flux:input wire:model="extraGuests.{{ $index }}.first_name" label="Extra guest {{ $index + 1 }} first name" />
+                                    <flux:input wire:model="extraGuests.{{ $index }}.middle_name" label="Middle name" />
+                                    <flux:input wire:model="extraGuests.{{ $index }}.last_name" label="Last name" />
                                 </div>
-                            </div>
-                        @empty
-                            <p class="text-sm text-zinc-500 dark:text-zinc-400">No extra guests added.</p>
-                        @endforelse
-                    </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
 
                 @php($quote = $this->quote())

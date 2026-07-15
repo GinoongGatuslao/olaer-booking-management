@@ -9,16 +9,37 @@ use App\Services\CheckOutInspectionRequestService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
+new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')] class extends Component
+{
     use WithPagination;
 
+    #[Url(as: 'q', except: '')]
     public string $search = '';
+
+    #[Url(as: 'list', except: 'eligible')]
     public string $statusFilter = 'eligible';
+
+    #[Url(as: 'stage', except: 'all')]
+    public string $stageFilter = 'all';
+
+    #[Url(as: 'departure', except: 'all')]
+    public string $dateFilter = 'all';
+
+    #[Url(as: 'sort', except: 'check_out_date')]
     public string $sortField = 'check_out_date';
+
+    #[Url(as: 'direction', except: 'asc')]
     public string $sortDirection = 'asc';
+
+    #[Url(as: 'per_page', except: 10)]
+    public int $perPage = 10;
 
     public ?int $selectedBookingDetailsId = null;
     public ?int $selectedBookingId = null;
@@ -71,7 +92,77 @@ new class extends Component {
     public function updatedStatusFilter(): void
     {
         $this->cancelSelection();
+
+        if ($this->statusFilter === 'checked_out') {
+            $this->stageFilter = 'all';
+        }
+
         $this->resetPage();
+    }
+
+    public function updatedStageFilter(): void
+    {
+        $this->cancelSelection();
+        $this->resetPage();
+    }
+
+    public function updatedDateFilter(): void
+    {
+        $this->cancelSelection();
+        $this->resetPage();
+    }
+
+    public function updatedPerPage(): void
+    {
+        if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
+            $this->perPage = 10;
+        }
+
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->search = '';
+        $this->statusFilter = 'eligible';
+        $this->stageFilter = 'all';
+        $this->dateFilter = 'all';
+        $this->sortField = 'check_out_date';
+        $this->sortDirection = 'asc';
+        $this->perPage = 10;
+        $this->cancelSelection();
+
+        $this->resetPage();
+    }
+
+    public function refreshSelectedState(): void
+    {
+        if ($this->selectedBookingDetailsId === null) {
+            return;
+        }
+
+        $detail = BookingDetail::query()
+            ->with(['booking.guest', 'facility'])
+            ->find($this->selectedBookingDetailsId);
+
+        if ($detail === null) {
+            $this->cancelSelection();
+            return;
+        }
+
+        $guest = $detail->booking?->guest;
+        $facilityName = $detail->facility?->facility_name ?? 'No facility';
+
+        $this->selectedBookingId = (int) $detail->booking_id;
+        $this->selectedBookingAmountDue =
+            (float) ($detail->booking?->amount_due ?? 0);
+
+        $this->selectedLabel =
+            ($detail->booking?->b_ref_no ?? 'Unknown booking')
+            .' - '
+            .trim(($guest?->first_name ?? '').' '.($guest?->last_name ?? ''))
+            .' - '
+            .$facilityName;
     }
 
     public function sortBy(string $field): void
@@ -128,6 +219,8 @@ new class extends Component {
                 (int) Auth::id()
             );
 
+            $this->refreshSelectedState();
+
             session()->flash('success', 'Inspection request sent to maintenance.');
         } catch (\Throwable $exception) {
             $this->addError('checkOut', $exception->getMessage());
@@ -162,7 +255,7 @@ new class extends Component {
 
         $charge = '₱' . number_format((float) $fine->fine_charge, 2);
 
-        if ((string) $fine->fine_type === 'Amenity Fine') {
+        if (in_array((string) $fine->fine_type, ['Amenity', 'Amenity Fine'], true)) {
             $amenityLabel = 'Amenity';
             $damageLabel = 'Damage';
 
@@ -183,10 +276,55 @@ new class extends Component {
     public function sortIndicator(string $field): string
     {
         if ($this->sortField !== $field) {
-            return '';
+            return '↕';
         }
 
         return $this->sortDirection === 'asc' ? '↑' : '↓';
+    }
+
+    public function workflowStage(BookingDetail $detail): string
+    {
+        if ($detail->status === 'Checked-out') {
+            return 'Checked-out';
+        }
+
+        $requestStatus =
+            $detail->getAttribute('latest_request_status');
+
+        $inspectionStatus =
+            $detail->getAttribute('latest_inspection_status');
+
+        if (! filled($requestStatus)) {
+            return 'Needs Inspection Request';
+        }
+
+        if ($requestStatus !== 'Completed') {
+            return 'Inspection '.$requestStatus;
+        }
+
+        if (! filled($inspectionStatus)) {
+            return 'Waiting for Inspection Result';
+        }
+
+        if ((float) $detail->booking->amount_due > 0) {
+            return 'Payment Due';
+        }
+
+        return 'Ready for Check-out';
+    }
+
+    public function workflowStageColor(string $stage): string
+    {
+        return match ($stage) {
+            'Ready for Check-out' => 'green',
+            'Checked-out' => 'blue',
+            'Payment Due' => 'red',
+            'Needs Inspection Request' => 'amber',
+            'Waiting for Inspection Result' => 'amber',
+            default => str_starts_with($stage, 'Inspection ')
+                ? 'purple'
+                : 'zinc',
+        };
     }
 
     private function bookingDetails(): LengthAwarePaginator
@@ -196,7 +334,27 @@ new class extends Component {
             ->join('tbl_booking', 'tbl_booking.booking_id', '=', 'tbl_booking_details.booking_id')
             ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_booking.guest_id')
             ->leftJoin('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_booking_details.facility_id')
-            ->with(['booking.guest', 'facility.facilityType']);
+            ->with(['booking.guest', 'facility.facilityType'])
+            ->addSelect([
+                'latest_request_status' =>
+                    FacilityInspectionRequest::query()
+                        ->select('status')
+                        ->whereColumn(
+                            'booking_details_id',
+                            'tbl_booking_details.booking_details_id',
+                        )
+                        ->latest('facility_inspection_request_id')
+                        ->limit(1),
+                'latest_inspection_status' =>
+                    FacilityInspection::query()
+                        ->select('inspection_status')
+                        ->whereColumn(
+                            'booking_details_id',
+                            'tbl_booking_details.booking_details_id',
+                        )
+                        ->latest('facility_inspection_id')
+                        ->limit(1),
+            ]);
 
         if ($this->statusFilter === 'checked_out') {
             $query->where('tbl_booking_details.status', 'Checked-out');
@@ -210,10 +368,107 @@ new class extends Component {
         if ($searchText !== '') {
             $needle = '%' . $searchText . '%';
 
-            $query->whereRaw(
-                '(tbl_booking.b_ref_no LIKE ? OR tbl_guest.first_name LIKE ? OR tbl_guest.last_name LIKE ? OR tbl_guest.contact_no LIKE ? OR tbl_facility.facility_name LIKE ?)',
-                [$needle, $needle, $needle, $needle, $needle]
+            $query->where(function ($query) use ($needle): void {
+                $query->where('tbl_booking.b_ref_no', 'like', $needle)
+                    ->orWhere('tbl_guest.first_name', 'like', $needle)
+                    ->orWhere('tbl_guest.middle_name', 'like', $needle)
+                    ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhere('tbl_guest.contact_no', 'like', $needle)
+                    ->orWhere('tbl_guest.email', 'like', $needle)
+                    ->orWhere('tbl_facility.facility_name', 'like', $needle);
+            });
+        }
+
+        if ($this->dateFilter === 'today') {
+            $query->whereDate(
+                'tbl_booking_details.check_out_date',
+                now()->toDateString(),
             );
+        } elseif ($this->dateFilter === 'upcoming') {
+            $query->whereDate(
+                'tbl_booking_details.check_out_date',
+                '>',
+                now()->toDateString(),
+            );
+        } elseif ($this->dateFilter === 'overdue') {
+            $query->whereDate(
+                'tbl_booking_details.check_out_date',
+                '<',
+                now()->toDateString(),
+            );
+        }
+
+        if (
+            $this->statusFilter === 'eligible'
+            && $this->stageFilter !== 'all'
+        ) {
+            if ($this->stageFilter === 'needs_request') {
+                $query->whereNotExists(function ($query): void {
+                    $query->selectRaw('1')
+                        ->from('tbl_facility_inspection_request as request_filter')
+                        ->whereColumn(
+                            'request_filter.booking_details_id',
+                            'tbl_booking_details.booking_details_id',
+                        );
+                });
+            } elseif ($this->stageFilter === 'waiting') {
+                $query->whereExists(function ($query): void {
+                    $query->selectRaw('1')
+                        ->from('tbl_facility_inspection_request as request_filter')
+                        ->whereColumn(
+                            'request_filter.booking_details_id',
+                            'tbl_booking_details.booking_details_id',
+                        )
+                        ->where(
+                            'request_filter.status',
+                            '!=',
+                            'Completed',
+                        );
+                });
+            } elseif ($this->stageFilter === 'payment_due') {
+                $query->where(
+                    'tbl_booking.amount_due',
+                    '>',
+                    0,
+                )->whereExists(function ($query): void {
+                    $query->selectRaw('1')
+                        ->from('tbl_facility_inspection_request as request_filter')
+                        ->whereColumn(
+                            'request_filter.booking_details_id',
+                            'tbl_booking_details.booking_details_id',
+                        )
+                        ->where(
+                            'request_filter.status',
+                            'Completed',
+                        );
+                });
+            } elseif ($this->stageFilter === 'ready') {
+                $query->where(
+                    'tbl_booking.amount_due',
+                    '<=',
+                    0,
+                )
+                    ->whereExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('tbl_facility_inspection_request as request_filter')
+                            ->whereColumn(
+                                'request_filter.booking_details_id',
+                                'tbl_booking_details.booking_details_id',
+                            )
+                            ->where(
+                                'request_filter.status',
+                                'Completed',
+                            );
+                    })
+                    ->whereExists(function ($query): void {
+                        $query->selectRaw('1')
+                            ->from('tbl_facility_inspection as inspection_filter')
+                            ->whereColumn(
+                                'inspection_filter.booking_details_id',
+                                'tbl_booking_details.booking_details_id',
+                            );
+                    });
+            }
         }
 
         if ($this->sortField === 'guest_name') {
@@ -234,7 +489,11 @@ new class extends Component {
             $query->orderBy($sortColumn, $this->sortDirection);
         }
 
-        return $query->paginate(10);
+        $perPage = in_array($this->perPage, [10, 25, 50, 100], true)
+            ? $this->perPage
+            : 10;
+
+        return $query->paginate($perPage);
     }
 
     private function selectedGuestFines(): Collection
@@ -285,7 +544,7 @@ new class extends Component {
 };
 ?>
 
-<div class="space-y-6">
+<div class="space-y-6" wire:poll.10s="refreshSelectedState">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Cashier Check-out</h1>
@@ -348,18 +607,65 @@ new class extends Component {
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    @if ($selectedInspectionRequest === null)
-                        <flux:button wire:click="sendInspectionRequest">Send Inspection Request</flux:button>
-                    @elseif ($selectedInspectionRequest->status !== 'Completed')
-                        <flux:button disabled>Waiting for Maintenance</flux:button>
+                    @if ($selectedBookingId !== null && Route::has('cashier.bookings.show'))
+                        <flux:button
+                            href="{{ route('cashier.bookings.show', $selectedBookingId) }}"
+                            wire:navigate
+                            variant="ghost"
+                        >
+                            Booking Workspace
+                        </flux:button>
                     @endif
 
-                    @if ($selectedInspectionRequest !== null && $selectedInspectionRequest->status === 'Completed' && $selectedInspection !== null && $selectedBookingAmountDue <= 0)
-                        <flux:button variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
-                    @else
-                        <flux:button variant="primary" disabled>Not Ready</flux:button>
+                    @if (
+                        $selectedBookingId !== null
+                        && $selectedBookingAmountDue > 0
+                        && Route::has('cashier.payments.index')
+                    )
+                        <flux:button
+                            href="{{ route('cashier.payments.index', ['booking' => $selectedBookingId]) }}"
+                            wire:navigate
+                            variant="primary"
+                        >
+                            Settle Payment
+                        </flux:button>
                     @endif
-                    <flux:button variant="ghost" wire:click="cancelSelection">Cancel</flux:button>
+
+                    @if ($selectedInspectionRequest === null)
+                        <flux:button wire:click="sendInspectionRequest">
+                            Send Inspection Request
+                        </flux:button>
+                    @elseif ($selectedInspectionRequest->status !== 'Completed')
+                        <flux:button disabled>
+                            Waiting for Maintenance
+                        </flux:button>
+                    @endif
+
+                    @if (
+                        $selectedInspectionRequest !== null
+                        && $selectedInspectionRequest->status === 'Completed'
+                        && $selectedInspection !== null
+                        && $selectedBookingAmountDue <= 0
+                    )
+                        <flux:button
+                            variant="primary"
+                            wire:click="confirmCheckOut"
+                            wire:confirm="Confirm this facility check-out?"
+                        >
+                            Confirm Check-out
+                        </flux:button>
+                    @else
+                        <flux:button variant="primary" disabled>
+                            Not Ready
+                        </flux:button>
+                    @endif
+
+                    <flux:button
+                        variant="ghost"
+                        wire:click="cancelSelection"
+                    >
+                        Cancel
+                    </flux:button>
                 </div>
             </div>
 
@@ -396,12 +702,55 @@ new class extends Component {
     @endif
 
     <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div class="grid gap-3 md:grid-cols-3">
-            <flux:input label="Search" placeholder="Reference, guest, contact, facility..." wire:model.live.debounce.300ms="search" />
-            <flux:select label="Status" wire:model.live="statusFilter">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <flux:input
+                label="Search"
+                placeholder="Reference, guest, contact, email, facility"
+                wire:model.live.debounce.300ms="search"
+                clearable
+                class="xl:col-span-2"
+            />
+
+            <flux:select label="List" wire:model.live="statusFilter">
                 <option value="eligible">Checked-in / Pending check-out</option>
                 <option value="checked_out">Checked-out history</option>
             </flux:select>
+
+            <flux:select
+                label="Workflow stage"
+                wire:model.live="stageFilter"
+                :disabled="$statusFilter === 'checked_out'"
+            >
+                <option value="all">All stages</option>
+                <option value="needs_request">Needs inspection request</option>
+                <option value="waiting">Waiting for maintenance</option>
+                <option value="payment_due">Inspection complete / payment due</option>
+                <option value="ready">Ready for check-out</option>
+            </flux:select>
+
+            <flux:select label="Scheduled departure" wire:model.live="dateFilter">
+                <option value="all">All departure dates</option>
+                <option value="today">Due today</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="overdue">Past scheduled date</option>
+            </flux:select>
+
+            <flux:select label="Rows" wire:model.live="perPage">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </flux:select>
+        </div>
+
+        <div class="mt-3 flex justify-end">
+            <flux:button
+                type="button"
+                wire:click="clearFilters"
+                variant="ghost"
+            >
+                Clear Filters
+            </flux:button>
         </div>
 
         <div class="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -414,7 +763,8 @@ new class extends Component {
                         <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_in_date')">Check-in {{ $this->sortIndicator('check_in_date') }}</button></th>
                         <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_out_date')">Check-out {{ $this->sortIndicator('check_out_date') }}</button></th>
                         <th class="px-3 py-2 text-left"><button wire:click="sortBy('amount_due')">Balance {{ $this->sortIndicator('amount_due') }}</button></th>
-                        <th class="px-3 py-2 text-left">Action</th>
+                        <th class="px-3 py-2 text-left">Workflow Stage</th>
+                        <th class="px-3 py-2 text-left">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -427,19 +777,60 @@ new class extends Component {
                             <td class="px-3 py-2">{{ $detail->check_out_date?->format('M d, Y') }}</td>
                             <td class="px-3 py-2">₱{{ number_format((float) $detail->booking->amount_due, 2) }}</td>
                             <td class="px-3 py-2">
-                                <flux:button size="sm" wire:click="selectCheckOut({{ $detail->booking_details_id }})">View</flux:button>
+                                @php($stage = $this->workflowStage($detail))
+
+                                <flux:badge
+                                    color="{{ $this->workflowStageColor($stage) }}"
+                                    size="sm"
+                                >
+                                    {{ $stage }}
+                                </flux:badge>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="flex flex-wrap gap-2">
+                                    @if (Route::has('cashier.bookings.show'))
+                                        <flux:button
+                                            href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
+                                            wire:navigate
+                                            size="sm"
+                                            variant="ghost"
+                                        >
+                                            Booking
+                                        </flux:button>
+                                    @endif
+
+                                    <flux:button
+                                        size="sm"
+                                        variant="primary"
+                                        wire:click="selectCheckOut({{ $detail->booking_details_id }})"
+                                    >
+                                        View
+                                    </flux:button>
+                                </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-8 text-center text-zinc-500">No check-out records found.</td>
+                            <td colspan="8" class="px-3 py-10 text-center text-zinc-500">
+                                No check-out records match the selected filters.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="mt-4">
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm text-zinc-500">
+                Showing
+                {{ $bookingDetails->firstItem() ?? 0 }}
+                to
+                {{ $bookingDetails->lastItem() ?? 0 }}
+                of
+                {{ $bookingDetails->total() }}
+                facility check-out records
+            </p>
+
             {{ $bookingDetails->links() }}
         </div>
     </div>

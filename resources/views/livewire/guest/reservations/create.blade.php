@@ -27,7 +27,7 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
     public string $check_out_date = '';
     public ?int $facility_id = null;
 
-    public int $extra_guest_count = 0;
+    public int $total_guest_count = 1;
     public array $extra_guests = [];
 
     public ?int $created_reservation_id = null;
@@ -36,7 +36,7 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
     {
         $this->check_in_date = now()->toDateString();
         $this->check_out_date = now()->toDateString();
-        $this->syncExtraGuestRows();
+        $this->syncPaidExtraGuestRows();
     }
 
     public function updatedFacilityTypeId(): void
@@ -60,14 +60,23 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
         $this->facility_id = null;
     }
 
-    public function updatedExtraGuestCount(): void
+    public function updatedFacilityId(): void
     {
-        $this->extra_guest_count = max(0, min(6, (int) $this->extra_guest_count));
-        $this->syncExtraGuestRows();
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
+    }
+
+    public function updatedTotalGuestCount(): void
+    {
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
     }
 
     public function save(PublicReservationWorkflowService $service): void
     {
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
+
         $validated = $this->validate($this->rules(), $this->messages());
 
         $reservation = $service->createGuestReservation($validated);
@@ -124,11 +133,16 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                 'integer',
                 Rule::exists('tbl_facility', 'facility_id'),
             ],
-            'extra_guest_count' => ['required', 'integer', 'min:0', 'max:6'],
+            'total_guest_count' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:'.$this->maxTotalGuests(),
+            ],
             'extra_guests' => ['array'],
-            'extra_guests.*.first_name' => ['nullable', 'string', 'max:50'],
+            'extra_guests.*.first_name' => ['required', 'string', 'max:50'],
             'extra_guests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extra_guests.*.last_name' => ['nullable', 'string', 'max:50'],
+            'extra_guests.*.last_name' => ['required', 'string', 'max:50'],
         ];
     }
 
@@ -141,11 +155,41 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
         ];
     }
 
-    private function syncExtraGuestRows(): void
+    public function maxTotalGuests(): int
+    {
+        return app(PublicFacilitySearchService::class)
+            ->maxTotalGuests($this->facility_id);
+    }
+
+    public function occupancyPreview(): ?array
+    {
+        return app(PublicFacilitySearchService::class)
+            ->occupancyPreview(
+                $this->facility_id,
+                $this->total_guest_count,
+            );
+    }
+
+    private function clampTotalGuests(): void
+    {
+        $this->total_guest_count = max(
+            1,
+            min(
+                $this->maxTotalGuests(),
+                (int) $this->total_guest_count,
+            ),
+        );
+    }
+
+    private function syncPaidExtraGuestRows(): void
     {
         $rows = [];
+        $paidExtraGuestCount = (int) (
+            $this->occupancyPreview()['paid_extra_guest_count']
+            ?? 0
+        );
 
-        for ($index = 0; $index < $this->extra_guest_count; $index++) {
+        for ($index = 0; $index < $paidExtraGuestCount; $index++) {
             $existing = $this->extra_guests[$index] ?? [];
 
             $rows[$index] = [
@@ -180,7 +224,8 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                 $this->rate_type !== '' ? $this->rate_type : null,
                 $this->check_in_date !== '' ? $this->check_in_date : null,
                 $this->check_out_date !== '' ? $this->check_out_date : null,
-                $this->extra_guest_count,
+                0,
+                $this->total_guest_count,
             );
         } catch (Throwable) {
             return null;
@@ -203,9 +248,9 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
         $this->check_in_date = now()->toDateString();
         $this->check_out_date = now()->toDateString();
         $this->facility_id = null;
-        $this->extra_guest_count = 0;
+        $this->total_guest_count = 1;
         $this->extra_guests = [];
-        $this->syncExtraGuestRows();
+        $this->syncPaidExtraGuestRows();
         $this->resetValidation();
     }
 };
@@ -336,14 +381,23 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
             </div>
 
             <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <h2 class="text-lg font-semibold">Extra guests</h2>
-                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Extra guest fees currently apply to room reservations only, based on the resort rule of ₱100 per extra room guest.</p>
+                <h2 class="text-lg font-semibold">Guest capacity</h2>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    Enter the complete party size. Rooms include 4 guests and charge ₱100 only for guests above 4. Cottages and function halls have no extra-guest charge but cannot exceed capacity.
+                </p>
 
                 <div class="mt-4 max-w-xs">
-                    <flux:input wire:model.live="extra_guest_count" type="number" min="0" max="6" label="Number of extra guests" />
+                    <flux:input wire:model.live="total_guest_count" type="number" min="1" max="{{ $this->maxTotalGuests() }}" label="Total guests, including primary guest" />
                 </div>
 
-                @if ($extra_guest_count > 0)
+                @if ($this->occupancyPreview())
+                    @php($occupancy = $this->occupancyPreview())
+                    <p class="mt-2 text-xs text-zinc-500">
+                        Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                    </p>
+                @endif
+
+                @if ($extra_guests !== [])
                     <div class="mt-5 space-y-3">
                         @foreach ($extra_guests as $index => $extraGuest)
                             <div class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">

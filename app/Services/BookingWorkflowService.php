@@ -20,6 +20,7 @@ class BookingWorkflowService
     public function __construct(
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
+        private readonly FacilityOccupancyService $occupancy,
     ) {}
 
     public function createBooking(array $data): Booking
@@ -30,12 +31,36 @@ class BookingWorkflowService
             $checkOutDate = (string) $data['check_out_date'];
             $rateType = (string) $data['rate_type'];
             $discountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
-            $extraGuests = $this->cleanExtraGuests($data['extra_guests'] ?? []);
-            $extraGuestCount = count($extraGuests);
+            $totalGuestCount = max(
+                1,
+                (int) ($data['total_guest_count'] ?? 1),
+            );
+            $extraGuests = $this->cleanExtraGuests(
+                $data['extra_guests'] ?? [],
+            );
+            $occupancy = $this->occupancy->forFacilityId(
+                $facilityId,
+                $totalGuestCount,
+            );
+            $this->occupancy->assertNamedPaidExtraGuests(
+                $extraGuests,
+                $occupancy['paid_extra_guest_count'],
+            );
+            $extraGuestCount =
+                $occupancy['paid_extra_guest_count'];
 
-            $this->availability->assertFacilityAvailable($facilityId, $checkInDate, $checkOutDate);
+            $this->availability->assertFacilityAvailable(
+                $facilityId,
+                $checkInDate,
+                $checkOutDate,
+            );
 
-            $quote = $this->quoteService->quote($facilityId, $rateType, $extraGuestCount, $discountId);
+            $quote = $this->quoteService->quote(
+                facilityId: $facilityId,
+                rateType: $rateType,
+                discountId: $discountId,
+                totalGuestCount: $totalGuestCount,
+            );
             $paymentAmount = round((float) $data['payment_amount'], 2);
 
             if ($paymentAmount !== round((float) $quote['total'], 2)) {
@@ -70,6 +95,7 @@ class BookingWorkflowService
                 'guest_id' => $guest->guest_id,
                 'booking_date' => Carbon::now()->toDateString(),
                 'no_of_extra_guests' => $extraGuestCount,
+                'total_guest_count' => $totalGuestCount,
                 'total_price' => $quote['total'],
                 'amount_due' => 0.00,
                 'user_id' => (int) $data['user_id'],
@@ -158,6 +184,19 @@ class BookingWorkflowService
             if ((int) $oldFacility->facility_type_id !== (int) $newFacility->facility_type_id) {
                 throw new InvalidArgumentException('Facility transfer must be within the same facility type.');
             }
+
+            $totalGuestCount = (int) (
+                $detail->booking->total_guest_count
+                ?: $this->occupancy->legacyTotalGuestCount(
+                    $oldFacility,
+                    (int) $detail->booking->no_of_extra_guests,
+                )
+            );
+
+            $this->occupancy->forFacility(
+                $newFacility,
+                $totalGuestCount,
+            );
 
             $this->availability->assertFacilityAvailable(
                 $newFacilityId,

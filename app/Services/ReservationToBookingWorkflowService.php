@@ -20,6 +20,7 @@ class ReservationToBookingWorkflowService
 {
     public function __construct(
         private readonly ReservationQuoteService $quoteService,
+        private readonly FacilityOccupancyService $occupancy,
     ) {}
 
     /**
@@ -66,11 +67,25 @@ class ReservationToBookingWorkflowService
                 }
             }
 
+            $firstDetail = $reservation->details->first();
+            $totalGuestCount = (int) (
+                $reservation->total_guest_count
+                ?: (
+                    $firstDetail?->facility
+                        ? $this->occupancy->legacyTotalGuestCount(
+                            $firstDetail->facility,
+                            (int) $reservation->no_of_extra_guests,
+                        )
+                        : max(1, (int) $reservation->no_of_extra_guests + 1)
+                )
+            );
+
             $booking = Booking::query()->create([
                 'b_ref_no' => $this->newReference('B'),
                 'guest_id' => $reservation->guest_id,
                 'booking_date' => Carbon::today()->toDateString(),
                 'no_of_extra_guests' => (int) $reservation->no_of_extra_guests,
+                'total_guest_count' => $totalGuestCount,
                 'total_price' => $reservation->total_price,
                 'amount_due' => 0.00,
                 'user_id' => $userId,
@@ -80,7 +95,10 @@ class ReservationToBookingWorkflowService
             ]);
 
             foreach ($reservation->details as $detail) {
-                $quote = $this->quoteForReservationDetail($detail, (int) $reservation->no_of_extra_guests);
+                $quote = $this->quoteForReservationDetail(
+                    $detail,
+                    $totalGuestCount,
+                );
 
                 BookingDetail::query()->create([
                     'booking_id' => $booking->booking_id,
@@ -149,7 +167,10 @@ class ReservationToBookingWorkflowService
         }
     }
 
-    private function quoteForReservationDetail(ReservationDetail $detail, int $extraGuestCount): array
+    private function quoteForReservationDetail(
+        ReservationDetail $detail,
+        int $totalGuestCount,
+    ): array
     {
         try {
             return $this->quoteService->quote(
@@ -158,7 +179,7 @@ class ReservationToBookingWorkflowService
                 checkInDate: $detail->check_in_date->toDateString(),
                 checkOutDate: $detail->check_out_date->toDateString(),
                 discountId: $detail->discount_id ? (int) $detail->discount_id : null,
-                extraGuestCount: $extraGuestCount,
+                totalGuestCount: $totalGuestCount,
             );
         } catch (\Throwable) {
             $price = FacilityPrice::query()

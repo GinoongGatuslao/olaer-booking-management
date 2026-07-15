@@ -288,7 +288,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 'max:255',
             ],
             'passwordConfirmation' => [
-                $this->editingUserId !== null || $this->password !== ''
+                $this->editingUserId === null || $this->password !== ''
                     ? 'required'
                     : 'nullable',
                 'same:password',

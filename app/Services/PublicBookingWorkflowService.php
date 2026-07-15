@@ -19,7 +19,7 @@ class PublicBookingWorkflowService
     public function __construct(
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
-        private readonly PublicBookingSearchService $searchService,
+        private readonly FacilityOccupancyService $occupancy,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -30,21 +30,35 @@ class PublicBookingWorkflowService
             $rateType = (string) $data['rate_type'];
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
-            $extraGuests = $this->cleanExtraGuests($data['extra_guests'] ?? []);
-            $extraGuestCount = count($extraGuests);
-            $maxExtraGuests = $this->searchService->maxExtraGuests($facilityId);
+            $totalGuestCount = max(
+                1,
+                (int) ($data['total_guest_count'] ?? 1),
+            );
+            $extraGuests = $this->cleanExtraGuests(
+                $data['extra_guests'] ?? [],
+            );
+            $occupancy = $this->occupancy->forFacilityId(
+                $facilityId,
+                $totalGuestCount,
+            );
+            $this->occupancy->assertNamedPaidExtraGuests(
+                $extraGuests,
+                $occupancy['paid_extra_guest_count'],
+            );
+            $extraGuestCount =
+                $occupancy['paid_extra_guest_count'];
 
-            if ($extraGuestCount > $maxExtraGuests) {
-                throw new InvalidArgumentException("This facility only allows {$maxExtraGuests} paid extra guest(s).");
-            }
-
-            $this->availability->assertFacilityAvailable($facilityId, $checkInDate, $checkOutDate);
+            $this->availability->assertFacilityAvailable(
+                $facilityId,
+                $checkInDate,
+                $checkOutDate,
+            );
 
             $quote = $this->quoteService->quote(
                 facilityId: $facilityId,
                 rateType: $rateType,
-                extraGuestCount: $extraGuestCount,
                 discountId: null,
+                totalGuestCount: $totalGuestCount,
             );
 
             $paymentAmount = round((float) $data['payment_amount'], 2);
@@ -95,6 +109,7 @@ class PublicBookingWorkflowService
                 'guest_id' => $guest->guest_id,
                 'booking_date' => Carbon::today()->toDateString(),
                 'no_of_extra_guests' => $extraGuestCount,
+                'total_guest_count' => $totalGuestCount,
                 'total_price' => $total,
                 // Keep amount_due until cashier verifies the GCash proof.
                 'amount_due' => $total,

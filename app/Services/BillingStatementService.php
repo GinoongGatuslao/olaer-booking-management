@@ -6,8 +6,11 @@ use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\FacilityPrice;
 use App\Models\GuestFine;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class BillingStatementService
 {
@@ -53,6 +56,79 @@ class BillingStatementService
         return $records
             ->sortByDesc('date')
             ->values();
+    }
+
+    /**
+     * Return a database-paginated billing ledger.
+     *
+     * The older records() method is intentionally retained because other
+     * modules may still depend on its Collection return value.
+     */
+    public function paginatedRecords(
+        array $filters = [],
+        int $perPage = 10,
+        string $sortField = 'date',
+        string $sortDirection = 'desc',
+        string $pageName = 'page',
+    ): array {
+        $query = $this->billingRecordsQuery($filters);
+
+        $summary = [
+            'count' => (clone $query)->count(),
+            'total_amount' => round(
+                (float) (clone $query)->sum('amount'),
+                2,
+            ),
+            'total_due' => round(
+                (float) (clone $query)->sum('amount_due'),
+                2,
+            ),
+            'paid_count' => (clone $query)
+                ->where('payment_status', 'Paid')
+                ->count(),
+            'unpaid_count' => (clone $query)
+                ->where('payment_status', 'Unpaid')
+                ->count(),
+        ];
+
+        $allowedSorts = [
+            'date',
+            'transaction_type',
+            'guest_name',
+            'amount',
+            'amount_due',
+            'payment_status',
+        ];
+
+        $sortField = in_array($sortField, $allowedSorts, true)
+            ? $sortField
+            : 'date';
+
+        $sortDirection = $sortDirection === 'asc'
+            ? 'asc'
+            : 'desc';
+
+        $perPage = in_array($perPage, [10, 25, 50, 100], true)
+            ? $perPage
+            : 10;
+
+        $rows = $query
+            ->orderBy($sortField, $sortDirection)
+            ->orderBy('reference_no', 'desc')
+            ->paginate(
+                $perPage,
+                ['*'],
+                $pageName,
+            );
+
+        $rows->through(
+            fn (object $row): array => (array) $row,
+        );
+
+        return [
+            'rows' => $rows,
+            ...$summary,
+        ];
     }
 
     public function statementForBooking(int $bookingId): array
@@ -255,6 +331,429 @@ class BillingStatementService
                     'payment_status' => round((float) ($guestFine->booking?->amount_due ?? 0), 2) <= 0 ? 'Paid' : 'Unpaid',
                 ];
             });
+    }
+
+    private function billingRecordsQuery(array $filters): QueryBuilder
+    {
+        $transactionType = strtolower(
+            (string) ($filters['transaction_type'] ?? 'all')
+        );
+
+        $queries = [];
+
+        if (
+            $transactionType === 'all'
+            || $transactionType === 'booking'
+        ) {
+            $queries[] = $this->bookingRecordQuery($filters);
+        }
+
+        if (
+            $transactionType === 'all'
+            || $transactionType === 'amenity_request'
+        ) {
+            $queries[] = $this->amenityRequestRecordQuery($filters);
+        }
+
+        if (
+            $transactionType === 'all'
+            || $transactionType === 'fine'
+        ) {
+            $queries[] = $this->fineRecordQuery($filters);
+        }
+
+        // Validation in the UI restricts this to known values, but retaining
+        // a fallback keeps the service safe for direct callers.
+        if ($queries === []) {
+            $queries[] = $this->bookingRecordQuery($filters);
+        }
+
+        $union = array_shift($queries);
+
+        foreach ($queries as $query) {
+            $union->unionAll($query);
+        }
+
+        $ledger = DB::query()
+            ->fromSub($union, 'billing_records');
+
+        $search = trim(
+            (string) ($filters['search'] ?? '')
+        );
+
+        if ($search !== '') {
+            $like = '%'.$search.'%';
+
+            $ledger->where(function (QueryBuilder $query) use ($like): void {
+                $query->where('reference_no', 'like', $like)
+                    ->orWhere('booking_ref_no', 'like', $like)
+                    ->orWhere('guest_name', 'like', $like)
+                    ->orWhere('description', 'like', $like)
+                    ->orWhere('transaction_type', 'like', $like);
+            });
+        }
+
+        $paymentStatus = strtolower(
+            (string) ($filters['payment_status'] ?? 'all')
+        );
+
+        if ($paymentStatus === 'paid') {
+            $ledger->where('payment_status', 'Paid');
+        } elseif ($paymentStatus === 'unpaid') {
+            $ledger->where('payment_status', 'Unpaid');
+        }
+
+        return $ledger;
+    }
+
+    private function bookingRecordQuery(array $filters): QueryBuilder
+    {
+        $guestName = $this->guestNameExpression('billing_guest');
+
+        return DB::table('tbl_booking as billing_booking')
+            ->join(
+                'tbl_guest as billing_guest',
+                'billing_guest.guest_id',
+                '=',
+                'billing_booking.guest_id',
+            )
+            ->when(
+                $this->from($filters),
+                fn (QueryBuilder $query, string $from) =>
+                    $query->whereDate(
+                        'billing_booking.booking_date',
+                        '>=',
+                        $from,
+                    ),
+            )
+            ->when(
+                $this->to($filters),
+                fn (QueryBuilder $query, string $to) =>
+                    $query->whereDate(
+                        'billing_booking.booking_date',
+                        '<=',
+                        $to,
+                    ),
+            )
+            ->selectRaw("'Booking' as transaction_type")
+            ->selectRaw(
+                'billing_booking.b_ref_no as reference_no'
+            )
+            ->selectRaw(
+                'billing_booking.b_ref_no as booking_ref_no'
+            )
+            ->selectRaw(
+                'billing_booking.booking_id as booking_id'
+            )
+            ->selectRaw($guestName.' as guest_name')
+            ->selectRaw(
+                'billing_booking.booking_date as date'
+            )
+            ->selectRaw("'Facility booking' as description")
+            ->selectRaw(
+                'billing_booking.total_price as amount'
+            )
+            ->selectRaw(
+                'billing_booking.amount_due as amount_due'
+            )
+            ->selectRaw(
+                "CASE
+                    WHEN billing_booking.amount_due <= 0
+                        THEN 'Paid'
+                    ELSE 'Unpaid'
+                END as payment_status"
+            );
+    }
+
+    private function amenityRequestRecordQuery(
+        array $filters,
+    ): QueryBuilder {
+        $guestName = $this->guestNameExpression(
+            'amenity_guest',
+        );
+
+        $reference = $this->prefixedIdExpression(
+            'AR-',
+            'billing_amenity_request.amenity_request_id',
+        );
+
+        return DB::table(
+            'tbl_amenity_request as billing_amenity_request'
+        )
+            ->join(
+                'tbl_booking as amenity_booking',
+                'amenity_booking.booking_id',
+                '=',
+                'billing_amenity_request.booking_id',
+            )
+            ->join(
+                'tbl_guest as amenity_guest',
+                'amenity_guest.guest_id',
+                '=',
+                'amenity_booking.guest_id',
+            )
+            ->where(
+                'billing_amenity_request.amenity_request_status',
+                '!=',
+                'Cancelled',
+            )
+            ->when(
+                $this->from($filters),
+                fn (QueryBuilder $query, string $from) =>
+                    $query->whereDate(
+                        'billing_amenity_request.date_created',
+                        '>=',
+                        $from,
+                    ),
+            )
+            ->when(
+                $this->to($filters),
+                fn (QueryBuilder $query, string $to) =>
+                    $query->whereDate(
+                        'billing_amenity_request.date_created',
+                        '<=',
+                        $to,
+                    ),
+            )
+            ->selectRaw(
+                "'Amenity Request' as transaction_type"
+            )
+            ->selectRaw($reference.' as reference_no')
+            ->selectRaw(
+                'amenity_booking.b_ref_no as booking_ref_no'
+            )
+            ->selectRaw(
+                'amenity_booking.booking_id as booking_id'
+            )
+            ->selectRaw($guestName.' as guest_name')
+            ->selectRaw(
+                'billing_amenity_request.date_created as date'
+            )
+            ->selectRaw(
+                "'Requested rentable amenities' as description"
+            )
+            ->selectRaw(
+                'billing_amenity_request.total_price as amount'
+            )
+            ->selectRaw(
+                "CASE
+                    WHEN billing_amenity_request.amenity_request_status
+                        = 'Awaiting Payment'
+                    THEN billing_amenity_request.total_price
+                    ELSE 0
+                END as amount_due"
+            )
+            ->selectRaw(
+                "CASE
+                    WHEN billing_amenity_request.amenity_request_status
+                        = 'Awaiting Payment'
+                    THEN 'Unpaid'
+                    ELSE 'Paid'
+                END as payment_status"
+            );
+    }
+
+    private function fineRecordQuery(array $filters): QueryBuilder
+    {
+        $guestName = $this->guestNameExpression(
+            'fine_guest',
+        );
+
+        $reference = $this->prefixedIdExpression(
+            'GF-',
+            'billing_guest_fine.guest_fine_id',
+        );
+
+        $amenityDescription = $this->fineDescriptionExpression();
+
+        return DB::table(
+            'tbl_guest_fine as billing_guest_fine'
+        )
+            ->join(
+                'tbl_booking as fine_booking',
+                'fine_booking.booking_id',
+                '=',
+                'billing_guest_fine.booking_id',
+            )
+            ->join(
+                'tbl_guest as fine_guest',
+                'fine_guest.guest_id',
+                '=',
+                'fine_booking.guest_id',
+            )
+            ->join(
+                'tbl_fine as billing_fine',
+                'billing_fine.fine_id',
+                '=',
+                'billing_guest_fine.fine_id',
+            )
+            ->leftJoin(
+                'tbl_amenity as fine_amenity',
+                'fine_amenity.amenity_id',
+                '=',
+                'billing_fine.amenity_id',
+            )
+            ->leftJoin(
+                'tbl_amenity_name as fine_amenity_name',
+                'fine_amenity_name.amenity_name_id',
+                '=',
+                'fine_amenity.amenity_name_id',
+            )
+            ->leftJoin(
+                'tbl_damage_type as fine_damage_type',
+                'fine_damage_type.damage_type_id',
+                '=',
+                'billing_fine.damage_type_id',
+            )
+            ->when(
+                $this->from($filters),
+                fn (QueryBuilder $query, string $from) =>
+                    $query->whereDate(
+                        'billing_guest_fine.date_checked',
+                        '>=',
+                        $from,
+                    ),
+            )
+            ->when(
+                $this->to($filters),
+                fn (QueryBuilder $query, string $to) =>
+                    $query->whereDate(
+                        'billing_guest_fine.date_checked',
+                        '<=',
+                        $to,
+                    ),
+            )
+            ->selectRaw("'Fine' as transaction_type")
+            ->selectRaw($reference.' as reference_no')
+            ->selectRaw(
+                'fine_booking.b_ref_no as booking_ref_no'
+            )
+            ->selectRaw(
+                'fine_booking.booking_id as booking_id'
+            )
+            ->selectRaw($guestName.' as guest_name')
+            ->selectRaw(
+                'billing_guest_fine.date_checked as date'
+            )
+            ->selectRaw($amenityDescription.' as description')
+            ->selectRaw(
+                'billing_guest_fine.total_charge as amount'
+            )
+            ->selectRaw(
+                "CASE
+                    WHEN fine_booking.amount_due > 0
+                    THEN billing_guest_fine.total_charge
+                    ELSE 0
+                END as amount_due"
+            )
+            ->selectRaw(
+                "CASE
+                    WHEN fine_booking.amount_due <= 0
+                    THEN 'Paid'
+                    ELSE 'Unpaid'
+                END as payment_status"
+            );
+    }
+
+    private function guestNameExpression(string $alias): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite', 'pgsql' =>
+                "TRIM(
+                    COALESCE({$alias}.first_name, '')
+                    || ' '
+                    || COALESCE({$alias}.middle_name, '')
+                    || ' '
+                    || COALESCE({$alias}.last_name, '')
+                )",
+            'sqlsrv' =>
+                "LTRIM(RTRIM(
+                    CONCAT(
+                        COALESCE({$alias}.first_name, ''),
+                        ' ',
+                        COALESCE({$alias}.middle_name, ''),
+                        ' ',
+                        COALESCE({$alias}.last_name, '')
+                    )
+                ))",
+            default =>
+                "TRIM(
+                    CONCAT_WS(
+                        ' ',
+                        {$alias}.first_name,
+                        NULLIF({$alias}.middle_name, ''),
+                        {$alias}.last_name
+                    )
+                )",
+        };
+    }
+
+    private function prefixedIdExpression(
+        string $prefix,
+        string $column,
+    ): string {
+        $escapedPrefix = str_replace(
+            "'",
+            "''",
+            $prefix,
+        );
+
+        return match (DB::connection()->getDriverName()) {
+            'sqlite', 'pgsql' =>
+                "'{$escapedPrefix}' || CAST({$column} AS TEXT)",
+            'sqlsrv' =>
+                "CONCAT('{$escapedPrefix}', CAST({$column} AS VARCHAR(30)))",
+            default =>
+                "CONCAT('{$escapedPrefix}', {$column})",
+        };
+    }
+
+    private function fineDescriptionExpression(): string
+    {
+        return match (DB::connection()->getDriverName()) {
+            'sqlite', 'pgsql' =>
+                "CASE
+                    WHEN billing_fine.fine_type
+                        IN ('Amenity', 'Amenity Fine')
+                    THEN TRIM(
+                        COALESCE(
+                            fine_amenity_name.amenity_name,
+                            'Amenity'
+                        )
+                        || ' - '
+                        || COALESCE(
+                            fine_damage_type.damage_type,
+                            'Damage'
+                        )
+                    )
+                    ELSE COALESCE(
+                        billing_fine.situational_fine,
+                        'Fine'
+                    )
+                END",
+            default =>
+                "CASE
+                    WHEN billing_fine.fine_type
+                        IN ('Amenity', 'Amenity Fine')
+                    THEN TRIM(
+                        CONCAT(
+                            COALESCE(
+                                fine_amenity_name.amenity_name,
+                                'Amenity'
+                            ),
+                            ' - ',
+                            COALESCE(
+                                fine_damage_type.damage_type,
+                                'Damage'
+                            )
+                        )
+                    )
+                    ELSE COALESCE(
+                        billing_fine.situational_fine,
+                        'Fine'
+                    )
+                END",
+        };
     }
 
     private function from(array $filters): ?string

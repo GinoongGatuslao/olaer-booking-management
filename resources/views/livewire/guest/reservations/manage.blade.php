@@ -28,7 +28,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     public ?int $facilityId = null;
     public string $checkInDate = '';
     public string $checkOutDate = '';
-    public int $extraGuestCount = 0;
+    public int $totalGuestCount = 1;
     public array $extraGuests = [];
     public string $cancellationReason = '';
 
@@ -36,7 +36,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     {
         $this->checkInDate = Carbon::tomorrow()->toDateString();
         $this->checkOutDate = Carbon::tomorrow()->addDay()->toDateString();
-        $this->syncExtraGuestRows();
+        $this->syncPaidExtraGuestRows();
     }
 
     public function requestOtp(GuestReservationManagementService $service): void
@@ -100,7 +100,21 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         $this->facilityId = (int) $detail->facility_id;
         $this->checkInDate = optional($detail->check_in_date)->format('Y-m-d') ?: Carbon::tomorrow()->toDateString();
         $this->checkOutDate = optional($detail->check_out_date)->format('Y-m-d') ?: Carbon::tomorrow()->addDay()->toDateString();
-        $this->extraGuestCount = (int) $reservation->extraGuests->count();
+        $this->totalGuestCount = (int) (
+            $reservation->total_guest_count
+            ?: (
+                $detail->facility
+                    ? app(\App\Services\FacilityOccupancyService::class)
+                        ->legacyTotalGuestCount(
+                            $detail->facility,
+                            (int) $reservation->no_of_extra_guests,
+                        )
+                    : max(
+                        1,
+                        (int) $reservation->no_of_extra_guests + 1,
+                    )
+            )
+        );
         $this->extraGuests = $reservation->extraGuests
             ->map(fn ($guest): array => [
                 'first_name' => (string) $guest->first_name,
@@ -109,7 +123,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             ])
             ->values()
             ->all();
-        $this->syncExtraGuestRows();
+        $this->syncPaidExtraGuestRows();
     }
 
     public function prepareCancel(): void
@@ -123,8 +137,8 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     {
         $this->rateType = '';
         $this->facilityId = null;
-        $this->extraGuestCount = 0;
-        $this->syncExtraGuestRows();
+        $this->totalGuestCount = 1;
+        $this->syncPaidExtraGuestRows();
     }
 
     public function updatedRateType(): void
@@ -132,15 +146,23 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         $this->facilityId = null;
     }
 
-    public function updatedExtraGuestCount(): void
+    public function updatedFacilityId(): void
     {
-        $this->extraGuestCount = max(0, min(6, (int) $this->extraGuestCount));
-        $this->syncExtraGuestRows();
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
+    }
+
+    public function updatedTotalGuestCount(): void
+    {
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
     }
 
     public function updateReservation(GuestReservationManagementService $service): void
     {
         $this->resetMessages();
+        $this->clampTotalGuests();
+        $this->syncPaidExtraGuestRows();
 
         $this->validate([
             'facilityTypeId' => ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'],
@@ -148,10 +170,15 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             'facilityId' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
             'checkInDate' => ['required', 'date', 'after_or_equal:today'],
             'checkOutDate' => ['required', 'date', 'after:checkInDate'],
-            'extraGuestCount' => ['integer', 'min:0', 'max:6'],
-            'extraGuests.*.first_name' => ['nullable', 'string', 'max:50'],
+            'totalGuestCount' => [
+                'required',
+                'integer',
+                'min:1',
+                'max:'.$this->maxTotalGuests(),
+            ],
+            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['nullable', 'string', 'max:50'],
+            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
         ]);
 
         try {
@@ -160,7 +187,8 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                 'rate_type' => $this->rateType,
                 'check_in_date' => $this->checkInDate,
                 'check_out_date' => $this->checkOutDate,
-                'extra_guests' => array_slice($this->extraGuests, 0, $this->extraGuestCount),
+                'total_guest_count' => $this->totalGuestCount,
+                'extra_guests' => $this->extraGuests,
             ]);
 
             $this->showUpdateForm = false;
@@ -234,19 +262,62 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                 $this->rateType,
                 $this->checkInDate,
                 $this->checkOutDate,
-                $this->extraGuestCount,
+                0,
                 $detail?->discount_id ? (int) $detail->discount_id : null,
+                $this->totalGuestCount,
             );
         } catch (Throwable) {
             return null;
         }
     }
 
-    private function syncExtraGuestRows(): void
+    public function maxTotalGuests(): int
+    {
+        if (! $this->facilityId) {
+            return 1;
+        }
+
+        return app(\App\Services\FacilityOccupancyService::class)
+            ->maxTotalGuests($this->facilityId);
+    }
+
+    public function occupancyPreview(): ?array
+    {
+        if (! $this->facilityId) {
+            return null;
+        }
+
+        try {
+            return app(\App\Services\FacilityOccupancyService::class)
+                ->forFacilityId(
+                    $this->facilityId,
+                    $this->totalGuestCount,
+                );
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function clampTotalGuests(): void
+    {
+        $this->totalGuestCount = max(
+            1,
+            min(
+                $this->maxTotalGuests(),
+                $this->totalGuestCount,
+            ),
+        );
+    }
+
+    private function syncPaidExtraGuestRows(): void
     {
         $this->extraGuests = array_values($this->extraGuests);
+        $required = (int) (
+            $this->occupancyPreview()['paid_extra_guest_count']
+            ?? 0
+        );
 
-        for ($i = count($this->extraGuests); $i < $this->extraGuestCount; $i++) {
+        for ($i = count($this->extraGuests); $i < $required; $i++) {
             $this->extraGuests[$i] = [
                 'first_name' => '',
                 'middle_name' => '',
@@ -254,8 +325,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             ];
         }
 
-        if (count($this->extraGuests) > $this->extraGuestCount) {
-            $this->extraGuests = array_slice($this->extraGuests, 0, $this->extraGuestCount);
+        if (count($this->extraGuests) > $required) {
+            $this->extraGuests = array_slice(
+                $this->extraGuests,
+                0,
+                $required,
+            );
         }
     }
 
@@ -441,12 +516,20 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                 <div class="mt-4 max-w-sm">
                     <label class="block">
                         <span class="text-sm font-medium">Room Extra Guests</span>
-                        <input type="number" min="0" max="6" wire:model.live="extraGuestCount" class="mt-1 w-full rounded-lg border-zinc-300">
+                        <input type="number" min="1" max="{{ $this->maxTotalGuests() }}" wire:model.live="totalGuestCount" class="mt-1 w-full rounded-lg border-zinc-300">
                     </label>
-                    <p class="mt-1 text-xs text-zinc-500">Extra guest charge applies to rooms only. Cottage/function hall guests should select the correct facility capacity.</p>
+                    <p class="mt-1 text-xs text-zinc-500">
+                        Total guests includes the primary guest. Rooms include 4 guests; only guests above 4 are charged. Cottages and function halls have no extra-guest charge but cannot exceed capacity.
+                    </p>
+                    @if ($this->occupancyPreview())
+                        @php($occupancy = $this->occupancyPreview())
+                        <p class="mt-1 text-xs text-zinc-500">
+                            Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                        </p>
+                    @endif
                 </div>
 
-                @if ($extraGuestCount > 0)
+                @if ($extraGuests !== [])
                     <div class="mt-4 space-y-3">
                         <h3 class="font-medium">Extra Guest Names</h3>
                         @foreach ($extraGuests as $index => $guest)

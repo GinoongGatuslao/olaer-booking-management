@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\FacilityAmenity;
 use App\Models\FacilityInspection;
+use App\Models\FacilityInspectionRequest;
 use App\Models\Fine;
 use App\Models\GuestFine;
 use App\Models\User;
@@ -89,6 +90,10 @@ class FacilityInspectionWorkflowService
 
             $this->guardMaintenanceUser($maintenanceUserId);
             $this->guardCanInspect($detail, $booking);
+            $this->guardAssignedInspectionRequest(
+                $bookingDetailsId,
+                $maintenanceUserId,
+            );
             $this->guardNoExistingFines($booking, $detail);
 
             $inspection = $this->upsertInspection($detail, $booking, $maintenanceUserId, 'Cleared', $remarks);
@@ -153,6 +158,11 @@ class FacilityInspectionWorkflowService
 
             $this->guardMaintenanceUser($maintenanceUserId);
             $this->guardCanInspect($detail, $booking);
+            $this->guardAssignedInspectionRequest(
+                $bookingDetailsId,
+                $maintenanceUserId,
+                allowCompletedDamageInspection: true,
+            );
 
             $sourceItem = $this->resolveChecklistItem($bookingDetailsId, $itemSource, $sourceId);
 
@@ -302,6 +312,65 @@ class FacilityInspectionWorkflowService
         if ($detail->facility_id === null || $detail->facility === null) {
             throw new InvalidArgumentException('This booking detail has no assigned facility to inspect.');
         }
+    }
+
+    private function guardAssignedInspectionRequest(
+        int $bookingDetailsId,
+        int $maintenanceUserId,
+        bool $allowCompletedDamageInspection = false,
+    ): void {
+        $request = FacilityInspectionRequest::query()
+            ->where('booking_details_id', $bookingDetailsId)
+            ->latest('facility_inspection_request_id')
+            ->lockForUpdate()
+            ->first();
+
+        if ($request === null) {
+            throw new InvalidArgumentException(
+                'A cashier-created inspection request is required before maintenance can inspect this facility.',
+            );
+        }
+
+        if ($request->assigned_to_user_id === null) {
+            throw new InvalidArgumentException(
+                'Accept the inspection request before recording the inspection result.',
+            );
+        }
+
+        if ((int) $request->assigned_to_user_id !== $maintenanceUserId) {
+            throw new InvalidArgumentException(
+                'Only the assigned maintenance staff member can complete this inspection.',
+            );
+        }
+
+        if ((string) $request->status === 'In Progress') {
+            return;
+        }
+
+        if (
+            $allowCompletedDamageInspection
+            && (string) $request->status === 'Completed'
+        ) {
+            $inspectionIsDamageFound =
+                FacilityInspection::query()
+                    ->where(
+                        'booking_details_id',
+                        $bookingDetailsId,
+                    )
+                    ->where(
+                        'inspection_status',
+                        'Damage Found',
+                    )
+                    ->exists();
+
+            if ($inspectionIsDamageFound) {
+                return;
+            }
+        }
+
+        throw new InvalidArgumentException(
+            'This inspection request is not active for the selected maintenance staff member.',
+        );
     }
 
     private function guardNoExistingFines(Booking $booking, BookingDetail $detail): void

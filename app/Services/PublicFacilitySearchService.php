@@ -12,6 +12,7 @@ class PublicFacilitySearchService
     public function __construct(
         private readonly FacilityAvailabilityService $availability,
         private readonly ReservationQuoteService $quoteService,
+        private readonly FacilityOccupancyService $occupancy,
     ) {}
 
     public function facilityTypes(): Collection
@@ -64,9 +65,20 @@ class PublicFacilitySearchService
             ->values();
     }
 
-    public function quotePreview(?int $facilityId, ?string $rateType, ?string $checkInDate, ?string $checkOutDate, int $extraGuestCount = 0): ?array
-    {
-        if (! $facilityId || blank($rateType) || blank($checkInDate) || blank($checkOutDate)) {
+    public function quotePreview(
+        ?int $facilityId,
+        ?string $rateType,
+        ?string $checkInDate,
+        ?string $checkOutDate,
+        int $extraGuestCount = 0,
+        ?int $totalGuestCount = null,
+    ): ?array {
+        if (
+            ! $facilityId
+            || blank($rateType)
+            || blank($checkInDate)
+            || blank($checkOutDate)
+        ) {
             return null;
         }
 
@@ -77,6 +89,26 @@ class PublicFacilitySearchService
             checkOutDate: (string) $checkOutDate,
             discountId: null,
             extraGuestCount: $extraGuestCount,
+            totalGuestCount: $totalGuestCount,
         );
+    }
+
+    public function occupancyPreview(
+        ?int $facilityId,
+        int $totalGuestCount,
+    ): ?array {
+        if (! $facilityId) {
+            return null;
+        }
+
+        return $this->occupancy->forFacilityId(
+            $facilityId,
+            $totalGuestCount,
+        );
+    }
+
+    public function maxTotalGuests(?int $facilityId): int
+    {
+        return $this->occupancy->maxTotalGuests($facilityId);
     }
 }

@@ -2,6 +2,12 @@
     $guest = $booking->guest;
     $detail = $booking->details->first();
     $facility = $detail?->facility;
+    $facilityType = strtolower(
+        (string) $facility?->facilityType?->facility_type
+    );
+    $legacyTotalGuests = $facilityType === 'room'
+        ? 4 + (int) $booking->no_of_extra_guests
+        : 1 + (int) $booking->no_of_extra_guests;
     $payment = $booking->payments->first();
 @endphp
 
@@ -39,6 +45,14 @@
                 <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $detail?->check_out_date ?? 'N/A' }}</td>
             </tr>
             <tr>
+                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Total Guests</td>
+                <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $booking->total_guest_count ?? max(1, $legacyTotalGuests) }}</td>
+            </tr>
+            <tr>
+                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Paid Room Extra Guests</td>
+                <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $booking->no_of_extra_guests }}</td>
+            </tr>
+            <tr>
                 <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Total Price</td>
                 <td style="border: 1px solid #e5e7eb; padding: 8px;">₱{{ number_format((float) $booking->total_price, 2) }}</td>
             </tr>
@@ -64,7 +78,7 @@
     </table>
 
     @if ($booking->extraGuests->isNotEmpty())
-        <h3 style="font-size: 16px; margin-top: 20px;">Extra Guest Names</h3>
+        <h3 style="font-size: 16px; margin-top: 20px;">Paid Room Extra Guest Names</h3>
         <ul>
             @foreach ($booking->extraGuests as $extraGuest)
                 <li>{{ trim($extraGuest->first_name . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . $extraGuest->last_name) }}</li>

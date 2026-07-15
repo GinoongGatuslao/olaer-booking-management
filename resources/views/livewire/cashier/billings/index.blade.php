@@ -1,18 +1,40 @@
 <?php
 
 use App\Services\BillingStatementService;
-use Illuminate\Pagination\LengthAwarePaginator;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
+new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')] class extends Component
+{
     use WithPagination;
 
+    #[Url(as: 'q', except: '')]
     public string $search = '';
+
+    #[Url(as: 'from', except: '')]
     public string $fromDate = '';
+
+    #[Url(as: 'to', except: '')]
     public string $toDate = '';
+
+    #[Url(as: 'payment_status', except: 'all')]
     public string $paymentStatus = 'all';
+
+    #[Url(as: 'transaction_type', except: 'all')]
     public string $transactionType = 'all';
+
+    #[Url(as: 'sort', except: 'date')]
+    public string $sortField = 'date';
+
+    #[Url(as: 'direction', except: 'desc')]
+    public string $sortDirection = 'desc';
+
+    #[Url(as: 'per_page', except: 10)]
+    public int $perPage = 10;
+
     public ?int $selectedBookingId = null;
     public ?string $errorMessage = null;
 
@@ -27,8 +49,18 @@ new class extends Component {
 
     public function with(): array
     {
+        $billingData = app(
+            BillingStatementService::class,
+        )->paginatedRecords(
+            $this->filters(),
+            $this->perPage,
+            $this->sortField,
+            $this->sortDirection,
+        );
+
         return [
-            'records' => $this->paginatedRecords(),
+            'records' => $billingData['rows'],
+            'billingSummary' => $billingData,
             'statement' => $this->selectedStatement(),
         ];
     }
@@ -58,6 +90,55 @@ new class extends Component {
         $this->resetPage();
     }
 
+    public function updatedPerPage(): void
+    {
+        if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
+            $this->perPage = 10;
+        }
+
+        $this->resetPage();
+    }
+
+    public function sortBy(string $field): void
+    {
+        $allowed = [
+            'date',
+            'transaction_type',
+            'guest_name',
+            'amount',
+            'amount_due',
+            'payment_status',
+        ];
+
+        if (! in_array($field, $allowed, true)) {
+            return;
+        }
+
+        if ($this->sortField === $field) {
+            $this->sortDirection =
+                $this->sortDirection === 'asc'
+                    ? 'desc'
+                    : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection =
+                $field === 'date' ? 'desc' : 'asc';
+        }
+
+        $this->resetPage();
+    }
+
+    public function sortIndicator(string $field): string
+    {
+        if ($this->sortField !== $field) {
+            return '↕';
+        }
+
+        return $this->sortDirection === 'asc'
+            ? '↑'
+            : '↓';
+    }
+
     public function selectBooking(int $bookingId): void
     {
         $this->selectedBookingId = $bookingId;
@@ -71,22 +152,10 @@ new class extends Component {
         $this->toDate = '';
         $this->paymentStatus = 'all';
         $this->transactionType = 'all';
+        $this->sortField = 'date';
+        $this->sortDirection = 'desc';
+        $this->perPage = 10;
         $this->resetPage();
-    }
-
-    public function paginatedRecords(): LengthAwarePaginator
-    {
-        $records = app(BillingStatementService::class)->records($this->filters());
-        $page = $this->getPage();
-        $perPage = 10;
-
-        return new LengthAwarePaginator(
-            $records->forPage($page, $perPage)->values(),
-            $records->count(),
-            $perPage,
-            $page,
-            ['path' => request()->url(), 'pageName' => 'page']
-        );
     }
 
     public function selectedStatement(): ?array
@@ -138,43 +207,92 @@ new class extends Component {
     @endif
 
     <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="grid gap-4 md:grid-cols-5">
-            <div class="md:col-span-2">
-                <flux:input label="Search" placeholder="Guest, booking ref, billing ref..." wire:model.live.debounce.300ms="search" />
-            </div>
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
+            <flux:input
+                label="Search"
+                placeholder="Guest, booking ref, billing ref, description"
+                wire:model.live.debounce.300ms="search"
+                clearable
+                class="xl:col-span-2"
+            />
 
-            <div>
-                <flux:input type="date" label="From" wire:model.live="fromDate" />
-            </div>
+            <flux:input
+                type="date"
+                label="From"
+                wire:model.live="fromDate"
+            />
 
-            <div>
-                <flux:input type="date" label="To" wire:model.live="toDate" />
-            </div>
+            <flux:input
+                type="date"
+                label="To"
+                wire:model.live="toDate"
+            />
 
-            <div class="flex items-end">
-                <flux:button type="button" variant="outline" wire:click="clearFilters" class="w-full">Clear</flux:button>
-            </div>
+            <flux:select
+                label="Transaction Type"
+                wire:model.live="transactionType"
+            >
+                <option value="all">All transactions</option>
+                <option value="booking">Bookings</option>
+                <option value="amenity_request">Amenity Requests</option>
+                <option value="fine">Fines</option>
+            </flux:select>
+
+            <flux:select
+                label="Payment Status"
+                wire:model.live="paymentStatus"
+            >
+                <option value="all">All statuses</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+            </flux:select>
+
+            <flux:select
+                label="Rows"
+                wire:model.live="perPage"
+            >
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </flux:select>
         </div>
 
-        <div class="mt-4 grid gap-4 md:grid-cols-2">
-            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Transaction Type
-                <select wire:model.live="transactionType" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                    <option value="all">All</option>
-                    <option value="booking">Bookings</option>
-                    <option value="amenity_request">Amenity Requests</option>
-                    <option value="fine">Fines</option>
-                </select>
-            </label>
+        <div class="mt-4 flex justify-end">
+            <flux:button
+                type="button"
+                variant="ghost"
+                wire:click="clearFilters"
+            >
+                Clear Filters
+            </flux:button>
+        </div>
+    </div>
 
-            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Payment Status
-                <select wire:model.live="paymentStatus" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                    <option value="all">All</option>
-                    <option value="paid">Paid</option>
-                    <option value="unpaid">Unpaid</option>
-                </select>
-            </label>
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Records</p>
+            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['count'] }}</p>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Billed Amount</p>
+            <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_amount']) }}</p>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding</p>
+            <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_due']) }}</p>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Paid Records</p>
+            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['paid_count'] }}</p>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Unpaid Records</p>
+            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['unpaid_count'] }}</p>
         </div>
     </div>
 
@@ -188,19 +306,46 @@ new class extends Component {
                 <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
                     <thead class="bg-zinc-50 dark:bg-zinc-950/60">
                         <tr class="text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
-                            <th class="px-4 py-3">Date</th>
-                            <th class="px-4 py-3">Type</th>
-                            <th class="px-4 py-3">Guest</th>
+                            <th class="px-4 py-3">
+                                <button wire:click="sortBy('date')" class="font-medium">
+                                    Date {{ $this->sortIndicator('date') }}
+                                </button>
+                            </th>
+                            <th class="px-4 py-3">
+                                <button wire:click="sortBy('transaction_type')" class="font-medium">
+                                    Type {{ $this->sortIndicator('transaction_type') }}
+                                </button>
+                            </th>
+                            <th class="px-4 py-3">
+                                <button wire:click="sortBy('guest_name')" class="font-medium">
+                                    Guest {{ $this->sortIndicator('guest_name') }}
+                                </button>
+                            </th>
                             <th class="px-4 py-3">Description</th>
-                            <th class="px-4 py-3 text-right">Amount</th>
-                            <th class="px-4 py-3 text-right">Due</th>
-                            <th class="px-4 py-3">Status</th>
-                            <th class="px-4 py-3"></th>
+                            <th class="px-4 py-3 text-right">
+                                <button wire:click="sortBy('amount')" class="font-medium">
+                                    Amount {{ $this->sortIndicator('amount') }}
+                                </button>
+                            </th>
+                            <th class="px-4 py-3 text-right">
+                                <button wire:click="sortBy('amount_due')" class="font-medium">
+                                    Due {{ $this->sortIndicator('amount_due') }}
+                                </button>
+                            </th>
+                            <th class="px-4 py-3">
+                                <button wire:click="sortBy('payment_status')" class="font-medium">
+                                    Status {{ $this->sortIndicator('payment_status') }}
+                                </button>
+                            </th>
+                            <th class="px-4 py-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         @forelse ($records as $record)
-                            <tr class="align-top">
+                            <tr
+                                wire:key="billing-record-{{ $record['transaction_type'] }}-{{ $record['reference_no'] }}"
+                                class="align-top"
+                            >
                                 <td class="whitespace-nowrap px-4 py-3">{{ $record['date'] ?? 'N/A' }}</td>
                                 <td class="whitespace-nowrap px-4 py-3">{{ $record['transaction_type'] }}</td>
                                 <td class="px-4 py-3">
@@ -221,22 +366,65 @@ new class extends Component {
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     @if (($record['booking_id'] ?? 0) > 0)
-                                        <flux:button size="sm" variant="outline" wire:click="selectBooking({{ $record['booking_id'] }})">
-                                            View Statement
-                                        </flux:button>
+                                        <div class="flex flex-wrap justify-end gap-2">
+                                            @if (Route::has('cashier.bookings.show'))
+                                                <flux:button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    href="{{ route('cashier.bookings.show', $record['booking_id']) }}"
+                                                    wire:navigate
+                                                >
+                                                    Booking
+                                                </flux:button>
+                                            @endif
+
+                                            @if (
+                                                (float) $record['amount_due'] > 0
+                                                && Route::has('cashier.payments.index')
+                                            )
+                                                <flux:button
+                                                    size="sm"
+                                                    variant="primary"
+                                                    href="{{ route('cashier.payments.index', ['booking' => $record['booking_id']]) }}"
+                                                    wire:navigate
+                                                >
+                                                    Payment
+                                                </flux:button>
+                                            @endif
+
+                                            <flux:button
+                                                size="sm"
+                                                variant="ghost"
+                                                wire:click="selectBooking({{ $record['booking_id'] }})"
+                                            >
+                                                Statement
+                                            </flux:button>
+                                        </div>
                                     @endif
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="px-4 py-8 text-center text-zinc-500">No billing records found.</td>
+                                <td colspan="8" class="px-4 py-10 text-center text-zinc-500">
+                                    No billing record matches the selected filters.
+                                </td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
 
-            <div class="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+            <div class="flex flex-col gap-3 border-t border-zinc-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+                <p class="text-sm text-zinc-500">
+                    Showing
+                    {{ $records->firstItem() ?? 0 }}
+                    to
+                    {{ $records->lastItem() ?? 0 }}
+                    of
+                    {{ $records->total() }}
+                    billing records
+                </p>
+
                 {{ $records->links() }}
             </div>
         </div>
