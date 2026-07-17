@@ -22,6 +22,7 @@ class ReservationToBookingWorkflowService
         private readonly ReservationQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
     ) {}
 
     /**
@@ -70,8 +71,12 @@ class ReservationToBookingWorkflowService
 
                 $mode = ModeOfPayment::query()->findOrFail((int) $modeOfPaymentId);
 
-                if (strtolower((string) $mode->mode_of_payment) === 'gcash' && $referenceNumber === '') {
-                    throw new InvalidArgumentException('GCash payments require a reference number.');
+                if (
+                    strtolower((string) $mode->mode_of_payment)
+                    === 'gcash'
+                ) {
+                    $referenceNumber = $this->gcashReferences
+                        ->assertAvailable($referenceNumber);
                 }
             }
 

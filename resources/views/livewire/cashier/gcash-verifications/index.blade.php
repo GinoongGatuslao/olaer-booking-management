@@ -252,6 +252,18 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                         <p class="font-medium text-zinc-950 dark:text-white">{{ $booking?->b_ref_no }}</p>
                     </div>
 
+                    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                        <p class="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                            GCash reference number
+                        </p>
+                        <p class="mt-1 font-semibold tracking-wide text-emerald-950 dark:text-emerald-100">
+                            {{ $selectedPayment->reference_number ?: 'No reference provided' }}
+                        </p>
+                        <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                            Match this reference and amount with the uploaded proof before reviewing.
+                        </p>
+                    </div>
+
                     <div>
                         <p class="text-xs uppercase tracking-wide text-zinc-500">Guest</p>
                         <p class="font-medium text-zinc-950 dark:text-white">{{ $booking?->guest?->first_name }} {{ $booking?->guest?->last_name }}</p>
@@ -315,6 +327,20 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             Reviewed by: {{ $selectedPayment->verifier?->first_name }} {{ $selectedPayment->verifier?->last_name }}<br>
                             Reviewed at: {{ optional($selectedPayment->verified_at)->format('M d, Y h:i A') ?? '—' }}
                         </div>
+
+                        @if (
+                            strtolower((string) $selectedPayment->payment_status) === 'rejected'
+                            && filled($selectedPayment->rejection_reason)
+                        )
+                            <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+                                <p class="text-xs font-semibold uppercase tracking-wide">
+                                    Rejection reason
+                                </p>
+                                <p class="mt-1 whitespace-pre-line">
+                                    {{ $selectedPayment->rejection_reason }}
+                                </p>
+                            </div>
+                        @endif
                     @endif
                 </div>
             @else

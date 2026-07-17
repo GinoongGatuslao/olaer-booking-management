@@ -21,6 +21,7 @@ class PublicBookingWorkflowService
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -82,9 +83,8 @@ class PublicBookingWorkflowService
 
             $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
 
-            if ($referenceNumber === '') {
-                throw new InvalidArgumentException('GCash reference number is required.');
-            }
+            $referenceNumber = $this->gcashReferences
+                ->assertAvailable($referenceNumber);
 
             $proofPath = trim((string) ($data['proof_of_payment_path'] ?? ''));
 

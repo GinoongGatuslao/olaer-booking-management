@@ -7,6 +7,7 @@ use App\Models\EntranceSlip;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,10 @@ use Throwable;
 
 class PaymentWorkflowService
 {
+    public function __construct(
+        private readonly GcashReferenceIntegrityService $gcashReferences,
+    ) {}
+
     public function recordCashierPayment(array $data): Payment
     {
         $targetType = (string) ($data['target_type'] ?? '');
@@ -37,9 +42,7 @@ class PaymentWorkflowService
             throw new InvalidArgumentException('Payment amount must be greater than zero.');
         }
 
-        if ($cashierUserId < 1) {
-            throw new InvalidArgumentException('A logged-in cashier is required to record payment.');
-        }
+        $this->guardCashier($cashierUserId);
 
         $mode = ModeOfPayment::query()->findOrFail($modeOfPaymentId);
         $modeName = strtolower(trim((string) $mode->mode_of_payment));
@@ -51,6 +54,11 @@ class PaymentWorkflowService
         DB::beginTransaction();
 
         try {
+            if ($modeName === 'gcash') {
+                $referenceNumber = $this->gcashReferences
+                    ->assertAvailable($referenceNumber);
+            }
+
             $target = $this->lockTarget($targetType, $targetId);
             $amountDue = round((float) $target->amount_due, 2);
 
@@ -84,6 +92,25 @@ class PaymentWorkflowService
         } catch (Throwable $exception) {
             DB::rollBack();
             throw $exception;
+        }
+    }
+
+    private function guardCashier(int $userId): void
+    {
+        if ($userId < 1) {
+            throw new InvalidArgumentException(
+                'A logged-in cashier is required to record payment.',
+            );
+        }
+
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($userId);
+
+        if ($user->role?->role_name !== 'Cashier') {
+            throw new InvalidArgumentException(
+                'Only a Cashier may record payments.',
+            );
         }
     }
 

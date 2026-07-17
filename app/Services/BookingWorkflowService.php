@@ -22,6 +22,7 @@ class BookingWorkflowService
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
     ) {}
 
     public function createBooking(array $data): Booking
@@ -74,8 +75,9 @@ class BookingWorkflowService
             $mode = ModeOfPayment::query()->findOrFail((int) $data['mode_of_payment_id']);
             $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
 
-            if (strtolower($mode->mode_of_payment) === 'gcash' && $referenceNumber === '') {
-                throw new InvalidArgumentException('GCash payments require a reference number.');
+            if (strtolower($mode->mode_of_payment) === 'gcash') {
+                $referenceNumber = $this->gcashReferences
+                    ->assertAvailable($referenceNumber);
             }
 
             $address = Address::query()->create([
