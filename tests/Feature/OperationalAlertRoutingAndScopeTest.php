@@ -499,7 +499,58 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             $this->assertIsString($content);
 
             $this->assertStringContainsString(
-                "route(\$routeName, \$alert['route_params'] ?? [])",
+                '<x-operational-alert-card',
+                $content,
+            );
+
+            $this->assertStringNotContainsString(
+                '$badgeClass',
+                $content,
+            );
+        }
+
+        $alertCard = file_get_contents(
+            resource_path(
+                'views/components/operational-alert-card.blade.php',
+            ),
+        );
+
+        $this->assertIsString($alertCard);
+
+        $this->assertStringContainsString(
+            "Route::has(\$routeName)",
+            $alertCard,
+        );
+
+        $this->assertStringContainsString(
+            "\$alert['route_params'] ?? []",
+            $alertCard,
+        );
+
+        $this->assertStringContainsString(
+            'wire:navigate',
+            $alertCard,
+        );
+
+        $actionCenters = [
+            'resources/views/livewire/cashier/action-center/index.blade.php',
+            'resources/views/livewire/maintenance/action-center/index.blade.php',
+        ];
+
+        foreach ($actionCenters as $relativePath) {
+            $content = file_get_contents(
+                base_path($relativePath),
+            );
+
+            $this->assertIsString($content);
+
+            $this->assertStringContainsString(
+                '<x-staff-shortcut-card',
+                $content,
+            );
+
+            $this->assertStringContainsString(
+                '<x-staff-page-header',
                 $content,
             );
         }
