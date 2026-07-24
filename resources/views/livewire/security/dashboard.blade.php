@@ -51,56 +51,52 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
 
 ?>
 
-<div wire:poll.15s class="space-y-6">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight">Security Guard Dashboard</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Entrance monitoring for today. Payment statuses refresh automatically every 15 seconds.
-            </p>
-        </div>
-
-        @if (Route::has('security.entrance-slips.create'))
-            <flux:button
-                href="{{ route('security.entrance-slips.create') }}"
-                wire:navigate
-                variant="primary"
-            >
-                Create Entrance Slip
-            </flux:button>
-        @endif
-    </div>
+<div wire:poll.15s.visible class="space-y-6">
+    <x-staff-page-header
+        eyebrow="Entrance operations"
+        title="Security entrance overview"
+        description="Monitor today’s guest admissions and create accurate entrance slips before directing guests to Cashier for payment."
+    >
+        <x-slot:actions>
+            @if (Route::has('security.entrance-slips.create'))
+                <flux:button
+                    href="{{ route('security.entrance-slips.create') }}"
+                    wire:navigate
+                    variant="primary"
+                >
+                    Create Entrance Slip
+                </flux:button>
+            @endif
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Slips I created today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_slips_today'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">
-                Resort total: {{ $this->overview['resort_slips_today'] }}
-            </p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Slips I created today"
+            :value="$this->overview['my_slips_today']"
+            :description="'Resort total: '.$this->overview['resort_slips_today']"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Paid entrance slips</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['paid_slips_today'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Paid slips count as admitted guests.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Paid entrance slips"
+            :value="$this->overview['paid_slips_today']"
+            description="Paid slips count toward admitted guests."
+            tone="success"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Unpaid entrance slips</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['unpaid_slips_today'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">
-                Mine: {{ $this->overview['my_unpaid_slips_today'] }}
-            </p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Unpaid entrance slips"
+            :value="$this->overview['unpaid_slips_today']"
+            :description="'Created by me: '.$this->overview['my_unpaid_slips_today']"
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Admitted guests today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['admitted_guests_today'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">
-                Tourists: {{ $this->overview['tourists_today'] }}
-            </p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Admitted guests today"
+            :value="$this->overview['admitted_guests_today']"
+            :description="'Tourists included: '.$this->overview['tourists_today']"
+            tone="info"
+        />
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
@@ -244,12 +240,7 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
                             </td>
 
                             <td class="px-2 py-3">
-                                <flux:badge
-                                    color="{{ $slip->status === 'Paid' ? 'green' : 'amber' }}"
-                                    size="sm"
-                                >
-                                    {{ $slip->status }}
-                                </flux:badge>
+                                <x-status-badge :status="$slip->status" />
                             </td>
 
                             <td class="px-2 py-3 text-zinc-500">
@@ -271,8 +262,13 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-2 py-10 text-center text-zinc-500">
-                                You have not created an entrance slip today.
+                            <td colspan="8" class="px-2 py-6">
+                                <x-dashboard-empty-state
+                                    title="No entrance slips created today"
+                                    description="Create a slip when the next walk-in group arrives."
+                                    :href="Route::has('security.entrance-slips.create') ? route('security.entrance-slips.create') : null"
+                                    action="Create entrance slip"
+                                />
                             </td>
                         </tr>
                     @endforelse
