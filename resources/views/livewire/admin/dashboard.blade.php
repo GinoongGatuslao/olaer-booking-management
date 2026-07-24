@@ -41,16 +41,13 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
 
 ?>
 
-<div wire:poll.15s class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live operational overview. Updates automatically every 15 seconds.
-            </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
+<div wire:poll.15s.visible class="space-y-6">
+    <x-staff-page-header
+        eyebrow="Administration"
+        title="Resort operations overview"
+        description="Verified revenue, facility use, staff activity, and current configuration at a glance. Live data refreshes while this dashboard is visible."
+    >
+        <x-slot:actions>
             @if (Route::has('admin.reports.index'))
                 <flux:button href="{{ route('admin.reports.index') }}" wire:navigate variant="primary">
                     Open Reports
@@ -62,40 +59,50 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
                     Manage Users
                 </flux:button>
             @endif
-        </div>
-    </div>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Revenue today</p>
-            <p class="mt-2 text-3xl font-semibold">₱{{ number_format($this->overview['today_revenue'], 2) }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Revenue today"
+            :value="'₱'.number_format($this->overview['today_revenue'], 2)"
+            description="Verified payments received today."
+            tone="success"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Revenue this month</p>
-            <p class="mt-2 text-3xl font-semibold">₱{{ number_format($this->overview['month_revenue'], 2) }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Revenue this month"
+            :value="'₱'.number_format($this->overview['month_revenue'], 2)"
+            description="Verified payments in the current month."
+            tone="secondary"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Facilities currently in use</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['occupied_facilities'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Facilities in use"
+            :value="$this->overview['occupied_facilities']"
+            description="Facilities tied to checked-in booking details."
+            tone="info"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Pending GCash verification</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['pending_gcash'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Pending GCash"
+            :value="$this->overview['pending_gcash']"
+            description="Guest-uploaded GCash proofs awaiting cashier review."
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Staff active in last 5 minutes</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['active_staff'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Recently active staff"
+            :value="$this->overview['active_staff']"
+            description="Authenticated activity within the last five minutes."
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Configured amenities</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['total_amenities'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Master-data count, not inventory stock.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Configured amenities"
+            :value="$this->overview['total_amenities']"
+            description="Master-data count only; warehouse stock is outside this system."
+            tone="secondary"
+        />
     </div>
 
     <div class="grid gap-6 xl:grid-cols-3">
@@ -155,7 +162,10 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
                         </flux:badge>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">No staff activity has been recorded yet.</p>
+                    <x-dashboard-empty-state
+                        title="No recent staff activity"
+                        description="Authenticated activity will appear here as staff use the system."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -189,7 +199,7 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
                                 </td>
                                 <td class="px-2 py-3">{{ $detail->booking?->guest?->full_name ?? 'Unknown guest' }}</td>
                                 <td class="px-2 py-3">{{ optional($detail->check_out_date)->format('d/m/Y') }}</td>
-                                <td class="px-2 py-3"><flux:badge color="blue" size="sm">Checked-in</flux:badge></td>
+                                <td class="px-2 py-3"><x-status-badge status="Checked-in" /></td>
                             </tr>
                         @empty
                             <tr>
@@ -228,7 +238,10 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">No operational activity is available yet.</p>
+                    <x-dashboard-empty-state
+                        title="No recent operations"
+                        description="New booking, payment, facility, and staff activity will appear here."
+                    />
                 @endforelse
             </div>
         </flux:card>
