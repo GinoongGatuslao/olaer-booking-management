@@ -7,6 +7,8 @@ use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
+use App\Services\CashierDashboardService;
+use App\Services\RealtimeDashboardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -114,6 +116,32 @@ class CashierGcashVerificationReferenceTest extends TestCase
             'date_paid' => now()->toDateString(),
             'payment_status' => 'Pending',
         ]);
+
+        $cashierDashboard = app(
+            CashierDashboardService::class,
+        );
+
+        $this->assertSame(
+            1,
+            $cashierDashboard->overview(0)[
+                'pending_gcash'
+            ],
+        );
+
+        $this->assertSame(
+            [$gcashPayment->payment_id],
+            $cashierDashboard
+                ->pendingGcashPayments()
+                ->pluck('payment_id')
+                ->all(),
+        );
+
+        $this->assertSame(
+            1,
+            app(
+                RealtimeDashboardService::class,
+            )->cashier()['pending_gcash'],
+        );
 
         Livewire::withQueryParams([
             'payment' => $gcashPayment->payment_id,
