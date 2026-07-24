@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class StaffNavigationFoundationTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_every_staff_navigation_destination_is_a_registered_route(): void
     {
         $routeNames = [
@@ -42,6 +47,8 @@ class StaffNavigationFoundationTest extends TestCase
             'security.entrance-slips.create',
             'guest.home',
             'profile.edit',
+            'security.edit',
+            'appearance.edit',
         ];
 
         foreach ($routeNames as $routeName) {
@@ -76,30 +83,52 @@ class StaffNavigationFoundationTest extends TestCase
         }
     }
 
-    public function test_staff_layout_context_is_prepared_outside_blade(): void
+    public function test_staff_layout_context_is_prepared_by_web_middleware(): void
     {
-        $provider = file_get_contents(
-            app_path('Providers/AppServiceProvider.php'),
+        $middleware = file_get_contents(
+            app_path('Http/Middleware/ShareStaffLayoutContext.php'),
+        );
+
+        $bootstrap = file_get_contents(
+            base_path('bootstrap/app.php'),
         );
 
         $layout = file_get_contents(
             resource_path('views/layouts/app.blade.php'),
         );
 
-        $this->assertIsString($provider);
+        $this->assertIsString($middleware);
+        $this->assertIsString($bootstrap);
         $this->assertIsString($layout);
         $this->assertStringContainsString(
-            "View::composer(\n            'layouts.app'",
-            $provider,
+            'ShareStaffLayoutContext::class',
+            $bootstrap,
         );
         $this->assertStringContainsString(
             "'staffDashboardRoute' =>",
-            $provider,
+            $middleware,
         );
         $this->assertStringNotContainsString(
             'loadMissing(',
             $layout,
         );
+    }
+
+    public function test_cashier_bookings_page_receives_staff_layout_context(): void
+    {
+        $cashierRole = Role::query()->create([
+            'role_name' => 'Cashier',
+        ]);
+
+        $cashier = User::factory()->create([
+            'role_id' => $cashierRole->role_id,
+        ]);
+
+        $this->actingAs($cashier)
+            ->get(route('cashier.bookings.index'))
+            ->assertOk()
+            ->assertSee('Olaer Spring Resort')
+            ->assertSee('Cashier workspace');
     }
 
     public function test_staff_navigation_is_a_class_based_volt_component(): void
