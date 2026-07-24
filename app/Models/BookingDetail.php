@@ -16,6 +16,15 @@ class BookingDetail extends Model
 
     public $timestamps = false;
 
+    /**
+     * Booking stay fields are database DATE columns.
+     *
+     * Using a date-only persistence format keeps SQLite test storage aligned
+     * with MySQL DATE storage instead of serializing casts as midnight
+     * datetimes such as 2026-07-29 00:00:00.
+     */
+    protected $dateFormat = 'Y-m-d';
+
     protected $fillable = [
         'booking_id',
         'facility_id',

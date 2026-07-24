@@ -260,7 +260,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             {{ $selectedPayment->reference_number ?: 'No reference provided' }}
                         </p>
                         <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                            Match this reference and amount with the uploaded proof before reviewing.
+                            Match this with the uploaded proof before verifying.
                         </p>
                     </div>
 

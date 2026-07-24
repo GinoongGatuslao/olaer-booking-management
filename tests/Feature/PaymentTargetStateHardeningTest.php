@@ -63,7 +63,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ]);
     }
 
-    public function test_checked_in_booking_payment_releases_paid_amenity_request(): void
+    public function test_checked_in_booking_payment_does_not_control_amenity_request_state(): void
     {
         $cashierId = $this->createUser('Cashier');
         $modeId = $this->createPaymentMode('Cash');
@@ -74,7 +74,7 @@ class PaymentTargetStateHardeningTest extends TestCase
 
         $requestId = $this->createAmenityRequest(
             bookingId: $bookingId,
-            status: 'Awaiting Payment',
+            status: 'Pending',
             totalPrice: 300.00,
         );
 
