@@ -20,6 +20,8 @@ class PublicBookingWorkflowService
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -30,6 +32,9 @@ class PublicBookingWorkflowService
             $rateType = (string) $data['rate_type'];
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
+
+            $this->scheduleLock->lockOne($facilityId);
+
             $totalGuestCount = max(
                 1,
                 (int) ($data['total_guest_count'] ?? 1),
@@ -78,9 +83,8 @@ class PublicBookingWorkflowService
 
             $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
 
-            if ($referenceNumber === '') {
-                throw new InvalidArgumentException('GCash reference number is required.');
-            }
+            $referenceNumber = $this->gcashReferences
+                ->assertAvailable($referenceNumber);
 
             $proofPath = trim((string) ($data['proof_of_payment_path'] ?? ''));
 

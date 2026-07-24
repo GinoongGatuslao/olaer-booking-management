@@ -2,101 +2,190 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Throwable;
 
 class GcashPaymentVerificationService
 {
-    public function verify(int $paymentId, int $cashierUserId): Payment
-    {
-        if ($cashierUserId < 1) {
-            throw new InvalidArgumentException('A logged-in cashier is required to verify GCash payments.');
-        }
+    public function __construct(
+        private readonly GcashReferenceIntegrityService $references,
+    ) {}
 
-        DB::beginTransaction();
+    public function verify(
+        int $paymentId,
+        int $cashierUserId,
+    ): Payment {
+        $this->guardCashier($cashierUserId);
 
-        try {
+        return DB::transaction(function () use (
+            $paymentId,
+            $cashierUserId,
+        ): Payment {
             $payment = Payment::query()
-                ->with(['booking.details'])
+                ->with([
+                    'booking.details',
+                    'modeOfPayment',
+                ])
                 ->lockForUpdate()
                 ->findOrFail($paymentId);
 
-            $this->guardPendingGuestGcashPayment($payment);
+            $status = strtolower(
+                trim((string) $payment->payment_status),
+            );
 
-            $booking = $payment->booking;
+            if ($status === 'verified') {
+                $this->guardVerifiedStateIsConsistent($payment);
 
-            if (! $booking) {
-                throw new InvalidArgumentException('Only booking GCash proof verification is supported here.');
+                return $this->freshPayment($payment);
             }
 
-            $booking = $booking->newQuery()->lockForUpdate()->with('details')->findOrFail($booking->booking_id);
+            if ($status === 'rejected') {
+                throw new InvalidArgumentException(
+                    'A rejected GCash payment cannot be verified.',
+                );
+            }
 
-            $amountPaid = round((float) $payment->amount_paid, 2);
-            $amountDue = round((float) $booking->amount_due, 2);
-            $newAmountDue = max(round($amountDue - $amountPaid, 2), 0.00);
+            $this->guardPendingGuestGcashPayment($payment);
+
+            $booking = Booking::query()
+                ->with('details')
+                ->lockForUpdate()
+                ->findOrFail((int) $payment->booking_id);
+
+            if (
+                strtolower(trim((string) $booking->status))
+                !== 'pending verification'
+            ) {
+                throw new InvalidArgumentException(
+                    'Only bookings pending GCash verification can be verified.',
+                );
+            }
+
+            $amountPaid = round(
+                (float) $payment->amount_paid,
+                2,
+            );
+            $amountDue = round(
+                (float) $booking->amount_due,
+                2,
+            );
+
+            if ($amountPaid <= 0) {
+                throw new InvalidArgumentException(
+                    'The submitted GCash payment amount is invalid.',
+                );
+            }
+
+            if (abs($amountPaid - $amountDue) > 0.009) {
+                throw new InvalidArgumentException(
+                    'The submitted GCash amount must exactly match the booking balance.',
+                );
+            }
+
+            $referenceNumber = $this->references
+                ->assertAvailable(
+                    (string) $payment->reference_number,
+                    (int) $payment->payment_id,
+                );
 
             $payment->update([
+                'reference_number' => $referenceNumber,
                 'payment_status' => 'Verified',
+                'rejection_reason' => null,
                 'verified_by_user_id' => $cashierUserId,
                 'verified_at' => Carbon::now(),
             ]);
 
             $booking->update([
-                'amount_due' => $newAmountDue,
-                'status' => $newAmountDue <= 0 ? 'Booked' : (string) $booking->status,
+                'amount_due' => 0.00,
+                'status' => 'Booked',
             ]);
 
-            if ($newAmountDue <= 0) {
-                $booking->details()->where('status', 'Pending Verification')->update([
+            $booking->details()
+                ->where(
+                    'status',
+                    'Pending Verification',
+                )
+                ->update([
                     'status' => 'Booked',
                     'user_id' => $cashierUserId,
                 ]);
-            }
 
-            DB::commit();
-
-            return $payment->fresh(['booking.guest', 'booking.details.facility', 'modeOfPayment', 'verifier']);
-        } catch (Throwable $exception) {
-            DB::rollBack();
-            throw $exception;
-        }
+            return $this->freshPayment($payment);
+        });
     }
 
-    public function reject(int $paymentId, int $cashierUserId, string $reason): Payment
-    {
-        if ($cashierUserId < 1) {
-            throw new InvalidArgumentException('A logged-in cashier is required to reject GCash payments.');
-        }
+    public function reject(
+        int $paymentId,
+        int $cashierUserId,
+        string $reason,
+    ): Payment {
+        $this->guardCashier($cashierUserId);
 
         $reason = trim($reason);
 
         if ($reason === '') {
-            throw new InvalidArgumentException('A rejection reason is required.');
+            throw new InvalidArgumentException(
+                'A rejection reason is required.',
+            );
         }
 
-        DB::beginTransaction();
+        if (mb_strlen($reason) > 500) {
+            throw new InvalidArgumentException(
+                'Rejection reason must not exceed 500 characters.',
+            );
+        }
 
-        try {
+        return DB::transaction(function () use (
+            $paymentId,
+            $cashierUserId,
+            $reason,
+        ): Payment {
             $payment = Payment::query()
-                ->with(['booking.details'])
+                ->with([
+                    'booking.details',
+                    'modeOfPayment',
+                ])
                 ->lockForUpdate()
                 ->findOrFail($paymentId);
 
-            $this->guardPendingGuestGcashPayment($payment);
+            $status = strtolower(
+                trim((string) $payment->payment_status),
+            );
 
-            $booking = $payment->booking;
-
-            if (! $booking) {
-                throw new InvalidArgumentException('Only booking GCash proof verification is supported here.');
+            if ($status === 'rejected') {
+                return $this->freshPayment($payment);
             }
 
-            $booking = $booking->newQuery()->lockForUpdate()->with('details')->findOrFail($booking->booking_id);
+            if ($status === 'verified') {
+                throw new InvalidArgumentException(
+                    'A verified GCash payment cannot be rejected.',
+                );
+            }
+
+            $this->guardPendingGuestGcashPayment($payment);
+
+            $booking = Booking::query()
+                ->with('details')
+                ->lockForUpdate()
+                ->findOrFail((int) $payment->booking_id);
+
+            if (
+                strtolower(trim((string) $booking->status))
+                !== 'pending verification'
+            ) {
+                throw new InvalidArgumentException(
+                    'Only bookings pending GCash verification can be rejected.',
+                );
+            }
 
             $payment->update([
                 'payment_status' => 'Rejected',
+                'rejection_reason' => $reason,
                 'verified_by_user_id' => $cashierUserId,
                 'verified_at' => Carbon::now(),
             ]);
@@ -105,39 +194,109 @@ class GcashPaymentVerificationService
                 'status' => 'Payment Rejected',
             ]);
 
-            $booking->details()->where('status', 'Pending Verification')->update([
-                'status' => 'Payment Rejected',
-                'user_id' => $cashierUserId,
-            ]);
+            $booking->details()
+                ->where(
+                    'status',
+                    'Pending Verification',
+                )
+                ->update([
+                    'status' => 'Payment Rejected',
+                    'user_id' => $cashierUserId,
+                ]);
 
-            DB::commit();
+            return $this->freshPayment($payment);
+        });
+    }
 
-            return $payment->fresh(['booking.guest', 'booking.details.facility', 'modeOfPayment', 'verifier']);
-        } catch (Throwable $exception) {
-            DB::rollBack();
-            throw $exception;
+    private function guardCashier(int $userId): void
+    {
+        if ($userId < 1) {
+            throw new InvalidArgumentException(
+                'A logged-in cashier is required to review GCash payments.',
+            );
+        }
+
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($userId);
+
+        if ($user->role?->role_name !== 'Cashier') {
+            throw new InvalidArgumentException(
+                'Only a Cashier may verify or reject GCash payments.',
+            );
         }
     }
 
-    private function guardPendingGuestGcashPayment(Payment $payment): void
-    {
-        $mode = strtolower(trim((string) optional($payment->modeOfPayment)->mode_of_payment));
-        $status = strtolower(trim((string) $payment->payment_status));
+    private function guardPendingGuestGcashPayment(
+        Payment $payment,
+    ): void {
+        $mode = strtolower(
+            trim(
+                (string) $payment
+                    ->modeOfPayment
+                    ?->mode_of_payment,
+            ),
+        );
 
         if ($mode !== 'gcash') {
-            throw new InvalidArgumentException('Only GCash payments can be verified here.');
+            throw new InvalidArgumentException(
+                'Only GCash payments can be reviewed here.',
+            );
         }
 
-        if ($status !== 'pending') {
-            throw new InvalidArgumentException('Only pending GCash payments can be verified or rejected.');
+        if (
+            strtolower(
+                trim((string) $payment->payment_status),
+            ) !== 'pending'
+        ) {
+            throw new InvalidArgumentException(
+                'Only pending GCash payments can be reviewed.',
+            );
+        }
+
+        if (blank($payment->reference_number)) {
+            throw new InvalidArgumentException(
+                'This GCash payment has no reference number.',
+            );
         }
 
         if (blank($payment->proof_of_payment_path)) {
-            throw new InvalidArgumentException('This GCash payment has no uploaded proof.');
+            throw new InvalidArgumentException(
+                'This GCash payment has no uploaded proof.',
+            );
         }
 
         if (! $payment->booking_id) {
-            throw new InvalidArgumentException('This verification page currently handles guest booking payments only.');
+            throw new InvalidArgumentException(
+                'This verification workflow handles guest booking payments only.',
+            );
         }
+    }
+
+    private function guardVerifiedStateIsConsistent(
+        Payment $payment,
+    ): void {
+        $booking = $payment->booking;
+
+        if (
+            ! $booking
+            || round((float) $booking->amount_due, 2) > 0
+            || strtolower(trim((string) $booking->status))
+                !== 'booked'
+        ) {
+            throw new InvalidArgumentException(
+                'This verified payment has an inconsistent booking state and requires administrative review.',
+            );
+        }
+    }
+
+    private function freshPayment(Payment $payment): Payment
+    {
+        return $payment->fresh([
+            'booking.guest',
+            'booking.details.facility',
+            'modeOfPayment',
+            'verifier',
+        ]);
     }
 }

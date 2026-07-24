@@ -21,6 +21,8 @@ class BookingWorkflowService
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
     ) {}
 
     public function createBooking(array $data): Booking
@@ -31,6 +33,9 @@ class BookingWorkflowService
             $checkOutDate = (string) $data['check_out_date'];
             $rateType = (string) $data['rate_type'];
             $discountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
+
+            $this->scheduleLock->lockOne($facilityId);
+
             $totalGuestCount = max(
                 1,
                 (int) ($data['total_guest_count'] ?? 1),
@@ -70,8 +75,9 @@ class BookingWorkflowService
             $mode = ModeOfPayment::query()->findOrFail((int) $data['mode_of_payment_id']);
             $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
 
-            if (strtolower($mode->mode_of_payment) === 'gcash' && $referenceNumber === '') {
-                throw new InvalidArgumentException('GCash payments require a reference number.');
+            if (strtolower($mode->mode_of_payment) === 'gcash') {
+                $referenceNumber = $this->gcashReferences
+                    ->assertAvailable($referenceNumber);
             }
 
             $address = Address::query()->create([
@@ -101,6 +107,7 @@ class BookingWorkflowService
                 'user_id' => (int) $data['user_id'],
                 'reservation_id' => $data['reservation_id'] ?? null,
                 'entrance_slip_id' => $data['entrance_slip_id'] ?? null,
+                'status' => 'Booked',
             ]);
 
             BookingDetail::query()->create([
@@ -138,7 +145,7 @@ class BookingWorkflowService
                 'amount_paid' => $paymentAmount,
                 'date_paid' => Carbon::now(),
                 'user_id' => (int) $data['user_id'],
-                'payment_status' => 'verified',
+                'payment_status' => 'Verified',
                 'verified_by_user_id' => (int) $data['user_id'],
                 'verified_at' => Carbon::now(),
             ]);
@@ -150,7 +157,15 @@ class BookingWorkflowService
     public function rescheduleBookingDetail(int $bookingDetailsId, string $newCheckInDate): void
     {
         DB::transaction(function () use ($bookingDetailsId, $newCheckInDate): void {
-            $detail = BookingDetail::query()->findOrFail($bookingDetailsId);
+            $detail = BookingDetail::query()
+                ->with('booking')
+                ->lockForUpdate()
+                ->findOrFail($bookingDetailsId);
+
+            $this->scheduleLock->lockOne(
+                (int) $detail->facility_id,
+            );
+
             $oldCheckIn = Carbon::parse($detail->check_in_date);
             $oldCheckOut = Carbon::parse($detail->check_out_date);
             $days = max(1, $oldCheckIn->diffInDays($oldCheckOut));
@@ -175,9 +190,31 @@ class BookingWorkflowService
     public function transferBookingDetail(int $bookingDetailsId, int $newFacilityId): void
     {
         DB::transaction(function () use ($bookingDetailsId, $newFacilityId): void {
-            $detail = BookingDetail::query()->with(['booking', 'facility.facilityType'])->findOrFail($bookingDetailsId);
-            $oldFacility = $detail->facility;
-            $newFacility = Facility::query()->with('facilityType')->findOrFail($newFacilityId);
+            $detail = BookingDetail::query()
+                ->lockForUpdate()
+                ->findOrFail($bookingDetailsId);
+
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $detail->booking_id);
+
+            $facilities = $this->scheduleLock
+                ->lockMany([
+                    (int) $detail->facility_id,
+                    $newFacilityId,
+                ])
+                ->load('facilityType')
+                ->keyBy('facility_id');
+
+            $oldFacility = $facilities->get(
+                (int) $detail->facility_id,
+            );
+            $newFacility = $facilities->get(
+                $newFacilityId,
+            );
+
+            $detail->setRelation('booking', $booking);
+            $detail->setRelation('facility', $oldFacility);
 
             $this->guardEditableBookingDetail($detail);
 
@@ -186,10 +223,10 @@ class BookingWorkflowService
             }
 
             $totalGuestCount = (int) (
-                $detail->booking->total_guest_count
+                $booking->total_guest_count
                 ?: $this->occupancy->legacyTotalGuestCount(
                     $oldFacility,
-                    (int) $detail->booking->no_of_extra_guests,
+                    (int) $booking->no_of_extra_guests,
                 )
             );
 
@@ -221,8 +258,8 @@ class BookingWorkflowService
             ]);
 
             if ($upgradeCharge > 0) {
-                $detail->booking->increment('total_price', $upgradeCharge);
-                $detail->booking->increment('amount_due', $upgradeCharge);
+                $booking->increment('total_price', $upgradeCharge);
+                $booking->increment('amount_due', $upgradeCharge);
             }
         });
     }
@@ -230,7 +267,21 @@ class BookingWorkflowService
     public function extendCottageDayRate(int $bookingDetailsId): void
     {
         DB::transaction(function () use ($bookingDetailsId): void {
-            $detail = BookingDetail::query()->with(['booking', 'facility.facilityType'])->findOrFail($bookingDetailsId);
+            $detail = BookingDetail::query()
+                ->with(['booking', 'facility.facilityType'])
+                ->lockForUpdate()
+                ->findOrFail($bookingDetailsId);
+
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $detail->booking_id);
+
+            $detail->setRelation('booking', $booking);
+
+            $this->scheduleLock->lockOne(
+                (int) $detail->facility_id,
+            );
+
             $facilityType = strtolower((string) optional($detail->facility->facilityType)->facility_type);
 
             $this->guardEditableBookingDetail($detail);
@@ -252,17 +303,41 @@ class BookingWorkflowService
                 'line_total' => $detail->line_total !== null ? round((float) $detail->line_total + $charge, 2) : null,
             ]);
 
-            $detail->booking->increment('total_price', $charge);
-            $detail->booking->increment('amount_due', $charge);
+            $booking->increment('total_price', $charge);
+            $booking->increment('amount_due', $charge);
         });
     }
 
     private function guardEditableBookingDetail(BookingDetail $detail): void
     {
-        $lockedStatuses = ['Checked-in', 'Checked-out', 'Cancelled'];
+        $lockedDetailStatuses = [
+            'Checked-in',
+            'Checked-out',
+            'Cancelled',
+            'Payment Rejected',
+            'Rejected',
+        ];
 
-        if (in_array((string) $detail->status, $lockedStatuses, true)) {
-            throw new InvalidArgumentException('This booking can no longer be modified because it is already checked-in, checked-out, or cancelled.');
+        if (in_array((string) $detail->status, $lockedDetailStatuses, true)) {
+            throw new InvalidArgumentException(
+                'This booking detail can no longer be modified because it is already locked by its current workflow status.'
+            );
+        }
+
+        $bookingStatus = (string) $detail->booking?->status;
+
+        $lockedBookingStatuses = [
+            'Cancelled',
+            'Checked-out',
+            'Payment Rejected',
+            'Rejected',
+            'Pending Verification',
+        ];
+
+        if (in_array($bookingStatus, $lockedBookingStatuses, true)) {
+            throw new InvalidArgumentException(
+                'This booking can no longer be modified because the parent booking is not in an editable state.'
+            );
         }
     }
 

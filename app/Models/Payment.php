@@ -28,6 +28,7 @@ class Payment extends Model
         'payment_status',
         'verified_by_user_id',
         'verified_at',
+        'rejection_reason',
     ];
 
     protected function casts(): array

@@ -7,6 +7,7 @@ use App\Models\EntranceSlip;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,10 @@ use Throwable;
 
 class PaymentWorkflowService
 {
+    public function __construct(
+        private readonly GcashReferenceIntegrityService $gcashReferences,
+    ) {}
+
     public function recordCashierPayment(array $data): Payment
     {
         $targetType = (string) ($data['target_type'] ?? '');
@@ -37,9 +42,7 @@ class PaymentWorkflowService
             throw new InvalidArgumentException('Payment amount must be greater than zero.');
         }
 
-        if ($cashierUserId < 1) {
-            throw new InvalidArgumentException('A logged-in cashier is required to record payment.');
-        }
+        $this->guardCashier($cashierUserId);
 
         $mode = ModeOfPayment::query()->findOrFail($modeOfPaymentId);
         $modeName = strtolower(trim((string) $mode->mode_of_payment));
@@ -51,12 +54,17 @@ class PaymentWorkflowService
         DB::beginTransaction();
 
         try {
+            if ($modeName === 'gcash') {
+                $referenceNumber = $this->gcashReferences
+                    ->assertAvailable($referenceNumber);
+            }
+
             $target = $this->lockTarget($targetType, $targetId);
             $amountDue = round((float) $target->amount_due, 2);
 
             $this->guardTargetIsPayable($targetType, $target, $amountDue, $amountPaid);
 
-            $newAmountDue = max(round($amountDue - $amountPaid, 2), 0.00);
+            $newAmountDue = round($amountDue - $amountPaid, 2);
 
             $paymentPayload = [
                 'p_ref_no' => $this->newReference(),
@@ -87,6 +95,25 @@ class PaymentWorkflowService
         }
     }
 
+    private function guardCashier(int $userId): void
+    {
+        if ($userId < 1) {
+            throw new InvalidArgumentException(
+                'A logged-in cashier is required to record payment.',
+            );
+        }
+
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($userId);
+
+        if ($user->role?->role_name !== 'Cashier') {
+            throw new InvalidArgumentException(
+                'Only a Cashier may record payments.',
+            );
+        }
+    }
+
     private function lockTarget(string $targetType, int $targetId): Model
     {
         return match ($targetType) {
@@ -97,46 +124,91 @@ class PaymentWorkflowService
         };
     }
 
-    private function guardTargetIsPayable(string $targetType, Model $target, float $amountDue, float $amountPaid): void
-    {
+    private function guardTargetIsPayable(
+        string $targetType,
+        Model $target,
+        float $amountDue,
+        float $amountPaid,
+    ): void {
         if ($amountDue <= 0) {
-            throw new InvalidArgumentException('This record has no unpaid balance.');
+            throw new InvalidArgumentException(
+                'This record has no unpaid balance.',
+            );
         }
 
         if ($amountPaid > $amountDue) {
-            throw new InvalidArgumentException('Payment amount cannot be greater than the unpaid balance.');
+            throw new InvalidArgumentException(
+                'Payment amount cannot be greater than the unpaid balance.',
+            );
         }
 
         if ($targetType === 'booking') {
-            $status = (string) $target->status;
-
-            if (in_array($status, ['Cancelled', 'Checked-out'], true)) {
-                throw new InvalidArgumentException('This booking can no longer accept payments.');
-            }
+            $this->guardBookingIsPayable($target);
 
             return;
         }
 
         if ($targetType === 'reservation') {
-            $status = (string) $target->status;
-
-            if (in_array($status, ['Cancelled', 'Converted', 'No-show'], true)) {
-                throw new InvalidArgumentException('This reservation can no longer accept payments.');
-            }
+            $this->guardReservationIsPayable($target);
 
             return;
         }
 
         if ($targetType === 'entrance_slip') {
-            $status = (string) $target->status;
+            $this->guardEntranceSlipIsPayable(
+                $target,
+                $amountDue,
+                $amountPaid,
+            );
+        }
+    }
 
-            if ($status === 'Paid') {
-                throw new InvalidArgumentException('This entrance slip is already paid.');
-            }
+    private function guardBookingIsPayable(Model $booking): void
+    {
+        $status = (string) $booking->status;
 
-            if (abs($amountPaid - $amountDue) > 0.009) {
-                throw new InvalidArgumentException('Entrance slips must be paid in full.');
-            }
+        $payableStatuses = [
+            'Booked',
+            'Checked-in',
+            'Partially Checked-in',
+            'Partially Checked-out',
+        ];
+
+        if (! in_array($status, $payableStatuses, true)) {
+            throw new InvalidArgumentException(
+                'This booking can no longer accept payments.',
+            );
+        }
+    }
+
+    private function guardReservationIsPayable(Model $reservation): void
+    {
+        $status = (string) $reservation->status;
+
+        if ($status !== 'Active') {
+            throw new InvalidArgumentException(
+                'This reservation can no longer accept payments.',
+            );
+        }
+    }
+
+    private function guardEntranceSlipIsPayable(
+        Model $entranceSlip,
+        float $amountDue,
+        float $amountPaid,
+    ): void {
+        $status = (string) $entranceSlip->status;
+
+        if ($status === 'Paid') {
+            throw new InvalidArgumentException(
+                'This entrance slip is already paid.',
+            );
+        }
+
+        if (abs($amountPaid - $amountDue) > 0.009) {
+            throw new InvalidArgumentException(
+                'Entrance slips must be paid in full.',
+            );
         }
     }
 

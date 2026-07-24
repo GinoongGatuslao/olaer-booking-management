@@ -16,9 +16,12 @@ class GuestFine extends Model
 
     protected $fillable = [
         'booking_id',
+        'booking_details_id',
         'fine_id',
         'quantity',
         'facility_id',
+        'item_source',
+        'source_id',
         'total_charge',
         'date_checked',
         'reported_by_user_id',
@@ -28,6 +31,7 @@ class GuestFine extends Model
     {
         return [
             'quantity' => 'integer',
+            'source_id' => 'integer',
             'total_charge' => 'decimal:2',
             'date_checked' => 'date',
         ];
@@ -36,6 +40,11 @@ class GuestFine extends Model
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
+    }
+
+    public function bookingDetail(): BelongsTo
+    {
+        return $this->belongsTo(BookingDetail::class, 'booking_details_id', 'booking_details_id');
     }
 
     public function fine(): BelongsTo

@@ -21,6 +21,8 @@ class ReservationToBookingWorkflowService
     public function __construct(
         private readonly ReservationQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
     ) {}
 
     /**
@@ -38,6 +40,13 @@ class ReservationToBookingWorkflowService
                 ->findOrFail($reservationId);
 
             $this->guardConvertible($reservation);
+
+            $this->scheduleLock->lockMany(
+                $reservation->details
+                    ->pluck('facility_id')
+                    ->map(fn ($facilityId): int => (int) $facilityId)
+                    ->all(),
+            );
 
             $amountDue = round((float) $reservation->amount_due, 2);
             $paymentAmount = round((float) ($data['payment_amount'] ?? 0), 2);
@@ -62,8 +71,12 @@ class ReservationToBookingWorkflowService
 
                 $mode = ModeOfPayment::query()->findOrFail((int) $modeOfPaymentId);
 
-                if (strtolower((string) $mode->mode_of_payment) === 'gcash' && $referenceNumber === '') {
-                    throw new InvalidArgumentException('GCash payments require a reference number.');
+                if (
+                    strtolower((string) $mode->mode_of_payment)
+                    === 'gcash'
+                ) {
+                    $referenceNumber = $this->gcashReferences
+                        ->assertAvailable($referenceNumber);
                 }
             }
 
