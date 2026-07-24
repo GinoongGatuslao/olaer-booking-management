@@ -160,8 +160,10 @@ class ReservationToBookingWorkflowService
                     'booking_id' => $booking->booking_id,
                     'facility_id' => $detail->facility_id,
                     'rate_type' => $detail->rate_type,
-                    'check_in_date' => $detail->check_in_date,
-                    'check_out_date' => $detail->check_out_date,
+                    'check_in_date' =>
+                        $detail->check_in_date->toDateString(),
+                    'check_out_date' =>
+                        $detail->check_out_date->toDateString(),
                     'check_in_time' =>
                         $this->defaultCheckInTime($detail),
                     'status' => 'Booked',
