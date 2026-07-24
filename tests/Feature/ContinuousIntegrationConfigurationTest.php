@@ -20,6 +20,7 @@ class ContinuousIntegrationConfigurationTest extends TestCase
 
         foreach ([
             'push:',
+            '- UX-updates',
             'pull_request:',
             'workflow_dispatch:',
             'permissions:',
