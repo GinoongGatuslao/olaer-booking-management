@@ -1118,19 +1118,6 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                 </div>
 
                 <div class="flex flex-wrap gap-2">
-                    @if (
-                        $selectedBookingId !== null
-                        && Route::has('cashier.bookings.show')
-                    )
-                        <flux:button
-                            href="{{ route('cashier.bookings.show', $selectedBookingId) }}"
-                            target="_blank"
-                            variant="ghost"
-                        >
-                            Booking Workspace
-                        </flux:button>
-                    @endif
-
                     <flux:button
                         variant="ghost"
                         wire:click="cancelSelection"
@@ -1560,20 +1547,6 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 
                             <td class="px-4 py-4 text-right">
                                 <div class="flex flex-wrap justify-end gap-2">
-                                    @if (
-                                        $request->booking_id
-                                        && Route::has('cashier.bookings.show')
-                                    )
-                                        <flux:button
-                                            href="{{ route('cashier.bookings.show', $request->booking_id) }}"
-                                            target="_blank"
-                                            size="sm"
-                                            variant="ghost"
-                                        >
-                                            Booking
-                                        </flux:button>
-                                    @endif
-
                                     @if ($request->status === 'Pending')
                                         <flux:button
                                             wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
