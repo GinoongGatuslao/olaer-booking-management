@@ -7,7 +7,6 @@ use App\Models\FacilityPrice;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
-use App\Models\ReservationDetail;
 use App\Models\ReservationExtraGuest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -27,6 +26,7 @@ class GuestReservationManagementService
         private readonly DiscountResolverService $discountResolver,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly BookingAvailabilityService $availability,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
     ) {}
 
@@ -163,10 +163,11 @@ class GuestReservationManagementService
             ->get();
 
         return $facilities
-            ->filter(fn (Facility $facility): bool => $this->isFacilityAvailable(
+            ->filter(fn (Facility $facility): bool => $this->availability->isFacilityAvailable(
                 (int) $facility->facility_id,
                 (string) $checkInDate,
                 (string) $checkOutDate,
+                null,
                 $ignoreReservationDetailsId,
             ))
             ->values();
@@ -240,7 +241,13 @@ class GuestReservationManagementService
             $extraGuestCount =
                 $occupancy['paid_extra_guest_count'];
 
-            if (! $this->isFacilityAvailable($facilityId, $checkInDate, $checkOutDate, (int) $detail->reservation_details_id)) {
+            if (! $this->availability->isFacilityAvailable(
+                $facilityId,
+                $checkInDate,
+                $checkOutDate,
+                null,
+                (int) $detail->reservation_details_id,
+            )) {
                 throw new InvalidArgumentException('Selected facility is not available for the selected date range.');
             }
 
@@ -301,6 +308,10 @@ class GuestReservationManagementService
             throw new InvalidArgumentException('Cancellation reason is required.');
         }
 
+        if (mb_strlen($reason) > 500) {
+            throw new InvalidArgumentException('Cancellation reason must not exceed 500 characters.');
+        }
+
         $reservation = DB::transaction(function () use ($reservationId, $reason): Reservation {
             $reservation = Reservation::query()
                 ->with('payments')
@@ -315,6 +326,12 @@ class GuestReservationManagementService
                 'cancellation_reason' => $reason,
                 'cancelled_at' => Carbon::today()->toDateString(),
             ]);
+
+            GuestVerificationOtp::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->where('purpose', self::OTP_PURPOSE)
+                ->whereNull('verified_at')
+                ->update(['expires_at' => Carbon::now()->subMinute()]);
 
             return $reservation->fresh(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments']);
         });
@@ -354,49 +371,12 @@ class GuestReservationManagementService
     private function guardNoVerifiedPayments(Reservation $reservation): void
     {
         $hasVerifiedPayment = $reservation->payments()
-            ->where('payment_status', 'Verified')
+            ->whereRaw('LOWER(payment_status) = ?', ['verified'])
             ->exists();
 
         if ($hasVerifiedPayment) {
             throw new InvalidArgumentException('This reservation already has verified payment. Please contact the cashier for changes.');
         }
-    }
-
-    private function isFacilityAvailable(int $facilityId, string $checkInDate, string $checkOutDate, ?int $ignoreReservationDetailsId = null): bool
-    {
-        if ($checkOutDate <= $checkInDate) {
-            return false;
-        }
-
-        $facility = Facility::query()->find($facilityId);
-
-        if (! $facility || $facility->facility_status !== 'Available') {
-            return false;
-        }
-
-        $reservationConflict = ReservationDetail::query()
-            ->join('tbl_reservation', 'tbl_reservation.reservation_id', '=', 'tbl_reservation_details.reservation_id')
-            ->where('tbl_reservation_details.facility_id', $facilityId)
-            ->where('tbl_reservation_details.check_in_date', '<', $checkOutDate)
-            ->where('tbl_reservation_details.check_out_date', '>', $checkInDate)
-            ->whereNotIn('tbl_reservation.status', ['Cancelled', 'Converted', 'No-show'])
-            ->when($ignoreReservationDetailsId, function ($query) use ($ignoreReservationDetailsId): void {
-                $query->where('tbl_reservation_details.reservation_details_id', '!=', $ignoreReservationDetailsId);
-            })
-            ->exists();
-
-        if ($reservationConflict) {
-            return false;
-        }
-
-        return ! DB::table('tbl_booking_details')
-            ->join('tbl_booking', 'tbl_booking.booking_id', '=', 'tbl_booking_details.booking_id')
-            ->where('tbl_booking_details.facility_id', $facilityId)
-            ->where('tbl_booking_details.check_in_date', '<', $checkOutDate)
-            ->where('tbl_booking_details.check_out_date', '>', $checkInDate)
-            ->whereNotIn('tbl_booking_details.status', ['Cancelled', 'Checked-out', 'Transferred', 'Payment Rejected'])
-            ->whereNotIn('tbl_booking.status', ['Cancelled', 'Payment Rejected'])
-            ->exists();
     }
 
     private function cleanExtraGuests(array $extraGuests): array

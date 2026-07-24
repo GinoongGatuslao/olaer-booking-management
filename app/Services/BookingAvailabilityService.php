@@ -142,7 +142,6 @@ class BookingAvailabilityService
                 [
                     'Cancelled',
                     'Checked-out',
-                    'Transferred',
                     'Payment Rejected',
                     'Rejected',
                 ],

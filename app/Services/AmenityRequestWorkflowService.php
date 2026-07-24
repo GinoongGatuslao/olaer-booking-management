@@ -6,7 +6,6 @@ use App\Models\Amenity;
 use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -33,21 +32,27 @@ class AmenityRequestWorkflowService
         $items = $data['items'] ?? [];
 
         if ($bookingId < 1 || $facilityId < 1) {
-            throw new InvalidArgumentException('Select a valid checked-in booking and delivery facility.');
+            throw new InvalidArgumentException(
+                'Select a valid checked-in booking and delivery facility.',
+            );
         }
 
-        if ($cashierUserId < 1) {
-            throw new InvalidArgumentException('A logged-in cashier is required to create an amenity request.');
-        }
+        $this->guardCashierUser($cashierUserId);
 
         $cleanItems = $this->normalizeItems($items);
 
         DB::beginTransaction();
 
         try {
-            $booking = Booking::query()->lockForUpdate()->findOrFail($bookingId);
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail($bookingId);
+
             $this->guardBookingCanRequestAmenities($booking);
-            $this->guardFacilityBelongsToCheckedInBooking($booking, $facilityId);
+            $this->guardFacilityBelongsToCheckedInBooking(
+                $booking,
+                $facilityId,
+            );
 
             $quote = $this->quoteItems($cleanItems);
 
@@ -73,15 +78,30 @@ class AmenityRequestWorkflowService
             }
 
             $booking->update([
-                'total_price' => round((float) $booking->total_price + $quote['total'], 2),
-                'amount_due' => round((float) $booking->amount_due + $quote['total'], 2),
+                'total_price' => round(
+                    (float) $booking->total_price
+                    + $quote['total'],
+                    2,
+                ),
+                'amount_due' => round(
+                    (float) $booking->amount_due
+                    + $quote['total'],
+                    2,
+                ),
             ]);
 
             DB::commit();
 
-            return $request->fresh(['booking.guest', 'details.amenity.amenityName', 'details.facility', 'user', 'assignedTo']);
+            return $request->fresh([
+                'booking.guest',
+                'details.amenity.amenityName',
+                'details.facility',
+                'user',
+                'assignedTo',
+            ]);
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
@@ -89,10 +109,15 @@ class AmenityRequestWorkflowService
     /**
      * Modify only requests that are not paid/released yet.
      */
-    public function updateBillableRequest(int $amenityRequestId, int $facilityId, array $items): AmenityRequest
-    {
+    public function updateBillableRequest(
+        int $amenityRequestId,
+        int $facilityId,
+        array $items,
+    ): AmenityRequest {
         if ($amenityRequestId < 1 || $facilityId < 1) {
-            throw new InvalidArgumentException('Select a valid amenity request and facility.');
+            throw new InvalidArgumentException(
+                'Select a valid amenity request and facility.',
+            );
         }
 
         $cleanItems = $this->normalizeItems($items);
@@ -106,16 +131,38 @@ class AmenityRequestWorkflowService
                 ->findOrFail($amenityRequestId);
 
             if ($request->amenity_request_status !== 'Awaiting Payment') {
-                throw new InvalidArgumentException('Only unpaid amenity requests can be modified.');
+                throw new InvalidArgumentException(
+                    'Only unpaid amenity requests can be modified.',
+                );
             }
 
-            $booking = Booking::query()->lockForUpdate()->findOrFail((int) $request->booking_id);
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $request->booking_id);
+
             $this->guardBookingCanRequestAmenities($booking);
-            $this->guardFacilityBelongsToCheckedInBooking($booking, $facilityId);
+            $this->guardFacilityBelongsToCheckedInBooking(
+                $booking,
+                $facilityId,
+            );
 
             $oldTotal = round((float) $request->total_price, 2);
             $quote = $this->quoteItems($cleanItems);
             $difference = round($quote['total'] - $oldTotal, 2);
+            $newTotalPrice = round(
+                (float) $booking->total_price + $difference,
+                2,
+            );
+            $newAmountDue = round(
+                (float) $booking->amount_due + $difference,
+                2,
+            );
+
+            if ($newTotalPrice < 0 || $newAmountDue < 0) {
+                throw new InvalidArgumentException(
+                    'Amenity request cannot be modified because the booking balance is inconsistent. Please review payments first.',
+                );
+            }
 
             $request->details()->delete();
 
@@ -134,15 +181,22 @@ class AmenityRequestWorkflowService
             ]);
 
             $booking->update([
-                'total_price' => round((float) $booking->total_price + $difference, 2),
-                'amount_due' => round((float) $booking->amount_due + $difference, 2),
+                'total_price' => $newTotalPrice,
+                'amount_due' => $newAmountDue,
             ]);
 
             DB::commit();
 
-            return $request->fresh(['booking.guest', 'details.amenity.amenityName', 'details.facility', 'user', 'assignedTo']);
+            return $request->fresh([
+                'booking.guest',
+                'details.amenity.amenityName',
+                'details.facility',
+                'user',
+                'assignedTo',
+            ]);
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
@@ -161,11 +215,25 @@ class AmenityRequestWorkflowService
                 ->findOrFail($amenityRequestId);
 
             if ($request->amenity_request_status !== 'Awaiting Payment') {
-                throw new InvalidArgumentException('Only unpaid amenity requests can be cancelled. Paid/delivery requests cannot be cancelled because refunds are out of scope.');
+                throw new InvalidArgumentException(
+                    'Only unpaid amenity requests can be cancelled. Paid/delivery requests cannot be cancelled because refunds are out of scope.',
+                );
             }
 
-            $booking = Booking::query()->lockForUpdate()->findOrFail((int) $request->booking_id);
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $request->booking_id);
+
             $total = round((float) $request->total_price, 2);
+
+            if (
+                round((float) $booking->amount_due, 2) < $total
+                || round((float) $booking->total_price, 2) < $total
+            ) {
+                throw new InvalidArgumentException(
+                    'Amenity request cannot be cancelled because the booking balance is inconsistent. Please review payments first.',
+                );
+            }
 
             $request->update([
                 'amenity_request_status' => 'Cancelled',
@@ -173,13 +241,20 @@ class AmenityRequestWorkflowService
             ]);
 
             $booking->update([
-                'total_price' => max(round((float) $booking->total_price - $total, 2), 0),
-                'amount_due' => max(round((float) $booking->amount_due - $total, 2), 0),
+                'total_price' => round(
+                    (float) $booking->total_price - $total,
+                    2,
+                ),
+                'amount_due' => round(
+                    (float) $booking->amount_due - $total,
+                    2,
+                ),
             ]);
 
             DB::commit();
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
@@ -190,31 +265,59 @@ class AmenityRequestWorkflowService
      */
     public function releasePaidRequestsForBooking(int $bookingId): int
     {
-        $booking = Booking::query()->findOrFail($bookingId);
+        return DB::transaction(function () use ($bookingId): int {
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail($bookingId);
 
-        if (round((float) $booking->amount_due, 2) > 0) {
-            return 0;
-        }
+            if (round((float) $booking->amount_due, 2) > 0) {
+                return 0;
+            }
 
-        return AmenityRequest::query()
-            ->where('booking_id', $booking->booking_id)
-            ->where('amenity_request_status', 'Awaiting Payment')
-            ->update(['amenity_request_status' => 'Pending']);
+            if (! $this->bookingCanReleasePaidAmenities($booking)) {
+                return 0;
+            }
+
+            return AmenityRequest::query()
+                ->where('booking_id', $booking->booking_id)
+                ->where('amenity_request_status', 'Awaiting Payment')
+                ->where('total_price', '>', 0)
+                ->update([
+                    'amenity_request_status' => 'Pending',
+                ]);
+        });
     }
 
-    public function acceptRequest(int $amenityRequestId, int $maintenanceUserId): AmenityRequest
-    {
+    public function acceptRequest(
+        int $amenityRequestId,
+        int $maintenanceUserId,
+    ): AmenityRequest {
         DB::beginTransaction();
 
         try {
             $this->guardMaintenanceUser($maintenanceUserId);
 
             $request = AmenityRequest::query()
+                ->with('booking')
                 ->lockForUpdate()
                 ->findOrFail($amenityRequestId);
 
             if ($request->amenity_request_status !== 'Pending') {
-                throw new InvalidArgumentException('Only paid pending amenity requests can be accepted.');
+                throw new InvalidArgumentException(
+                    'Only paid pending amenity requests can be accepted.',
+                );
+            }
+
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $request->booking_id);
+
+            $this->guardBookingCanReceiveAmenityDelivery($booking);
+
+            if (! $request->details()->exists()) {
+                throw new InvalidArgumentException(
+                    'Amenity request has no delivery items.',
+                );
             }
 
             $request->update([
@@ -224,42 +327,87 @@ class AmenityRequestWorkflowService
 
             DB::commit();
 
-            return $request->fresh(['booking.guest', 'details.amenity.amenityName', 'details.facility', 'user', 'assignedTo']);
+            return $request->fresh([
+                'booking.guest',
+                'details.amenity.amenityName',
+                'details.facility',
+                'user',
+                'assignedTo',
+            ]);
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
 
-    public function markDelivered(int $amenityRequestId, int $maintenanceUserId): AmenityRequest
-    {
+    public function markDelivered(
+        int $amenityRequestId,
+        int $maintenanceUserId,
+    ): AmenityRequest {
         DB::beginTransaction();
 
         try {
             $this->guardMaintenanceUser($maintenanceUserId);
 
             $request = AmenityRequest::query()
+                ->with('booking')
                 ->lockForUpdate()
                 ->findOrFail($amenityRequestId);
 
+            if ($request->amenity_request_status === 'Delivered') {
+                if ((int) $request->assigned_to_user_id !== $maintenanceUserId) {
+                    throw new InvalidArgumentException(
+                        'Only the assigned maintenance staff can confirm this delivered request.',
+                    );
+                }
+
+                DB::commit();
+
+                return $request->fresh([
+                    'booking.guest',
+                    'details.amenity.amenityName',
+                    'details.facility',
+                    'user',
+                    'assignedTo',
+                ]);
+            }
+
             if ($request->amenity_request_status !== 'Delivering') {
-                throw new InvalidArgumentException('Only requests in Delivering status can be marked as delivered.');
+                throw new InvalidArgumentException(
+                    'Only requests in Delivering status can be marked as delivered.',
+                );
             }
 
             if ((int) $request->assigned_to_user_id !== $maintenanceUserId) {
-                throw new InvalidArgumentException('Only the assigned maintenance staff can mark this request as delivered.');
+                throw new InvalidArgumentException(
+                    'Only the assigned maintenance staff can mark this request as delivered.',
+                );
             }
+
+            $booking = Booking::query()
+                ->lockForUpdate()
+                ->findOrFail((int) $request->booking_id);
+
+            $this->guardBookingCanReceiveAmenityDelivery($booking);
 
             $request->update([
                 'amenity_request_status' => 'Delivered',
-                'delivered_at' => Carbon::now(),
+                'delivered_at' => $request->delivered_at ?? Carbon::now(),
             ]);
 
             DB::commit();
 
-            return $request->fresh(['booking.guest', 'details.amenity.amenityName', 'details.facility', 'user', 'assignedTo']);
+            return $request->fresh([
+                'booking.guest',
+                'details.amenity.amenityName',
+                'details.facility',
+                'user',
+                'assignedTo',
+            ]);
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
@@ -281,7 +429,9 @@ class AmenityRequestWorkflowService
         }
 
         if ($clean === []) {
-            throw new InvalidArgumentException('Add at least one amenity and quantity.');
+            throw new InvalidArgumentException(
+                'Add at least one amenity and quantity.',
+            );
         }
 
         return $clean;
@@ -298,17 +448,28 @@ class AmenityRequestWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($item['amenity_id']);
 
-            if (strtolower((string) $amenity->amenity_type) !== 'rentable') {
-                throw new InvalidArgumentException('Only rentable amenities can be requested and billed.');
+            if (
+                strtolower((string) $amenity->amenity_type)
+                !== 'rentable'
+            ) {
+                throw new InvalidArgumentException(
+                    'Only rentable amenities can be requested and billed.',
+                );
             }
 
             $price = round((float) $amenity->amenity_price, 2);
 
             if ($price <= 0) {
-                throw new InvalidArgumentException('Rentable amenities must have a price greater than zero.');
+                throw new InvalidArgumentException(
+                    'Rentable amenities must have a price greater than zero.',
+                );
             }
 
-            $lineTotal = round($price * (int) $item['quantity'], 2);
+            $lineTotal = round(
+                $price * (int) $item['quantity'],
+                2,
+            );
+
             $total = round($total + $lineTotal, 2);
 
             $quotedItems[] = [
@@ -325,19 +486,26 @@ class AmenityRequestWorkflowService
         ];
     }
 
-    private function guardBookingCanRequestAmenities(Booking $booking): void
-    {
-        if (! in_array((string) $booking->status, ['Checked-in', 'Partially Checked-in'], true)) {
-            throw new InvalidArgumentException('Amenities can only be requested for checked-in bookings.');
-        }
-
-        if (in_array((string) $booking->status, ['Cancelled', 'Checked-out'], true)) {
-            throw new InvalidArgumentException('This booking can no longer request amenities.');
+    private function guardBookingCanRequestAmenities(
+        Booking $booking,
+    ): void {
+        if (
+            ! in_array(
+                (string) $booking->status,
+                ['Checked-in', 'Partially Checked-in'],
+                true,
+            )
+        ) {
+            throw new InvalidArgumentException(
+                'Amenities can only be requested for checked-in bookings.',
+            );
         }
     }
 
-    private function guardFacilityBelongsToCheckedInBooking(Booking $booking, int $facilityId): void
-    {
+    private function guardFacilityBelongsToCheckedInBooking(
+        Booking $booking,
+        int $facilityId,
+    ): void {
         $exists = BookingDetail::query()
             ->where('booking_id', $booking->booking_id)
             ->where('facility_id', $facilityId)
@@ -345,16 +513,67 @@ class AmenityRequestWorkflowService
             ->exists();
 
         if (! $exists) {
-            throw new InvalidArgumentException('The delivery facility must belong to the selected checked-in booking.');
+            throw new InvalidArgumentException(
+                'The delivery facility must belong to the selected checked-in booking.',
+            );
+        }
+    }
+
+    private function bookingCanReleasePaidAmenities(
+        Booking $booking,
+    ): bool {
+        return in_array(
+            (string) $booking->status,
+            ['Checked-in', 'Partially Checked-in'],
+            true,
+        );
+    }
+
+    private function guardBookingCanReceiveAmenityDelivery(
+        Booking $booking,
+    ): void {
+        if (! $this->bookingCanReleasePaidAmenities($booking)) {
+            throw new InvalidArgumentException(
+                'Amenity delivery is only allowed for checked-in bookings.',
+            );
+        }
+
+        if (round((float) $booking->amount_due, 2) > 0) {
+            throw new InvalidArgumentException(
+                'Amenity delivery cannot proceed while the booking still has an unpaid balance.',
+            );
+        }
+    }
+
+    private function guardCashierUser(int $cashierUserId): void
+    {
+        if ($cashierUserId < 1) {
+            throw new InvalidArgumentException(
+                'A logged-in cashier is required to create an amenity request.',
+            );
+        }
+
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($cashierUserId);
+
+        if ($user->role?->role_name !== 'Cashier') {
+            throw new InvalidArgumentException(
+                'Only a Cashier can create amenity requests.',
+            );
         }
     }
 
     private function guardMaintenanceUser(int $maintenanceUserId): void
     {
-        $user = User::query()->with('role')->findOrFail($maintenanceUserId);
+        $user = User::query()
+            ->with('role')
+            ->findOrFail($maintenanceUserId);
 
         if ($user->role?->role_name !== 'Maintenance Staff') {
-            throw new InvalidArgumentException('Only maintenance staff can accept or deliver amenity requests.');
+            throw new InvalidArgumentException(
+                'Only maintenance staff can accept or deliver amenity requests.',
+            );
         }
     }
 }
