@@ -106,7 +106,9 @@ new #[Layout('layouts.app')] #[Title('Cashier Action Center - Olaer Spring Resor
                             default => 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
                         };
                         $routeName = $alert['route_name'] ?? null;
-                        $url = $routeName && Route::has($routeName) ? route($routeName) : '#';
+                        $url = $routeName && Route::has($routeName)
+                            ? route($routeName, $alert['route_params'] ?? [])
+                            : '#';
                     @endphp
 
                     <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
