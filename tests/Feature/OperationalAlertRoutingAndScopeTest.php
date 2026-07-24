@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\CheckOutInspectionRequestService;
 use App\Services\OperationalAlertService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
@@ -30,7 +31,7 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             amountDue: 1000.00,
         );
 
-        $this->createPayment(
+        $paymentId = $this->createPayment(
             $scenario['booking_id'],
             $cashier,
             'Pending',
@@ -54,10 +55,41 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             $alert['route_name'],
         );
 
+        $this->assertSame(
+            ['payment' => $paymentId],
+            $alert['route_params'],
+        );
+
         $this->assertTrue(
             Route::has(
                 $alert['route_name'],
             ),
+        );
+
+        $upcomingAlert = collect(
+            app(
+                OperationalAlertService::class,
+            )->cashierAlerts(),
+        )->firstWhere(
+            'type',
+            'upcoming_booking',
+        );
+
+        $this->assertNotNull(
+            $upcomingAlert,
+        );
+
+        $this->assertSame(
+            'cashier.check-ins.index',
+            $upcomingAlert['route_name'],
+        );
+
+        $this->assertSame(
+            [
+                'booking' =>
+                    $scenario['booking_id'],
+            ],
+            $upcomingAlert['route_params'],
         );
     }
 
@@ -75,7 +107,7 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             amountDue: 250.00,
         );
 
-        $this->createAmenityRequest(
+        $requestId = $this->createAmenityRequest(
             $scenario,
             'Extra Mattress',
             250.00,
@@ -103,9 +135,40 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             ),
         );
 
+        $this->assertSame(
+            ['q' => (string) $requestId],
+            $alert['route_params'],
+        );
+
         $this->assertStringContainsString(
             'payment is settled through the booking bill',
             $alert['message'],
+        );
+
+        $paymentAlert = collect(
+            app(
+                OperationalAlertService::class,
+            )->cashierAlerts(),
+        )->firstWhere(
+            'type',
+            'unpaid_checkout_balance',
+        );
+
+        $this->assertNotNull(
+            $paymentAlert,
+        );
+
+        $this->assertSame(
+            'cashier.payments.index',
+            $paymentAlert['route_name'],
+        );
+
+        $this->assertSame(
+            [
+                'booking' =>
+                    $scenario['booking_id'],
+            ],
+            $paymentAlert['route_params'],
         );
     }
 
@@ -194,6 +257,14 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
             ),
         );
 
+        $this->assertSame(
+            [
+                'request' => $request
+                    ->facility_inspection_request_id,
+            ],
+            $pendingAlert['route_params'],
+        );
+
         app(
             CheckOutInspectionRequestService::class,
         )->acceptRequest(
@@ -226,6 +297,112 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
                 'action_label'
             ],
         );
+
+        $this->assertSame(
+            [
+                'request' => $request
+                    ->facility_inspection_request_id,
+            ],
+            $inProgressAlert['route_params'],
+        );
+    }
+
+    public function test_cottage_ending_alert_opens_the_exact_booking_workspace(): void
+    {
+        Carbon::setTestNow(
+            '2026-07-24 17:00:00',
+        );
+
+        try {
+            $cashier = $this->createUser(
+                'Cashier',
+                'alert_cottage_cashier',
+            );
+
+            $scenario =
+                $this->createBookingScenario(
+                    $cashier,
+                    bookingStatus: 'Checked-in',
+                    detailStatus: 'Checked-in',
+                    amountDue: 0.00,
+                );
+
+            $cottageTypeId = DB::table(
+                'tbl_facility_type',
+            )
+                ->where(
+                    'facility_type',
+                    'Cottage',
+                )
+                ->value(
+                    'facility_type_id',
+                );
+
+            if ($cottageTypeId === null) {
+                $cottageTypeId = DB::table(
+                    'tbl_facility_type',
+                )->insertGetId([
+                    'facility_type' =>
+                        'Cottage',
+                ]);
+            }
+
+            DB::table('tbl_facility')
+                ->where(
+                    'facility_id',
+                    $scenario['facility_id'],
+                )
+                ->update([
+                    'facility_type_id' =>
+                        $cottageTypeId,
+                ]);
+
+            DB::table(
+                'tbl_booking_details',
+            )
+                ->where(
+                    'booking_details_id',
+                    $scenario[
+                        'booking_details_id'
+                    ],
+                )
+                ->update([
+                    'rate_type' => 'Day Use',
+                    'check_out_date' =>
+                        now()->toDateString(),
+                ]);
+
+            $alert = collect(
+                app(
+                    OperationalAlertService::class,
+                )->cashierAlerts(),
+            )->firstWhere(
+                'type',
+                'rental_period_ending',
+            );
+
+            $this->assertNotNull($alert);
+
+            $this->assertSame(
+                'cashier.bookings.show',
+                $alert['route_name'],
+            );
+
+            $this->assertSame(
+                [
+                    'booking' =>
+                        $scenario['booking_id'],
+                ],
+                $alert['route_params'],
+            );
+
+            $this->assertSame(
+                'Open booking',
+                $alert['action_label'],
+            );
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_completed_inspection_request_is_removed_from_maintenance_alerts(): void
@@ -301,6 +478,28 @@ class OperationalAlertRoutingAndScopeTest extends TestCase
 
             $this->assertStringContainsString(
                 $directive,
+                $content,
+            );
+        }
+
+        $parameterizedAlertViews = [
+            'resources/views/livewire/cashier/action-center/index.blade.php',
+            'resources/views/livewire/cashier/notifications/index.blade.php',
+            'resources/views/livewire/maintenance/notifications/index.blade.php',
+        ];
+
+        foreach (
+            $parameterizedAlertViews
+            as $relativePath
+        ) {
+            $content = file_get_contents(
+                base_path($relativePath),
+            );
+
+            $this->assertIsString($content);
+
+            $this->assertStringContainsString(
+                "route(\$routeName, \$alert['route_params'] ?? [])",
                 $content,
             );
         }
