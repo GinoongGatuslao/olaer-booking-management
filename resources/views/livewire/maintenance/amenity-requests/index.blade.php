@@ -385,7 +385,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         </h1>
 
         <p class="text-sm text-gray-600 dark:text-gray-400">
-            Accept paid requests and mark them delivered only after the items reach the guest.
+            Accept amenity requests and mark them delivered after the items reach the guest. Payment is collected during checkout.
         </p>
     </div>
 
@@ -407,7 +407,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                 <h2 class="font-semibold">Delivery queue and history</h2>
 
                 <p class="mt-1 text-sm text-gray-500">
-                    Pending requests are paid and unassigned. Delivering requests belong to one maintenance staff member.
+                    Pending requests are ready for delivery and unassigned. Delivering requests belong to one maintenance staff member.
                 </p>
             </div>
 
@@ -491,7 +491,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                 wire:click="sortBy('total_price')"
                                 class="font-semibold"
                             >
-                                Paid Value {{ $this->sortIndicator('total_price') }}
+                                Request Value {{ $this->sortIndicator('total_price') }}
                             </button>
                         </th>
 
@@ -589,7 +589,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                         size="sm"
                                         variant="primary"
                                         wire:click="acceptRequest({{ $request->amenity_request_id }})"
-                                        wire:confirm="Accept this paid amenity request for delivery?"
+                                        wire:confirm="Accept this amenity request for delivery?"
                                     >
                                         Accept
                                     </flux:button>
@@ -619,7 +619,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                     @empty
                         <tr>
                             <td colspan="10" class="px-4 py-12 text-center text-gray-500">
-                                No paid amenity requests match the current filters.
+                                No amenity requests match the current filters.
                             </td>
                         </tr>
                     @endforelse
