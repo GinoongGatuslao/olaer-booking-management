@@ -28,29 +28,119 @@
     </div>
 
     @if ($reportType === 'revenue')
-        <div class="mb-4 grid gap-3 md:grid-cols-3">
+        @php
+            $metrics = $report['financial_metrics'] ?? [];
+            $showOutstandingMetrics =
+                (bool) ($report['show_outstanding_metrics'] ?? false);
+        @endphp
+
+        <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Total Revenue</p>
-                <p class="text-xl font-bold">{{ $this->money($report['total']) }}</p>
+                <p class="text-xs text-zinc-500">Verified Revenue</p>
+                <p class="text-xl font-bold">
+                    {{ $this->money($metrics['verified_revenue'] ?? $report['total']) }}
+                </p>
             </div>
 
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Payment Count</p>
-                <p class="text-xl font-bold">{{ $report['count'] }}</p>
+                <p class="text-xs text-zinc-500">Verified Payments</p>
+                <p class="text-xl font-bold">
+                    {{ $metrics['verified_payment_count'] ?? $report['count'] }}
+                </p>
             </div>
 
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Payment Modes</p>
+                <p class="text-xs text-zinc-500">Booking Revenue</p>
+                <p class="text-xl font-bold">
+                    {{ $this->money($metrics['booking_revenue'] ?? 0) }}
+                </p>
+            </div>
 
-                <p class="text-sm">
-                    @forelse ($report['by_mode'] as $mode => $amount)
-                        {{ $mode }}: {{ $this->money($amount) }}@if (! $loop->last), @endif
-                    @empty
-                        No verified payment
-                    @endforelse
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Reservation Revenue</p>
+                <p class="text-xl font-bold">
+                    {{ $this->money($metrics['reservation_revenue'] ?? 0) }}
+                </p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Entrance Revenue</p>
+                <p class="text-xl font-bold">
+                    {{ $this->money($metrics['entrance_revenue'] ?? 0) }}
                 </p>
             </div>
         </div>
+
+        <div class="mb-4 grid gap-3 md:grid-cols-3">
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Cash</p>
+                <p class="text-lg font-semibold">
+                    {{ $this->money($metrics['cash_revenue'] ?? 0) }}
+                </p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">GCash</p>
+                <p class="text-lg font-semibold">
+                    {{ $this->money($metrics['gcash_revenue'] ?? 0) }}
+                </p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Other Modes</p>
+                <p class="text-lg font-semibold">
+                    {{ $this->money($metrics['other_mode_revenue'] ?? 0) }}
+                </p>
+            </div>
+        </div>
+
+        @if ($showOutstandingMetrics)
+            <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <p class="text-xs text-amber-700 dark:text-amber-300">
+                        Booking Balance
+                    </p>
+                    <p class="text-lg font-semibold">
+                        {{ $this->money($metrics['outstanding_booking_balance'] ?? 0) }}
+                    </p>
+                </div>
+
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <p class="text-xs text-amber-700 dark:text-amber-300">
+                        Reservation Balance
+                    </p>
+                    <p class="text-lg font-semibold">
+                        {{ $this->money($metrics['outstanding_reservation_balance'] ?? 0) }}
+                    </p>
+                </div>
+
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <p class="text-xs text-amber-700 dark:text-amber-300">
+                        Entrance Balance
+                    </p>
+                    <p class="text-lg font-semibold">
+                        {{ $this->money($metrics['outstanding_entrance_balance'] ?? 0) }}
+                    </p>
+                </div>
+
+                <div class="rounded-lg border border-amber-300 bg-amber-100 p-4 dark:border-amber-800 dark:bg-amber-950/50">
+                    <p class="text-xs font-medium text-amber-800 dark:text-amber-200">
+                        Total Outstanding
+                    </p>
+                    <p class="text-lg font-bold">
+                        {{ $this->money($metrics['total_outstanding_balance'] ?? 0) }}
+                    </p>
+                </div>
+            </div>
+        @endif
+
+        @if (trim($reportSearch) !== '')
+            <p class="mb-4 text-xs text-zinc-500 dark:text-zinc-400">
+                The summary cards cover all Verified payments in the selected date range.
+                The table search currently matches {{ $report['count'] }} payment(s)
+                totaling {{ $this->money($report['total']) }}.
+            </p>
+        @endif
 
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">

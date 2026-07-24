@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
 
 class ReportsService
 {
+    public function __construct(
+        private readonly FinancialReportMetricsService $financialMetrics,
+    ) {}
     public function revenueReport(
         string $startDate,
         string $endDate,
@@ -30,7 +33,10 @@ class ReportsService
         $base = Payment::query()
             ->whereDate('date_paid', '>=', $startDate)
             ->whereDate('date_paid', '<=', $endDate)
-            ->where('payment_status', 'Verified');
+            ->whereRaw(
+                'LOWER(payment_status) = ?',
+                ['verified'],
+            );
 
         if ($cashierUserId !== null) {
             $base->where(function (Builder $query) use ($cashierUserId): void {
@@ -72,6 +78,21 @@ class ReportsService
             ->orderBy('date_paid')
             ->orderBy('payment_id');
 
+        $financialMetrics =
+            $this->financialMetrics->summary(
+                $startDate,
+                $endDate,
+                $cashierUserId,
+            );
+
+        $dailyRevenue =
+            $this->financialMetrics
+                ->dailyVerifiedRevenue(
+                    $startDate,
+                    $endDate,
+                    $cashierUserId,
+                );
+
         return [
             'rows' => $this->paginateOrGet(
                 $rowsQuery,
@@ -82,6 +103,11 @@ class ReportsService
             'total' => $total,
             'by_mode' => $byMode,
             'count' => $count,
+            'financial_metrics' =>
+                $financialMetrics,
+            'daily_revenue' => $dailyRevenue,
+            'show_outstanding_metrics' =>
+                $cashierUserId === null,
         ];
     }
 

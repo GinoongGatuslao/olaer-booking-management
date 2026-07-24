@@ -11,6 +11,8 @@ class FinancialReportMetricsService
 {
     /**
      * @return array{
+     *   scope:string,
+     *   cashier_user_id:?int,
      *   date_from:?string,
      *   date_to:?string,
      *   verified_revenue:float,
@@ -30,6 +32,7 @@ class FinancialReportMetricsService
     public function summary(
         ?string $dateFrom = null,
         ?string $dateTo = null,
+        ?int $cashierUserId = null,
     ): array {
         [$from, $to] = $this->normalizeRange(
             $dateFrom,
@@ -39,6 +42,7 @@ class FinancialReportMetricsService
         $payments = $this->verifiedPaymentsQuery(
             $from,
             $to,
+            $cashierUserId,
         );
 
         $verifiedRevenue = $this->sumAmount(
@@ -99,6 +103,11 @@ class FinancialReportMetricsService
         );
 
         return [
+            'scope' =>
+                $cashierUserId === null
+                    ? 'all'
+                    : 'cashier',
+            'cashier_user_id' => $cashierUserId,
             'date_from' => $from,
             'date_to' => $to,
             'verified_revenue' => $verifiedRevenue,
@@ -142,6 +151,7 @@ class FinancialReportMetricsService
     public function dailyVerifiedRevenue(
         ?string $dateFrom = null,
         ?string $dateTo = null,
+        ?int $cashierUserId = null,
     ): array {
         [$from, $to] = $this->normalizeRange(
             $dateFrom,
@@ -151,6 +161,7 @@ class FinancialReportMetricsService
         return $this->verifiedPaymentsQuery(
             $from,
             $to,
+            $cashierUserId,
         )
             ->selectRaw(
                 'p.date_paid as revenue_date',
@@ -181,6 +192,7 @@ class FinancialReportMetricsService
     private function verifiedPaymentsQuery(
         ?string $dateFrom,
         ?string $dateTo,
+        ?int $cashierUserId,
     ): Builder {
         return DB::table('tbl_payment as p')
             ->leftJoin(
@@ -192,6 +204,32 @@ class FinancialReportMetricsService
             ->whereRaw(
                 'LOWER(p.payment_status) = ?',
                 ['verified'],
+            )
+            ->when(
+                $cashierUserId !== null,
+                function (
+                    Builder $query,
+                ) use (
+                    $cashierUserId,
+                ): void {
+                    $query->where(
+                        function (
+                            Builder $query,
+                        ) use (
+                            $cashierUserId,
+                        ): void {
+                            $query
+                                ->where(
+                                    'p.user_id',
+                                    $cashierUserId,
+                                )
+                                ->orWhere(
+                                    'p.verified_by_user_id',
+                                    $cashierUserId,
+                                );
+                        },
+                    );
+                },
             )
             ->when(
                 $dateFrom !== null,
