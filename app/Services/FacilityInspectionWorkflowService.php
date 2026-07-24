@@ -136,7 +136,9 @@ class FacilityInspectionWorkflowService
         ?int $sourceId = null
     ): GuestFine {
         if ($quantity < 1) {
-            throw new InvalidArgumentException('Fine quantity must be at least 1.');
+            throw new InvalidArgumentException(
+                'Fine quantity must be at least 1.',
+            );
         }
 
         DB::beginTransaction();
@@ -164,15 +166,50 @@ class FacilityInspectionWorkflowService
                 allowCompletedDamageInspection: true,
             );
 
-            $sourceItem = $this->resolveChecklistItem($bookingDetailsId, $itemSource, $sourceId);
+            $sourceItem = $this->resolveChecklistItem(
+                $bookingDetailsId,
+                $itemSource,
+                $sourceId,
+            );
 
-            if ($sourceItem !== null && $fine->amenity_id !== null && (int) $fine->amenity_id !== (int) $sourceItem['amenity_id']) {
-                throw new InvalidArgumentException('The selected fine does not match the selected checklist amenity.');
+            if (
+                $sourceItem !== null
+                && $fine->amenity_id !== null
+                && (int) $fine->amenity_id
+                    !== (int) $sourceItem['amenity_id']
+            ) {
+                throw new InvalidArgumentException(
+                    'The selected fine does not match the selected checklist amenity.',
+                );
             }
 
-            $totalCharge = round(((float) $fine->fine_charge) * $quantity, 2);
-            $inspection = $this->upsertInspection($detail, $booking, $maintenanceUserId, 'Damage Found', $remarks);
-            app(CheckOutInspectionRequestService::class)->markLatestRequestCompleted($bookingDetailsId, $maintenanceUserId);
+            if (
+                $sourceItem !== null
+                && $quantity > (int) $sourceItem['expected_quantity']
+            ) {
+                throw new InvalidArgumentException(
+                    'Fine quantity cannot be greater than the checklist expected quantity.',
+                );
+            }
+
+            $totalCharge = round(
+                ((float) $fine->fine_charge) * $quantity,
+                2,
+            );
+
+            $inspection = $this->upsertInspection(
+                $detail,
+                $booking,
+                $maintenanceUserId,
+                'Damage Found',
+                $remarks,
+            );
+
+            app(CheckOutInspectionRequestService::class)
+                ->markLatestRequestCompleted(
+                    $bookingDetailsId,
+                    $maintenanceUserId,
+                );
 
             if ($sourceItem !== null) {
                 $inspection->items()->updateOrCreate(
@@ -184,34 +221,52 @@ class FacilityInspectionWorkflowService
                     [
                         'amenity_id' => $sourceItem['amenity_id'],
                         'expected_quantity' => $sourceItem['expected_quantity'],
-                        'condition_status' => $this->conditionFromFine($fine),
+                        'condition_status' =>
+                            $this->conditionFromFine($fine),
                         'fine_quantity' => $quantity,
                         'total_charge' => $totalCharge,
                         'notes' => $remarks,
-                    ]
+                    ],
                 );
             }
 
-            $guestFine = GuestFine::query()->create([
-                'booking_id' => $booking->booking_id,
-                'fine_id' => $fine->fine_id,
-                'quantity' => $quantity,
-                'facility_id' => $detail->facility_id,
-                'total_charge' => $totalCharge,
-                'date_checked' => Carbon::today()->toDateString(),
-                'reported_by_user_id' => $maintenanceUserId,
-            ]);
+            [$guestFine, $balanceDelta] = $this->upsertGuestFine(
+                $detail,
+                $booking,
+                $fine,
+                $quantity,
+                $totalCharge,
+                $maintenanceUserId,
+                $sourceItem,
+            );
 
-            $booking->update([
-                'total_price' => round(((float) $booking->total_price) + $totalCharge, 2),
-                'amount_due' => round(((float) $booking->amount_due) + $totalCharge, 2),
-            ]);
+            if (abs($balanceDelta) > 0.009) {
+                $booking->update([
+                    'total_price' => round(
+                        ((float) $booking->total_price)
+                        + $balanceDelta,
+                        2,
+                    ),
+                    'amount_due' => round(
+                        ((float) $booking->amount_due)
+                        + $balanceDelta,
+                        2,
+                    ),
+                ]);
+            }
 
             DB::commit();
 
-            return $guestFine->fresh(['booking.guest', 'fine.amenity.amenityName', 'fine.damageType', 'facility', 'reportedBy']);
+            return $guestFine->fresh([
+                'booking.guest',
+                'fine.amenity.amenityName',
+                'fine.damageType',
+                'facility',
+                'reportedBy',
+            ]);
         } catch (Throwable $exception) {
             DB::rollBack();
+
             throw $exception;
         }
     }
@@ -286,6 +341,74 @@ class FacilityInspectionWorkflowService
         return 'Issue Found';
     }
 
+    /**
+     * @return array{0: GuestFine, 1: float}
+     */
+    private function upsertGuestFine(
+        BookingDetail $detail,
+        Booking $booking,
+        Fine $fine,
+        int $quantity,
+        float $totalCharge,
+        int $maintenanceUserId,
+        ?array $sourceItem,
+    ): array {
+        $identity = [
+            'booking_id' => $booking->booking_id,
+            'fine_id' => $fine->fine_id,
+            'facility_id' => $detail->facility_id,
+        ];
+
+        if (GuestFine::query()->getModel()->isFillable('booking_details_id')) {
+            $identity['booking_details_id'] =
+                $detail->booking_details_id;
+        }
+
+        if (
+            $sourceItem !== null
+            && GuestFine::query()->getModel()->isFillable('item_source')
+            && GuestFine::query()->getModel()->isFillable('source_id')
+        ) {
+            $identity['item_source'] = $sourceItem['source'];
+            $identity['source_id'] = $sourceItem['source_id'];
+        }
+
+        $guestFine = GuestFine::query()
+            ->where($identity)
+            ->lockForUpdate()
+            ->first();
+
+        if ($guestFine === null) {
+            $createPayload = array_merge($identity, [
+                'quantity' => $quantity,
+                'total_charge' => $totalCharge,
+                'date_checked' => Carbon::today()->toDateString(),
+                'reported_by_user_id' => $maintenanceUserId,
+            ]);
+
+            $guestFine = GuestFine::query()->create($createPayload);
+
+            return [$guestFine, $totalCharge];
+        }
+
+        $previousCharge = round(
+            (float) $guestFine->total_charge,
+            2,
+        );
+
+        $guestFine->update([
+            'quantity' => $quantity,
+            'total_charge' => $totalCharge,
+            'date_checked' => Carbon::today()->toDateString(),
+            'reported_by_user_id' => $maintenanceUserId,
+        ]);
+
+        return [
+            $guestFine,
+            round($totalCharge - $previousCharge, 2),
+        ];
+    }
+
     private function guardMaintenanceUser(int $maintenanceUserId): void
     {
         $user = User::query()
@@ -302,15 +425,33 @@ class FacilityInspectionWorkflowService
     private function guardCanInspect(BookingDetail $detail, Booking $booking): void
     {
         if ((string) $detail->status !== 'Checked-in') {
-            throw new InvalidArgumentException('Only checked-in booking details can be inspected.');
+            throw new InvalidArgumentException(
+                'Only checked-in booking details can be inspected.',
+            );
         }
 
-        if (in_array((string) $booking->status, ['Cancelled', 'Checked-out'], true)) {
-            throw new InvalidArgumentException('This booking can no longer be inspected.');
+        $allowedBookingStatuses = [
+            'Checked-in',
+            'Partially Checked-in',
+            'Partially Checked-out',
+        ];
+
+        if (
+            ! in_array(
+                (string) $booking->status,
+                $allowedBookingStatuses,
+                true,
+            )
+        ) {
+            throw new InvalidArgumentException(
+                'This booking can no longer be inspected.',
+            );
         }
 
         if ($detail->facility_id === null || $detail->facility === null) {
-            throw new InvalidArgumentException('This booking detail has no assigned facility to inspect.');
+            throw new InvalidArgumentException(
+                'This booking detail has no assigned facility to inspect.',
+            );
         }
     }
 
