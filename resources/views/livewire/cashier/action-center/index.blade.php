@@ -19,115 +19,166 @@ new #[Layout('layouts.app')] #[Title('Cashier Action Center - Olaer Spring Resor
         $this->alerts = app(OperationalAlertService::class)->cashierAlerts();
     }
 
-    public function shortcutUrl(string $routeName): string
+    /**
+     * @return array<int, array{
+     *   eyebrow:string,
+     *   title:string,
+     *   description:string,
+     *   url:string,
+     *   tone:string
+     * }>
+     */
+    public function shortcuts(): array
     {
-        return Route::has($routeName) ? route($routeName) : '#';
+        $shortcuts = [
+            [
+                'route' => 'cashier.reservations.index',
+                'eyebrow' => 'Front desk',
+                'title' => 'Reservations',
+                'description' => 'Create and manage guest reservations.',
+                'tone' => 'primary',
+            ],
+            [
+                'route' => 'cashier.reservation-conversions.index',
+                'eyebrow' => 'Front desk',
+                'title' => 'Reservation conversion',
+                'description' => 'Move eligible reservations into bookings.',
+                'tone' => 'secondary',
+            ],
+            [
+                'route' => 'cashier.bookings.index',
+                'eyebrow' => 'Guest stay',
+                'title' => 'Bookings',
+                'description' => 'Review and manage active booking records.',
+                'tone' => 'info',
+            ],
+            [
+                'route' => 'cashier.payments.index',
+                'eyebrow' => 'Payments',
+                'title' => 'Record payment',
+                'description' => 'Settle booking, reservation, or entrance balances.',
+                'tone' => 'success',
+            ],
+            [
+                'route' => 'cashier.gcash-verifications.index',
+                'eyebrow' => 'Payments',
+                'title' => 'GCash verification',
+                'description' => 'Review guest-uploaded proof and references.',
+                'tone' => 'warning',
+            ],
+            [
+                'route' => 'cashier.check-ins.index',
+                'eyebrow' => 'Guest stay',
+                'title' => 'Check-in',
+                'description' => 'Admit eligible, fully paid bookings.',
+                'tone' => 'info',
+            ],
+            [
+                'route' => 'cashier.check-outs.index',
+                'eyebrow' => 'Checkout',
+                'title' => 'Check-out',
+                'description' => 'Complete inspected, zero-balance stays.',
+                'tone' => 'warning',
+            ],
+            [
+                'route' => 'cashier.billings.index',
+                'eyebrow' => 'Checkout',
+                'title' => 'Billing statements',
+                'description' => 'Review current guest charges and balances.',
+                'tone' => 'secondary',
+            ],
+        ];
+
+        return collect($shortcuts)
+            ->filter(
+                fn (array $shortcut): bool =>
+                    Route::has($shortcut['route']),
+            )
+            ->map(
+                function (array $shortcut): array {
+                    $shortcut['url'] = route(
+                        $shortcut['route'],
+                    );
+
+                    unset($shortcut['route']);
+
+                    return $shortcut;
+                },
+            )
+            ->values()
+            ->all();
     }
 };
 
 ?>
 
 <div wire:poll.10s.visible="refreshActionCenter" class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight">Cashier Action Center</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live cashier shortcuts and alerts. This refreshes automatically every 10 seconds.
-            </p>
-        </div>
-
-        <flux:button wire:click="refreshActionCenter" variant="primary">Refresh now</flux:button>
-    </div>
-
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <a href="{{ $this->shortcutUrl('cashier.reservations.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Reservations</p>
-            <p class="mt-2 font-semibold">Create / manage reservations</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.reservation-conversions.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Conversion</p>
-            <p class="mt-2 font-semibold">Convert reservation to booking</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.bookings.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Bookings</p>
-            <p class="mt-2 font-semibold">View / manage bookings</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.payments.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Payments</p>
-            <p class="mt-2 font-semibold">Record balances and fines</p>
-        </a>
-    </div>
+    <x-staff-page-header
+        eyebrow="Front desk operations"
+        title="Cashier action center"
+        description="Open common workflows and respond to the most urgent live resort tasks from one place."
+    >
+        <x-slot:actions>
+            <flux:button
+                wire:click="refreshActionCenter"
+                wire:loading.attr="disabled"
+                wire:target="refreshActionCenter"
+                variant="primary"
+            >
+                <span wire:loading.remove wire:target="refreshActionCenter">Refresh now</span>
+                <span wire:loading wire:target="refreshActionCenter">Refreshing…</span>
+            </flux:button>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <a href="{{ $this->shortcutUrl('cashier.gcash-verifications.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">GCash</p>
-            <p class="mt-2 font-semibold">Verify online payments</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.check-ins.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Check-in</p>
-            <p class="mt-2 font-semibold">Admit fully-paid guests</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.check-outs.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Check-out</p>
-            <p class="mt-2 font-semibold">Confirm inspected guests</p>
-        </a>
-
-        <a href="{{ $this->shortcutUrl('cashier.billings.index') }}" class="rounded-xl border border-zinc-200 bg-white p-5 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">
-            <p class="text-sm text-zinc-500">Billing</p>
-            <p class="mt-2 font-semibold">View billing statements</p>
-        </a>
+        @foreach ($this->shortcuts() as $shortcut)
+            <x-staff-shortcut-card
+                :eyebrow="$shortcut['eyebrow']"
+                :title="$shortcut['title']"
+                :description="$shortcut['description']"
+                :href="$shortcut['url']"
+                :tone="$shortcut['tone']"
+            />
+        @endforeach
     </div>
 
-    <div class="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+    <section class="rounded-2xl border border-brand-border bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+        <div class="flex flex-col gap-3 border-b border-brand-border pb-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-700">
             <div>
-                <h2 class="font-semibold">Live cashier alerts</h2>
-                <p class="text-sm text-zinc-500">{{ count($alerts) }} active alert/s</p>
+                <h2 class="text-lg font-semibold text-brand-text dark:text-white">Live cashier alerts</h2>
+                <p class="mt-1 text-sm text-brand-text-muted dark:text-zinc-400">
+                    {{ count($alerts) }} {{ count($alerts) === 1 ? 'active alert' : 'active alerts' }}
+                </p>
             </div>
-            <a href="{{ $this->shortcutUrl('cashier.notifications.index') }}" class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">Full notifications</a>
+
+            @if (Route::has('cashier.notifications.index'))
+                <flux:button
+                    href="{{ route('cashier.notifications.index') }}"
+                    wire:navigate
+                    size="sm"
+                    variant="ghost"
+                >
+                    Full notifications
+                </flux:button>
+            @endif
         </div>
 
         @if (count($alerts) === 0)
-            <div class="p-8 text-center text-sm text-zinc-500">No cashier action needed right now.</div>
+            <x-dashboard-empty-state
+                class="mt-5"
+                title="No cashier action needed"
+                description="New payment, arrival, rental, and checkout alerts will appear here automatically."
+            />
         @else
-            <div class="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <div class="mt-5 grid gap-3">
                 @foreach ($alerts as $alert)
-                    @php
-                        $severity = $alert['severity'] ?? 'info';
-                        $badgeClass = match ($severity) {
-                            'danger' => 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-                            'warning' => 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-                            'success' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-                            default => 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-                        };
-                        $routeName = $alert['route_name'] ?? null;
-                        $url = $routeName && Route::has($routeName)
-                            ? route($routeName, $alert['route_params'] ?? [])
-                            : '#';
-                    @endphp
-
-                    <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="min-w-0 space-y-2">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="rounded-full px-2.5 py-1 text-xs font-medium {{ $badgeClass }}">{{ ucfirst($severity) }}</span>
-                                <span class="text-xs text-zinc-500">{{ $alert['time_label'] ?? '' }}</span>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold">{{ $alert['title'] ?? 'Alert' }}</h3>
-                                <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{{ $alert['message'] ?? '' }}</p>
-                            </div>
-                        </div>
-                        <a href="{{ $url }}" class="shrink-0 rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
-                            {{ $alert['action_label'] ?? 'Open' }}
-                        </a>
-                    </div>
+                    <x-operational-alert-card
+                        :alert="$alert"
+                        wire:key="cashier-action-alert-{{ $loop->index }}"
+                    />
                 @endforeach
             </div>
         @endif
-    </div>
+    </section>
 </div>
