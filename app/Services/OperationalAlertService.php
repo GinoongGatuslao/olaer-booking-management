@@ -85,6 +85,15 @@ class OperationalAlertService
             ->where('payment_status', 'Pending')
             ->whereNotNull('booking_id')
             ->whereNotNull('proof_of_payment_path')
+            ->whereHas(
+                'modeOfPayment',
+                function ($query): void {
+                    $query->whereRaw(
+                        'LOWER(mode_of_payment) = ?',
+                        ['gcash'],
+                    );
+                },
+            )
             ->latest('payment_id')
             ->limit(10)
             ->get();
@@ -113,6 +122,10 @@ class OperationalAlertService
                     ?? 'Pending',
                 'route_name' =>
                     'cashier.gcash-verifications.index',
+                'route_params' => [
+                    'payment' =>
+                        $payment->payment_id,
+                ],
                 'action_label' => 'Review proof',
                 'sort_at' =>
                     optional(
@@ -187,6 +200,10 @@ class OperationalAlertService
                     trim($date.' '.$time),
                 'route_name' =>
                     'cashier.check-ins.index',
+                'route_params' => [
+                    'booking' =>
+                        $detail->booking_id,
+                ],
                 'action_label' =>
                     'Go to check-in',
                 'sort_at' =>
@@ -274,9 +291,13 @@ class OperationalAlertService
                         'M d, Y h:i A',
                     ),
                 'route_name' =>
-                    'cashier.bookings.index',
+                    'cashier.bookings.show',
+                'route_params' => [
+                    'booking' =>
+                        $detail->booking_id,
+                ],
                 'action_label' =>
-                    'View bookings',
+                    'Open booking',
                 'sort_at' => $endAt->timestamp,
             ];
         }
@@ -344,6 +365,10 @@ class OperationalAlertService
                 'time_label' => 'Balance due',
                 'route_name' =>
                     'cashier.payments.index',
+                'route_params' => [
+                    'booking' =>
+                        $detail->booking_id,
+                ],
                 'action_label' =>
                     'Record payment',
                 'sort_at' => now()->timestamp,
@@ -407,6 +432,10 @@ class OperationalAlertService
                     ),
                 'route_name' =>
                     'maintenance.amenity-requests.index',
+                'route_params' => [
+                    'q' => (string) $request
+                        ->amenity_request_id,
+                ],
                 'action_label' =>
                     'Handle request',
                 'sort_at' =>
@@ -498,6 +527,10 @@ class OperationalAlertService
                     ?? 'Awaiting action',
                 'route_name' =>
                     'maintenance.facility-inspections.index',
+                'route_params' => [
+                    'request' => $request
+                        ->facility_inspection_request_id,
+                ],
                 'action_label' =>
                     $isPending
                         ? 'Accept request'
