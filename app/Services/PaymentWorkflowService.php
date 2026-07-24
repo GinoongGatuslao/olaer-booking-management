@@ -219,10 +219,6 @@ class PaymentWorkflowService
                 'amount_due' => $newAmountDue,
             ]);
 
-            if ($newAmountDue <= 0) {
-                app(AmenityRequestWorkflowService::class)->releasePaidRequestsForBooking((int) $target->booking_id);
-            }
-
             return;
         }
 

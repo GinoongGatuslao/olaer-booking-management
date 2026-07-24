@@ -20,9 +20,9 @@ class AmenityRequestWorkflowService
      * Correct real-life flow:
      * 1. Cashier records request.
      * 2. System adds amenity charge to the booking balance.
-     * 3. Request stays Awaiting Payment.
-     * 4. After the booking balance is paid, PaymentWorkflowService releases it to Pending.
-     * 5. Maintenance can accept and deliver.
+     * 3. Request immediately becomes Pending for maintenance delivery.
+     * 4. Maintenance accepts and delivers without waiting for payment.
+     * 5. Guest pays the amenity charge during checkout/final billing.
      */
     public function createBillableRequest(array $data): AmenityRequest
     {
@@ -58,7 +58,7 @@ class AmenityRequestWorkflowService
 
             $request = AmenityRequest::query()->create([
                 'booking_id' => $booking->booking_id,
-                'amenity_request_status' => 'Awaiting Payment',
+                'amenity_request_status' => 'Pending',
                 'total_price' => $quote['total'],
                 'date_created' => Carbon::today()->toDateString(),
                 'user_id' => $cashierUserId,
@@ -107,7 +107,7 @@ class AmenityRequestWorkflowService
     }
 
     /**
-     * Modify only requests that are not paid/released yet.
+     * Modify only pending, undelivered requests that have not been accepted by maintenance.
      */
     public function updateBillableRequest(
         int $amenityRequestId,
@@ -130,9 +130,12 @@ class AmenityRequestWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($amenityRequestId);
 
-            if ($request->amenity_request_status !== 'Awaiting Payment') {
+            if (
+                $request->amenity_request_status !== 'Pending'
+                || $request->assigned_to_user_id !== null
+            ) {
                 throw new InvalidArgumentException(
-                    'Only unpaid amenity requests can be modified.',
+                    'Only pending, undelivered amenity requests can be modified.',
                 );
             }
 
@@ -149,10 +152,12 @@ class AmenityRequestWorkflowService
             $oldTotal = round((float) $request->total_price, 2);
             $quote = $this->quoteItems($cleanItems);
             $difference = round($quote['total'] - $oldTotal, 2);
+
             $newTotalPrice = round(
                 (float) $booking->total_price + $difference,
                 2,
             );
+
             $newAmountDue = round(
                 (float) $booking->amount_due + $difference,
                 2,
@@ -202,7 +207,7 @@ class AmenityRequestWorkflowService
     }
 
     /**
-     * Cancel only while unpaid. Once paid, refund handling is out of scope.
+     * Cancel only while pending and unaccepted. Delivered amenities remain billable.
      */
     public function cancelUnpaidRequest(int $amenityRequestId): void
     {
@@ -214,9 +219,12 @@ class AmenityRequestWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($amenityRequestId);
 
-            if ($request->amenity_request_status !== 'Awaiting Payment') {
+            if (
+                $request->amenity_request_status !== 'Pending'
+                || $request->assigned_to_user_id !== null
+            ) {
                 throw new InvalidArgumentException(
-                    'Only unpaid amenity requests can be cancelled. Paid/delivery requests cannot be cancelled because refunds are out of scope.',
+                    'Only pending, undelivered amenity requests can be cancelled.',
                 );
             }
 
@@ -260,8 +268,10 @@ class AmenityRequestWorkflowService
     }
 
     /**
-     * Called after a booking payment. If the booking has no remaining balance,
-     * paid amenity requests are now visible to maintenance as Pending.
+     * Legacy compatibility only.
+     *
+     * Older builds used Awaiting Payment. Under the revised rule, these records
+     * are moved to Pending as long as the parent booking is still checked in.
      */
     public function releasePaidRequestsForBooking(int $bookingId): int
     {
@@ -270,18 +280,13 @@ class AmenityRequestWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($bookingId);
 
-            if (round((float) $booking->amount_due, 2) > 0) {
-                return 0;
-            }
-
-            if (! $this->bookingCanReleasePaidAmenities($booking)) {
+            if (! $this->bookingCanReceiveAmenityDelivery($booking)) {
                 return 0;
             }
 
             return AmenityRequest::query()
                 ->where('booking_id', $booking->booking_id)
                 ->where('amenity_request_status', 'Awaiting Payment')
-                ->where('total_price', '>', 0)
                 ->update([
                     'amenity_request_status' => 'Pending',
                 ]);
@@ -304,7 +309,7 @@ class AmenityRequestWorkflowService
 
             if ($request->amenity_request_status !== 'Pending') {
                 throw new InvalidArgumentException(
-                    'Only paid pending amenity requests can be accepted.',
+                    'Only pending amenity requests can be accepted.',
                 );
             }
 
@@ -519,7 +524,7 @@ class AmenityRequestWorkflowService
         }
     }
 
-    private function bookingCanReleasePaidAmenities(
+    private function bookingCanReceiveAmenityDelivery(
         Booking $booking,
     ): bool {
         return in_array(
@@ -532,15 +537,9 @@ class AmenityRequestWorkflowService
     private function guardBookingCanReceiveAmenityDelivery(
         Booking $booking,
     ): void {
-        if (! $this->bookingCanReleasePaidAmenities($booking)) {
+        if (! $this->bookingCanReceiveAmenityDelivery($booking)) {
             throw new InvalidArgumentException(
                 'Amenity delivery is only allowed for checked-in bookings.',
-            );
-        }
-
-        if (round((float) $booking->amount_due, 2) > 0) {
-            throw new InvalidArgumentException(
-                'Amenity delivery cannot proceed while the booking still has an unpaid balance.',
             );
         }
     }

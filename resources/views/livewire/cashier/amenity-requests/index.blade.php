@@ -249,7 +249,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
             session()->flash(
                 'success',
-                'Amenity request created. Collect payment before maintenance delivery.',
+                'Amenity request created. It is now available for maintenance delivery and will be paid during checkout.',
             );
         } catch (\Throwable $exception) {
             $this->addError(
@@ -265,10 +265,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             ->with('details')
             ->findOrFail($amenityRequestId);
 
-        if ($request->amenity_request_status !== 'Awaiting Payment') {
+        if ($request->amenity_request_status !== 'Pending') {
             $this->addError(
                 'edit',
-                'Only unpaid amenity requests can be modified.',
+                'Only pending, undelivered amenity requests can be modified.',
             );
 
             return;
@@ -370,7 +370,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
             session()->flash(
                 'success',
-                'Unpaid amenity request cancelled.',
+                'Pending amenity request cancelled.',
             );
         } catch (\Throwable $exception) {
             $this->addError(
@@ -383,7 +383,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
     public function statusColor(string $status): string
     {
         return match ($status) {
-            'Awaiting Payment' => 'amber',
             'Pending' => 'blue',
             'Delivering' => 'purple',
             'Delivered' => 'green',
@@ -698,7 +697,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             </h1>
 
             <p class="text-sm text-gray-600 dark:text-gray-400">
-                Create billable requests for checked-in bookings, collect payment, then release them to maintenance.
+                Create billable requests for checked-in bookings. Amenities can be delivered now and paid during checkout.
             </p>
         </div>
 
@@ -828,7 +827,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                         </p>
 
                         <p class="text-xs text-gray-500">
-                            Added to the booking balance. Maintenance receives the request only after the booking balance is fully paid.
+                            Added to the booking balance. This charge will be collected during checkout/final billing.
                         </p>
                     </div>
 
@@ -846,7 +845,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
     @if ($editingRequestId !== '')
         <flux:card class="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
             <h2 class="mb-4 text-lg font-semibold">
-                Modify Unpaid Amenity Request #{{ $editingRequestId }}
+                Modify Pending Amenity Request #{{ $editingRequestId }}
             </h2>
 
             @error('edit')
@@ -969,7 +968,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     label="Status"
                 >
                     <option value="">All statuses</option>
-                    <option value="Awaiting Payment">Awaiting Payment</option>
                     <option value="Pending">Pending</option>
                     <option value="Delivering">Delivering</option>
                     <option value="Delivered">Delivered</option>
@@ -1127,18 +1125,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         </flux:button>
                                     @endif
 
-                                    @if ($request->amenity_request_status === 'Awaiting Payment')
-                                        @if (Route::has('cashier.payments.index'))
-                                            <flux:button
-                                                href="{{ route('cashier.payments.index', ['booking' => $request->booking_id]) }}"
-                                                wire:navigate
-                                                size="sm"
-                                                variant="primary"
-                                            >
-                                                Payment
-                                            </flux:button>
-                                        @endif
-
+                                    @if ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null)
                                         <flux:button
                                             size="sm"
                                             wire:click="openEdit({{ $request->amenity_request_id }})"
@@ -1150,14 +1137,14 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                             size="sm"
                                             variant="danger"
                                             wire:click="cancelRequest({{ $request->amenity_request_id }})"
-                                            wire:confirm="Cancel this unpaid amenity request?"
+                                            wire:confirm="Cancel this pending amenity request?"
                                         >
                                             Cancel
                                         </flux:button>
                                     @endif
                                 </div>
 
-                                @if ($request->amenity_request_status !== 'Awaiting Payment' && ! Route::has('cashier.bookings.show'))
+                                @if (! ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null) && ! Route::has('cashier.bookings.show'))
                                     <span class="text-xs text-gray-500">
                                         No cashier action
                                     </span>
