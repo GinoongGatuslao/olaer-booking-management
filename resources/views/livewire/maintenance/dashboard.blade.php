@@ -59,16 +59,13 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
 
 ?>
 
-<div wire:poll.15s class="space-y-6">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight">Maintenance Dashboard</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live maintenance work queues. Updates automatically every 15 seconds.
-            </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
+<div wire:poll.15s.visible class="space-y-6">
+    <x-staff-page-header
+        eyebrow="Maintenance operations"
+        title="Service and inspection queue"
+        description="Track amenity deliveries, cashier-requested inspections, and work completed under your account. Live data refreshes while this dashboard is visible."
+    >
+        <x-slot:actions>
             @if (Route::has('maintenance.action-center'))
                 <flux:button
                     href="{{ route('maintenance.action-center') }}"
@@ -88,52 +85,73 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                     Amenity Requests
                 </flux:button>
             @endif
-        </div>
-    </div>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Pending amenity requests</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['pending_amenity_requests'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Paid requests waiting for a maintenance staff member.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Pending amenity requests"
+            :value="$this->overview['pending_amenity_requests']"
+            description="Requests available for a maintenance staff member to accept."
+            :href="Route::has('maintenance.amenity-requests.index') ? route('maintenance.amenity-requests.index') : null"
+            action="Open delivery queue"
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">My active deliveries</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_active_deliveries'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Requests you accepted but have not marked delivered.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="My active deliveries"
+            :value="$this->overview['my_active_deliveries']"
+            description="Requests you accepted but have not marked delivered."
+            :href="Route::has('maintenance.amenity-requests.index') ? route('maintenance.amenity-requests.index', ['assignment' => 'mine']) : null"
+            action="Continue deliveries"
+            tone="info"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Delivered by me today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_deliveries_today'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Delivered by me today"
+            :value="$this->overview['my_deliveries_today']"
+            description="Amenity deliveries completed under your account."
+            tone="success"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Pending inspection requests</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['pending_inspection_requests'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Only requests sent by the cashier appear here.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Pending inspections"
+            :value="$this->overview['pending_inspection_requests']"
+            description="Checkout inspection requests sent by Cashier."
+            :href="Route::has('maintenance.facility-inspections.index') ? route('maintenance.facility-inspections.index', ['status' => 'active']) : null"
+            action="Review requests"
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">My inspections in progress</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_inspections_in_progress'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="My inspections in progress"
+            :value="$this->overview['my_inspections_in_progress']"
+            description="Accepted inspections currently assigned to you."
+            :href="Route::has('maintenance.facility-inspections.index') ? route('maintenance.facility-inspections.index', ['assignment' => 'mine']) : null"
+            action="Continue inspections"
+            tone="info"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Completed by me today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['my_completed_inspections_today'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Completed by me today"
+            :value="$this->overview['my_completed_inspections_today']"
+            description="Checkout inspections completed under your account."
+            tone="success"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Issues reported by me today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['issues_reported_today'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Issues reported today"
+            :value="$this->overview['issues_reported_today']"
+            description="Damage or fine records reported under your account."
+            tone="danger"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Charges from my reports today</p>
-            <p class="mt-2 text-3xl font-semibold">₱{{ number_format($this->overview['charges_reported_today'], 2) }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Charges reported today"
+            :value="'₱'.number_format($this->overview['charges_reported_today'], 2)"
+            description="Total guest charges created from your reports."
+            tone="secondary"
+        />
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
@@ -178,18 +196,14 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                                 </p>
                             </div>
 
-                            <flux:badge
-                                color="{{ $request->amenity_request_status === 'Delivering' ? 'blue' : 'amber' }}"
-                                size="sm"
-                            >
-                                {{ $request->amenity_request_status }}
-                            </flux:badge>
+                            <x-status-badge :status="$request->amenity_request_status" />
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">
-                        No paid amenity requests currently need your attention.
-                    </p>
+                    <x-dashboard-empty-state
+                        title="Amenity queue is clear"
+                        description="New pending requests and deliveries assigned to you will appear here."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -246,12 +260,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                             </div>
 
                             <div class="flex items-center gap-2">
-                                <flux:badge
-                                    color="{{ $request->status === 'In Progress' ? 'blue' : 'amber' }}"
-                                    size="sm"
-                                >
-                                    {{ $request->status }}
-                                </flux:badge>
+                                <x-status-badge :status="$request->status" />
 
                                 @if (Route::has('maintenance.facility-inspections.index'))
                                     <flux:button
@@ -267,9 +276,10 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">
-                        No cashier-sent inspection request currently needs your attention.
-                    </p>
+                    <x-dashboard-empty-state
+                        title="Inspection queue is clear"
+                        description="Cashier-sent requests and inspections assigned to you will appear here."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -316,15 +326,13 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                             </p>
                         </div>
 
-                        <flux:badge
-                            color="{{ $inspection->inspection_status === 'Cleared' ? 'green' : 'red' }}"
-                            size="sm"
-                        >
-                            {{ $inspection->inspection_status }}
-                        </flux:badge>
+                        <x-status-badge :status="$inspection->inspection_status" />
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">You have not completed an inspection yet.</p>
+                    <x-dashboard-empty-state
+                        title="No completed inspections yet"
+                        description="Inspections you complete will appear here for quick reference."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -366,7 +374,10 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">You have not reported a fine yet.</p>
+                    <x-dashboard-empty-state
+                        title="No issues reported yet"
+                        description="Damage, missing-item, and situational fines you record will appear here."
+                    />
                 @endforelse
             </div>
         </flux:card>
