@@ -195,7 +195,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         <div>
             <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Billing Statements</h1>
             <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                View billed bookings, amenity requests, and fines. Print a statement only after checking the booking balance.
+                Review itemized charges while using the booking-wide balance as the settlement source of truth.
             </p>
         </div>
     </div>
@@ -276,22 +276,22 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Billed Amount</p>
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Booking Charges</p>
             <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_amount']) }}</p>
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding</p>
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding Balance</p>
             <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_due']) }}</p>
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Paid Records</p>
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Paid Bookings</p>
             <p class="mt-1 text-xl font-semibold">{{ $billingSummary['paid_count'] }}</p>
         </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Unpaid Records</p>
+            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding Bookings</p>
             <p class="mt-1 text-xl font-semibold">{{ $billingSummary['unpaid_count'] }}</p>
         </div>
     </div>
@@ -329,7 +329,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                             </th>
                             <th class="px-4 py-3 text-right">
                                 <button wire:click="sortBy('amount_due')" class="font-medium">
-                                    Due {{ $this->sortIndicator('amount_due') }}
+                                    Booking Due {{ $this->sortIndicator('amount_due') }}
                                 </button>
                             </th>
                             <th class="px-4 py-3">
