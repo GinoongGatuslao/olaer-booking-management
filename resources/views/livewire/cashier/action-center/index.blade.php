@@ -27,7 +27,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Action Center - Olaer Spring Resor
 
 ?>
 
-<div wire:poll.10s="refreshActionCenter" class="space-y-6">
+<div wire:poll.10s.visible="refreshActionCenter" class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Cashier Action Center</h1>

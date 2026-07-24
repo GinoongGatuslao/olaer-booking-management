@@ -21,12 +21,12 @@ new #[Layout('layouts.app')] #[Title('Maintenance Notifications - Olaer Spring R
 
 ?>
 
-<div class="space-y-6">
+<div wire:poll.15s.visible="refreshAlerts" class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Maintenance Notifications</h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live alerts for pending amenity requests and checked-in facilities that still need inspection.
+                Live alerts for pending amenity requests and cashier-created checkout inspection requests. This page refreshes automatically while visible.
             </p>
         </div>
 
@@ -49,7 +49,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Notifications - Olaer Spring R
         <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
             <p class="text-sm text-zinc-500">Inspections needed</p>
             <p class="mt-2 text-2xl font-semibold">
-                {{ collect($alerts)->where('type', 'inspection_needed')->count() }}
+                {{ collect($alerts)->where('type', 'inspection_request')->count() }}
             </p>
         </div>
     </div>
@@ -106,6 +106,6 @@ new #[Layout('layouts.app')] #[Title('Maintenance Notifications - Olaer Spring R
     </div>
 
     <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
-        Pending amenity requests appear after payment is completed. Inspection alerts disappear once maintenance records the facility checklist.
+        Pending amenity requests appear immediately and may be delivered before payment; their charges remain on the booking bill. Inspection alerts appear only after Cashier sends a checkout inspection request.
     </div>
 </div>

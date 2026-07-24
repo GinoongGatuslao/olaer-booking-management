@@ -21,12 +21,12 @@ new #[Layout('layouts.app')] #[Title('Cashier Notifications - Olaer Spring Resor
 
 ?>
 
-<div class="space-y-6">
+<div wire:poll.15s.visible="refreshAlerts" class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Cashier Notifications</h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live alerts for pending GCash proofs, upcoming bookings, cottage end-time reminders, and unpaid check-out balances.
+                Live alerts for pending GCash proofs, upcoming bookings, cottage end-time reminders, and unpaid check-out balances. This page refreshes automatically while visible.
             </p>
         </div>
 

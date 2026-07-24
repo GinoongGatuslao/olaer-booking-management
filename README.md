@@ -143,7 +143,7 @@ new class extends Component
 
 ### Maintenance functions
 
-- Accept paid amenity delivery requests.
+- Accept pending amenity delivery requests without requiring advance payment.
 - Deliver requested amenities.
 - Accept cashier-created inspection requests.
 - Inspect inclusive facility amenities.
@@ -169,7 +169,7 @@ The following are intentionally not implemented as core project features:
 - Third-party travel or OTA integration.
 - Automated GCash API verification.
 - Refund processing.
-- Cancellation of paid amenity requests.
+- Refund processing or cancellation after an amenity has been delivered or settled.
 - Full warehouse-style amenity inventory.
 - Guest self-service modification of confirmed bookings.
 - Public staff registration.
@@ -274,19 +274,18 @@ Amenities can only be requested for a checked-in booking and must be assigned to
 
 ```text
 Cashier creates request
-→ charge added to booking
-→ Awaiting Payment
-→ booking balance reaches zero
+→ charge added to booking total and amount due
 → Pending
 → Maintenance accepts
 → Delivering
 → assigned staff delivers
 → Delivered
+→ charge is settled during checkout or final billing
 ```
 
 Only rentable amenities with a valid positive price can be requested.
 
-An unpaid amenity request may be edited or cancelled. Once paid and released to Maintenance, cancellation is blocked because refunds are out of scope.
+A pending request may be edited or cancelled before Maintenance accepts it. Delivery does not require advance payment. Once assigned, delivering, or delivered, cancellation is blocked because refund processing is out of scope.
 
 ### Inspection and fines
 
@@ -439,15 +438,13 @@ flowchart TD
     B --> C[Facility becomes Occupied]
     C --> D[Guest requests rentable amenity]
     D --> E[Cashier creates billable request]
-    E --> F[Charge added to booking balance]
-    F --> G[Request: Awaiting Payment]
-    G --> H[Cashier records payment]
-    H --> I[Booking balance reaches zero]
-    I --> J[Request: Pending]
-    J --> K[Maintenance accepts]
-    K --> L[Request: Delivering]
-    L --> M[Assigned maintenance staff delivers]
-    M --> N[Request: Delivered]
+    E --> F[Charge added to booking total and amount due]
+    F --> G[Request: Pending]
+    G --> H[Maintenance accepts]
+    H --> I[Request: Delivering]
+    I --> J[Assigned maintenance staff delivers]
+    J --> K[Request: Delivered]
+    K --> L[Cashier settles amenity charge during final billing]
 ```
 
 Review starting points:
@@ -540,11 +537,10 @@ Extended
 ### Amenity request
 
 ```text
-Awaiting Payment
+Pending
 ├── Cancelled
-└── Pending
-    └── Delivering
-        └── Delivered
+└── Delivering
+    └── Delivered
 ```
 
 ### Inspection request

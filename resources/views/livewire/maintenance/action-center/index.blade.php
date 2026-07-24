@@ -13,7 +13,7 @@ new class extends Component {
 };
 ?>
 
-<div class="space-y-6" wire:poll.10s>
+<div class="space-y-6" wire:poll.10s.visible>
     <div>
         <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Maintenance Action Center</h1>
         <p class="text-sm text-zinc-600 dark:text-zinc-400">Only cashier-sent inspection requests appear here.</p>
