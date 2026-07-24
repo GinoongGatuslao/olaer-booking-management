@@ -76,7 +76,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Notifications - Olaer Spring R
                         };
 
                         $routeName = $alert['route_name'] ?? null;
-                        $url = $routeName && \Illuminate\Support\Facades\Route::has($routeName) ? route($routeName) : '#';
+                        $url = $routeName && \Illuminate\Support\Facades\Route::has($routeName)
+                            ? route($routeName, $alert['route_params'] ?? [])
+                            : '#';
                     @endphp
 
                     <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
