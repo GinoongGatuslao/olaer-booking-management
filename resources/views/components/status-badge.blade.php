@@ -14,6 +14,7 @@
         'cleared',
         'paid',
         'checked-out' => 'green',
+        'ready for check-out' => 'green',
 
         'checked-in' => 'emerald',
 
@@ -22,13 +23,17 @@
         'partially checked-out',
         'delivering',
         'in progress' => 'sky',
+        'inspection pending' => 'sky',
 
         'pending',
         'pending verification',
-        'unpaid' => 'amber',
+        'unpaid',
+        'inspection not requested' => 'amber',
 
         'rejected',
-        'payment rejected' => 'red',
+        'payment rejected',
+        'with issues',
+        'payment required' => 'red',
 
         'cancelled',
         'no-show' => 'zinc',
