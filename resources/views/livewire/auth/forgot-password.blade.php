@@ -4,6 +4,7 @@ use App\Services\StaffPasswordResetService;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
@@ -12,6 +13,9 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
     public string $step = 'request';
 
     public string $identifier = '';
+
+    #[Locked]
+    public string $resetIdentifier = '';
 
     public string $otp = '';
 
@@ -25,6 +29,8 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
 
     public function requestCode(StaffPasswordResetService $service): void
     {
+        $this->identifier = trim($this->identifier);
+
         $this->validate([
             'identifier' => ['required', 'string', 'max:100'],
         ], [
@@ -50,20 +56,23 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
             return;
         }
 
+        $this->resetIdentifier = $this->identifier;
         $this->step = 'verify';
-        $this->statusMessage = 'If the account is active and has a valid email address, a six-digit reset code has been sent.';
+        $this->statusMessage = 'If the account is active and has a valid email address, a six-digit reset code has been sent. Only the newest code is valid.';
         $this->resetValidation();
     }
 
     public function verifyCode(StaffPasswordResetService $service): void
     {
+        $this->otp = trim($this->otp);
+
         $this->validate([
-            'identifier' => ['required', 'string', 'max:100'],
+            'resetIdentifier' => ['required', 'string', 'max:100'],
             'otp' => ['required', 'digits:6'],
         ]);
 
         try {
-            $this->resetToken = $service->verifyOtp($this->identifier, $this->otp);
+            $this->resetToken = $service->verifyOtp($this->resetIdentifier, $this->otp);
         } catch (\RuntimeException $exception) {
             $this->addError('otp', $exception->getMessage());
 
@@ -78,7 +87,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
     public function resetPassword(StaffPasswordResetService $service): void
     {
         $this->validate([
-            'identifier' => ['required', 'string', 'max:100'],
+            'resetIdentifier' => ['required', 'string', 'max:100'],
             'resetToken' => ['required', 'string', 'size:64'],
             'password' => [
                 'required',
@@ -90,14 +99,14 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         ]);
 
         try {
-            $service->resetPassword($this->identifier, $this->resetToken, $this->password);
+            $service->resetPassword($this->resetIdentifier, $this->resetToken, $this->password);
         } catch (\RuntimeException $exception) {
             $this->addError('password', $exception->getMessage());
 
             return;
         }
 
-        $this->reset(['otp', 'resetToken', 'password', 'password_confirmation']);
+        $this->reset(['resetIdentifier', 'otp', 'resetToken', 'password', 'password_confirmation']);
         $this->step = 'done';
         $this->statusMessage = 'Your password has been changed. You may now sign in.';
         $this->resetValidation();
@@ -107,6 +116,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
     {
         $this->reset([
             'identifier',
+            'resetIdentifier',
             'otp',
             'resetToken',
             'password',
@@ -143,9 +153,6 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                         autocomplete="username"
                         autofocus
                     />
-                    @error('identifier')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
                 </div>
 
                 <flux:button type="submit" variant="primary" class="w-full" wire:loading.attr="disabled">
@@ -164,9 +171,6 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                         maxlength="6"
                         autofocus
                     />
-                    @error('otp')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
                 </div>
 
                 <flux:button type="submit" variant="primary" class="w-full" wire:loading.attr="disabled">
@@ -187,9 +191,6 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                         autocomplete="new-password"
                         autofocus
                     />
-                    @error('password')
-                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                    @enderror
                     <p class="mt-1 text-xs text-zinc-500">
                         Minimum 8 characters with uppercase, lowercase, number, and symbol.
                     </p>

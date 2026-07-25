@@ -3,10 +3,14 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Models\UserPasswordResetOtp;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
+use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
@@ -77,5 +81,33 @@ class PasswordResetTest extends TestCase
 
             return true;
         });
+    }
+
+    public function test_staff_password_reset_otp_remains_bound_to_the_requesting_account(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+
+        $component = Volt::test('auth.forgot-password')
+            ->set('identifier', $user->email)
+            ->call('requestCode')
+            ->assertSet('step', 'verify');
+
+        $otp = UserPasswordResetOtp::query()
+            ->where('user_id', $user->user_id)
+            ->latest('password_reset_otp_id')
+            ->firstOrFail();
+
+        $otp->update(['code_hash' => Hash::make('123456')]);
+
+        $component
+            ->set('identifier', 'changed@example.com')
+            ->set('otp', ' 123456 ')
+            ->call('verifyCode')
+            ->assertHasNoErrors('otp')
+            ->assertSet('step', 'reset');
+
+        $this->assertNotNull($otp->refresh()->verified_at);
     }
 }
