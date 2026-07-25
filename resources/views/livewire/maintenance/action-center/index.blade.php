@@ -1,9 +1,11 @@
 <?php
 
 use App\Services\CheckOutInspectionRequestService;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
-new class extends Component {
+new #[Layout('layouts.app')] #[Title('Maintenance Action Center - Olaer Spring Resort')] class extends Component {
     public function with(): array
     {
         return [
@@ -14,45 +16,118 @@ new class extends Component {
 ?>
 
 <div class="space-y-6" wire:poll.10s.visible>
-    <div>
-        <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Maintenance Action Center</h1>
-        <p class="text-sm text-zinc-600 dark:text-zinc-400">Only cashier-sent inspection requests appear here.</p>
+    <x-staff-page-header
+        eyebrow="Maintenance operations"
+        title="Maintenance action center"
+        description="Prioritize cashier-sent checkout inspections and open the maintenance workspaces used throughout the shift."
+    >
+        <x-slot:actions>
+            @if (Route::has('maintenance.facility-inspections.index'))
+                <flux:button
+                    href="{{ route('maintenance.facility-inspections.index') }}"
+                    wire:navigate
+                    variant="primary"
+                >
+                    Open inspections
+                </flux:button>
+            @endif
+        </x-slot:actions>
+    </x-staff-page-header>
+
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        @if (Route::has('maintenance.amenity-requests.index'))
+            <x-staff-shortcut-card
+                eyebrow="Guest service"
+                title="Amenity requests"
+                description="Accept pending requests and complete deliveries assigned to you."
+                :href="route('maintenance.amenity-requests.index')"
+                tone="warning"
+            />
+        @endif
+
+        @if (Route::has('maintenance.facility-inspections.index'))
+            <x-staff-shortcut-card
+                eyebrow="Checkout"
+                title="Facility inspections"
+                description="Accept requests, record findings, and complete assigned inspections."
+                :href="route('maintenance.facility-inspections.index')"
+                tone="info"
+            />
+        @endif
+
+        @if (Route::has('maintenance.notifications.index'))
+            <x-staff-shortcut-card
+                eyebrow="Live queue"
+                title="Notifications"
+                description="Review all current delivery and inspection alerts."
+                :href="route('maintenance.notifications.index')"
+                tone="secondary"
+            />
+        @endif
     </div>
 
-    <div class="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div class="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-            <h2 class="font-semibold text-zinc-900 dark:text-zinc-100">Pending Facility Inspections</h2>
+    <section class="rounded-2xl border border-brand-border bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+        <div class="flex flex-col gap-2 border-b border-brand-border pb-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-700">
+            <div>
+                <h2 class="text-lg font-semibold text-brand-text dark:text-white">Pending facility inspections</h2>
+                <p class="mt-1 text-sm text-brand-text-muted dark:text-zinc-400">
+                    Only checkout inspection requests sent by Cashier appear here.
+                </p>
+            </div>
+
+            <flux:badge
+                :color="$inspectionRequests->isEmpty() ? 'green' : 'amber'"
+                size="sm"
+            >
+                {{ $inspectionRequests->count() }} pending
+            </flux:badge>
         </div>
 
-        <div class="divide-y divide-zinc-200 dark:divide-zinc-800">
+        <div class="mt-5 grid gap-3">
             @forelse ($inspectionRequests as $request)
-                <div class="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <p class="font-medium text-zinc-900 dark:text-zinc-100">
-                            {{ $request->booking?->b_ref_no }} — {{ $request->facility?->facility_name ?? 'No facility' }}
-                        </p>
-                        <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                            Guest: {{ $request->booking?->guest?->first_name }} {{ $request->booking?->guest?->last_name }}
-                        </p>
-                        <p class="text-xs text-zinc-500 dark:text-zinc-500">
-                            Requested by {{ $request->requestedBy?->first_name }} {{ $request->requestedBy?->last_name }}
-                            @if ($request->requested_at)
-                                · {{ $request->requested_at->format('M d, Y h:i A') }}
-                            @endif
-                        </p>
-                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">Status: {{ $request->status }}</p>
-                    </div>
+                <article
+                    wire:key="maintenance-action-request-{{ $request->facility_inspection_request_id }}"
+                    class="rounded-2xl border border-brand-border bg-brand-surface/60 p-5 dark:border-zinc-700 dark:bg-zinc-950/40"
+                >
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <x-status-badge :status="$request->status" />
+                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">
+                                    {{ $request->requested_at?->format('M d, Y h:i A') ?? 'Awaiting action' }}
+                                </span>
+                            </div>
 
-                    <a href="{{ route('maintenance.facility-inspections.index', ['request' => $request->facility_inspection_request_id]) }}"
-                       class="inline-flex items-center justify-center rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900">
-                        Inspect
-                    </a>
-                </div>
+                            <p class="mt-3 font-semibold text-brand-text dark:text-white">
+                                {{ $request->booking?->b_ref_no }} — {{ $request->facility?->facility_name ?? 'No facility' }}
+                            </p>
+
+                            <p class="mt-1 text-sm text-brand-text-muted dark:text-zinc-300">
+                                Guest: {{ $request->booking?->guest?->first_name }} {{ $request->booking?->guest?->last_name }}
+                            </p>
+
+                            <p class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                Requested by {{ $request->requestedBy?->first_name }} {{ $request->requestedBy?->last_name }}
+                            </p>
+                        </div>
+
+                        <flux:button
+                            href="{{ route('maintenance.facility-inspections.index', ['request' => $request->facility_inspection_request_id]) }}"
+                            wire:navigate
+                            size="sm"
+                            variant="ghost"
+                            class="shrink-0"
+                        >
+                            Inspect
+                        </flux:button>
+                    </div>
+                </article>
             @empty
-                <div class="px-4 py-8 text-center text-sm text-zinc-500">
-                    No pending inspection requests.
-                </div>
+                <x-dashboard-empty-state
+                    title="No pending inspection requests"
+                    description="The Cashier has not sent a checkout inspection request requiring acceptance."
+                />
             @endforelse
         </div>
-    </div>
+    </section>
 </div>

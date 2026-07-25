@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\GuestVerificationOtp;
+use App\Models\User;
 use App\Services\BookingAvailabilityService;
 use App\Services\ReservationNoShowReleaseService;
 use App\Services\StaffReservationCancellationService;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class ReservationLifecycleHardeningTest extends TestCase
@@ -98,6 +100,41 @@ class ReservationLifecycleHardeningTest extends TestCase
         );
     }
 
+    public function test_cashier_reservation_page_cancels_through_the_hardened_service(): void
+    {
+        $cashierId = $this->createUser('Cashier');
+        $reservation = $this->createReservationScenario(
+            amountDue: 750.00,
+            totalPrice: 1000.00,
+        );
+
+        $this->actingAs(
+            User::query()->findOrFail($cashierId),
+        );
+
+        Livewire::test('cashier.reservations.index')
+            ->set(
+                'cancelReservationId',
+                $reservation['reservation_id'],
+            )
+            ->set(
+                'cancellationReason',
+                'Guest requested cancellation before payment.',
+            )
+            ->call('cancelReservation')
+            ->assertHasNoErrors()
+            ->assertSet('cancelReservationId', null);
+
+        $this->assertDatabaseHas('tbl_reservation', [
+            'reservation_id' =>
+                $reservation['reservation_id'],
+            'status' => 'Cancelled',
+            'amount_due' => 750.00,
+            'cancellation_reason' =>
+                'Guest requested cancellation before payment.',
+        ]);
+    }
+
     public function test_verified_payment_blocks_staff_cancellation(): void
     {
         $cashierId = $this->createUser('Cashier');
@@ -127,6 +164,41 @@ class ReservationLifecycleHardeningTest extends TestCase
                 $exception->getMessage(),
             );
         }
+
+        $this->assertDatabaseHas('tbl_reservation', [
+            'reservation_id' =>
+                $reservation['reservation_id'],
+            'status' => 'Active',
+            'amount_due' => 1000.00,
+        ]);
+    }
+
+    public function test_cashier_reservation_page_surfaces_verified_payment_cancellation_block(): void
+    {
+        $cashierId = $this->createUser('Cashier');
+        $reservation = $this->createReservationScenario();
+
+        $this->createVerifiedReservationPayment(
+            $reservation['reservation_id'],
+            $cashierId,
+            250.00,
+        );
+
+        $this->actingAs(
+            User::query()->findOrFail($cashierId),
+        );
+
+        Livewire::test('cashier.reservations.index')
+            ->set(
+                'cancelReservationId',
+                $reservation['reservation_id'],
+            )
+            ->set(
+                'cancellationReason',
+                'Attempted cancellation.',
+            )
+            ->call('cancelReservation')
+            ->assertHasErrors(['cancellationReason']);
 
         $this->assertDatabaseHas('tbl_reservation', [
             'reservation_id' =>

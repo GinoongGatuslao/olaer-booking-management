@@ -3,6 +3,34 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Public resort information
+    |--------------------------------------------------------------------------
+    |
+    | These details are shown across the customer website. Keeping them here
+    | provides one source of truth for the public layout and visit information.
+    |
+    */
+
+    'public' => [
+        'address' => 'Purok Olaer, General Santos City (Dadiangas), 9500 South Cotabato',
+        'phones' => [
+            [
+                'display' => '09279435323',
+                'href' => 'tel:09279435323',
+            ],
+            [
+                'display' => '0967 217 4485',
+                'href' => 'tel:09672174485',
+            ],
+        ],
+        'email' => 'olaermarketing@gmail.com',
+        'hours' => 'Open 24 hours',
+        'map_url' => 'https://maps.app.goo.gl/vf7jnCaVwTEhDfEw8',
+        'facebook_url' => 'https://www.facebook.com/OlaerSwimmingResort',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Reservation no-show release
     |--------------------------------------------------------------------------
     |

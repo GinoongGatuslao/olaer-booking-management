@@ -7,7 +7,6 @@ use App\Services\PublicBookingWorkflowService;
 use App\Services\GcashProofStorageService;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -166,13 +165,13 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
 
             $this->created_booking_id = (int) $booking->booking_id;
             $this->success_message = 'Booking submitted. Your payment proof is pending cashier verification.';
-        } catch (InvalidArgumentException $exception) {
+        } catch (\InvalidArgumentException $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
             }
 
             $this->error_message = $exception->getMessage();
-        } catch (Throwable $exception) {
+        } catch (\Throwable $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
             }

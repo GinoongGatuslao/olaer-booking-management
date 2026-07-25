@@ -544,13 +544,12 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
 };
 ?>
 
-<div class="space-y-6" wire:poll.10s="refreshSelectedState">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Cashier Check-out</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Verify maintenance inspection and payment status before releasing the facility.</p>
-        </div>
-    </div>
+<div class="space-y-6" wire:poll.10s.visible="refreshSelectedState">
+    <x-staff-page-header
+        eyebrow="Cashier operations"
+        title="Cashier Check-out"
+        description="Verify maintenance inspection and payment status before releasing the facility."
+    />
 
     @if (session('success'))
         <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
@@ -701,137 +700,213 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         </div>
     @endif
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <flux:input
-                label="Search"
-                placeholder="Reference, guest, contact, email, facility"
-                wire:model.live.debounce.300ms="search"
-                clearable
-                class="xl:col-span-2"
-            />
-
-            <flux:select label="List" wire:model.live="statusFilter">
-                <option value="eligible">Checked-in / Pending check-out</option>
-                <option value="checked_out">Checked-out history</option>
-            </flux:select>
-
-            <flux:select
-                label="Workflow stage"
-                wire:model.live="stageFilter"
-                :disabled="$statusFilter === 'checked_out'"
+    <x-staff-table-shell
+        :first-item="$bookingDetails->firstItem()"
+        :last-item="$bookingDetails->lastItem()"
+        :total="$bookingDetails->total()"
+        record-label="facility check-out records"
+        loading-target="search,statusFilter,stageFilter,dateFilter,perPage,sortBy,clearFilters"
+    >
+        <x-slot:filters>
+            <x-staff-filter-panel
+                title="Check-out queue and history"
+                description="Track inspection, payment, and release readiness for every checked-in facility."
+                :count="$bookingDetails->total()"
+                count-label="records"
             >
-                <option value="all">All stages</option>
-                <option value="needs_request">Needs inspection request</option>
-                <option value="waiting">Waiting for maintenance</option>
-                <option value="payment_due">Inspection complete / payment due</option>
-                <option value="ready">Ready for check-out</option>
-            </flux:select>
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <flux:input
+                        label="Search"
+                        placeholder="Reference, guest, contact, email, facility"
+                        wire:model.live.debounce.300ms="search"
+                        clearable
+                        class="xl:col-span-2"
+                    />
 
-            <flux:select label="Scheduled departure" wire:model.live="dateFilter">
-                <option value="all">All departure dates</option>
-                <option value="today">Due today</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="overdue">Past scheduled date</option>
-            </flux:select>
+                    <flux:select
+                        label="List"
+                        wire:model.live="statusFilter"
+                    >
+                        <option value="eligible">Checked-in / Pending check-out</option>
+                        <option value="checked_out">Checked-out history</option>
+                    </flux:select>
 
-            <flux:select label="Rows" wire:model.live="perPage">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </flux:select>
-        </div>
+                    <flux:select
+                        label="Workflow stage"
+                        wire:model.live="stageFilter"
+                        :disabled="$statusFilter === 'checked_out'"
+                    >
+                        <option value="all">All stages</option>
+                        <option value="needs_request">Needs inspection request</option>
+                        <option value="waiting">Waiting for maintenance</option>
+                        <option value="payment_due">Inspection complete / payment due</option>
+                        <option value="ready">Ready for check-out</option>
+                    </flux:select>
 
-        <div class="mt-3 flex justify-end">
-            <flux:button
-                type="button"
-                wire:click="clearFilters"
-                variant="ghost"
-            >
-                Clear Filters
-            </flux:button>
-        </div>
+                    <flux:select
+                        label="Scheduled departure"
+                        wire:model.live="dateFilter"
+                    >
+                        <option value="all">All departure dates</option>
+                        <option value="today">Due today</option>
+                        <option value="upcoming">Upcoming</option>
+                        <option value="overdue">Past scheduled date</option>
+                    </flux:select>
 
-        <div class="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                <thead class="bg-zinc-50 dark:bg-zinc-900">
-                    <tr>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('b_ref_no')">Ref {{ $this->sortIndicator('b_ref_no') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('guest_name')">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('facility_name')">Facility {{ $this->sortIndicator('facility_name') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_in_date')">Check-in {{ $this->sortIndicator('check_in_date') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('check_out_date')">Check-out {{ $this->sortIndicator('check_out_date') }}</button></th>
-                        <th class="px-3 py-2 text-left"><button wire:click="sortBy('amount_due')">Balance {{ $this->sortIndicator('amount_due') }}</button></th>
-                        <th class="px-3 py-2 text-left">Workflow Stage</th>
-                        <th class="px-3 py-2 text-left">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    @forelse ($bookingDetails as $detail)
-                        <tr>
-                            <td class="px-3 py-2 font-medium">{{ $detail->booking->b_ref_no }}</td>
-                            <td class="px-3 py-2">{{ $detail->booking->guest->first_name }} {{ $detail->booking->guest->last_name }}</td>
-                            <td class="px-3 py-2">{{ $detail->facility?->facility_name ?? 'No facility' }}</td>
-                            <td class="px-3 py-2">{{ $detail->check_in_date?->format('M d, Y') }}</td>
-                            <td class="px-3 py-2">{{ $detail->check_out_date?->format('M d, Y') }}</td>
-                            <td class="px-3 py-2">₱{{ number_format((float) $detail->booking->amount_due, 2) }}</td>
-                            <td class="px-3 py-2">
-                                @php($stage = $this->workflowStage($detail))
+                    <flux:select
+                        label="Rows per page"
+                        wire:model.live="perPage"
+                    >
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
 
-                                <flux:badge
-                                    color="{{ $this->workflowStageColor($stage) }}"
-                                    size="sm"
-                                >
-                                    {{ $stage }}
-                                </flux:badge>
-                            </td>
-                            <td class="px-3 py-2">
-                                <div class="flex flex-wrap gap-2">
-                                    @if (Route::has('cashier.bookings.show'))
-                                        <flux:button
-                                            href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
-                                            wire:navigate
-                                            size="sm"
-                                            variant="ghost"
-                                        >
-                                            Booking
-                                        </flux:button>
-                                    @endif
+                <x-slot:actions>
+                    <flux:button
+                        type="button"
+                        wire:click="clearFilters"
+                        variant="ghost"
+                        size="sm"
+                    >
+                        Reset view
+                    </flux:button>
+                </x-slot:actions>
+            </x-staff-filter-panel>
+        </x-slot:filters>
 
+        <table class="w-full min-w-[78rem] text-left text-sm">
+            <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
+                <tr>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('b_ref_no')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Ref {{ $this->sortIndicator('b_ref_no') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('guest_name')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Guest {{ $this->sortIndicator('guest_name') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('facility_name')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Facility {{ $this->sortIndicator('facility_name') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('check_in_date')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Check-in {{ $this->sortIndicator('check_in_date') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('check_out_date')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Check-out {{ $this->sortIndicator('check_out_date') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('amount_due')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Balance {{ $this->sortIndicator('amount_due') }}
+                        </button>
+                    </th>
+
+                    <th class="px-4 py-3 font-semibold">Workflow Stage</th>
+                    <th class="px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+            </thead>
+
+            <tbody class="divide-y divide-brand-border/70 dark:divide-zinc-800">
+                @forelse ($bookingDetails as $detail)
+                    <tr
+                        wire:key="check-out-detail-{{ $detail->booking_details_id }}"
+                        class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                    >
+                        <td class="px-4 py-4 font-medium">{{ $detail->booking->b_ref_no }}</td>
+                        <td class="px-4 py-4">{{ $detail->booking->guest->first_name }} {{ $detail->booking->guest->last_name }}</td>
+                        <td class="px-4 py-4">{{ $detail->facility?->facility_name ?? 'No facility' }}</td>
+                        <td class="px-4 py-4">{{ $detail->check_in_date?->format('M d, Y') }}</td>
+                        <td class="px-4 py-4">{{ $detail->check_out_date?->format('M d, Y') }}</td>
+                        <td class="px-4 py-4">₱{{ number_format((float) $detail->booking->amount_due, 2) }}</td>
+                        <td class="px-4 py-4">
+                            @php($stage = $this->workflowStage($detail))
+
+                            <flux:badge
+                                color="{{ $this->workflowStageColor($stage) }}"
+                                size="sm"
+                            >
+                                {{ $stage }}
+                            </flux:badge>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <div class="flex flex-wrap justify-end gap-2">
+                                @if (Route::has('cashier.bookings.show'))
                                     <flux:button
+                                        href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
+                                        wire:navigate
                                         size="sm"
-                                        variant="primary"
-                                        wire:click="selectCheckOut({{ $detail->booking_details_id }})"
+                                        variant="ghost"
                                     >
-                                        View
+                                        Booking
                                     </flux:button>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="8" class="px-3 py-10 text-center text-zinc-500">
-                                No check-out records match the selected filters.
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
+                                @endif
 
-        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="text-sm text-zinc-500">
-                Showing
-                {{ $bookingDetails->firstItem() ?? 0 }}
-                to
-                {{ $bookingDetails->lastItem() ?? 0 }}
-                of
-                {{ $bookingDetails->total() }}
-                facility check-out records
-            </p>
+                                <flux:button
+                                    type="button"
+                                    size="sm"
+                                    variant="primary"
+                                    wire:click="selectCheckOut({{ $detail->booking_details_id }})"
+                                >
+                                    View
+                                </flux:button>
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="8" class="px-5 py-6">
+                            <x-dashboard-empty-state
+                                title="No check-out records found"
+                                description="No facility check-out record matches the selected search, list, workflow stage, and departure filters."
+                                class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
+                            />
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
 
+        <x-slot:pagination>
             {{ $bookingDetails->links() }}
-        </div>
-    </div>
+        </x-slot:pagination>
+    </x-staff-table-shell>
 </div>

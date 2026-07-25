@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Reservation;
 use App\Services\PublicFacilitySearchService;
 use App\Services\PublicReservationWorkflowService;
 use Illuminate\Support\Collection;
@@ -29,8 +28,6 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
 
     public int $total_guest_count = 1;
     public array $extra_guests = [];
-
-    public ?int $created_reservation_id = null;
 
     public function mount(): void
     {
@@ -79,36 +76,37 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
 
         $validated = $this->validate($this->rules(), $this->messages());
 
-        $reservation = $service->createGuestReservation($validated);
+        try {
+            $reservation = $service->createGuestReservation($validated);
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError(
+                'facility_id',
+                $exception->getMessage(),
+            );
 
-        $this->created_reservation_id = (int) $reservation->reservation_id;
+            return;
+        }
 
-        $this->resetFormButKeepConfirmation();
-    }
+        session()->put(
+            'guest.reservation_confirmation_id',
+            (int) $reservation->reservation_id,
+        );
 
-    public function createAnother(): void
-    {
-        $this->created_reservation_id = null;
-        $this->resetFormButKeepConfirmation();
+        $this->redirect(
+            route('guest.reservations.success'),
+            navigate: true,
+        );
     }
 
     public function with(): array
     {
         $search = app(PublicFacilitySearchService::class);
-        $createdReservation = null;
-
-        if ($this->created_reservation_id) {
-            $createdReservation = Reservation::query()
-                ->with(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests'])
-                ->find($this->created_reservation_id);
-        }
 
         return [
             'facilityTypes' => $search->facilityTypes(),
             'rateTypes' => $search->rateTypesForFacilityType($this->facility_type_id),
             'availableFacilities' => $this->loadAvailableFacilities($search),
             'quote' => $this->loadQuotePreview($search),
-            'createdReservation' => $createdReservation,
         ];
     }
 
@@ -232,27 +230,6 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
         }
     }
 
-    private function resetFormButKeepConfirmation(): void
-    {
-        $this->first_name = '';
-        $this->middle_name = '';
-        $this->last_name = '';
-        $this->email = '';
-        $this->contact_no = '';
-        $this->province = 'Sultan Kudarat';
-        $this->city = 'Tacurong City';
-        $this->barangay = '';
-        $this->purok = '';
-        $this->facility_type_id = null;
-        $this->rate_type = '';
-        $this->check_in_date = now()->toDateString();
-        $this->check_out_date = now()->toDateString();
-        $this->facility_id = null;
-        $this->total_guest_count = 1;
-        $this->extra_guests = [];
-        $this->syncPaidExtraGuestRows();
-        $this->resetValidation();
-    }
 };
 
 ?>
@@ -265,50 +242,6 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
             This creates a temporary hold for the selected facility. Full booking/payment verification is still handled by the cashier.
         </p>
     </div>
-
-    @if ($createdReservation)
-        @php($detail = $createdReservation->details->first())
-
-        <div class="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-900 dark:bg-emerald-950/40">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <p class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Reservation created</p>
-                    <h2 class="mt-1 text-2xl font-bold text-emerald-950 dark:text-emerald-50">Reference: {{ $createdReservation->r_ref_no }}</h2>
-                    <p class="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
-                        Save this reference number. Present it to the cashier when verifying or paying for the reservation.
-                    </p>
-                </div>
-
-                <div class="flex gap-2 print:hidden">
-                    <flux:button type="button" variant="primary" onclick="window.print()">Print slip</flux:button>
-                    <flux:button type="button" variant="subtle" wire:click="createAnother">Create another</flux:button>
-                </div>
-            </div>
-
-            <div class="mt-6 grid gap-4 rounded-xl bg-white p-4 text-sm dark:bg-zinc-950 md:grid-cols-2 lg:grid-cols-4">
-                <div>
-                    <div class="text-zinc-500 dark:text-zinc-400">Guest</div>
-                    <div class="font-medium">{{ $createdReservation->guest?->full_name }}</div>
-                    <div class="text-zinc-500 dark:text-zinc-400">{{ $createdReservation->guest?->email }}</div>
-                </div>
-                <div>
-                    <div class="text-zinc-500 dark:text-zinc-400">Facility</div>
-                    <div class="font-medium">{{ $detail?->facility?->facility_name }}</div>
-                    <div class="text-zinc-500 dark:text-zinc-400">{{ $detail?->facility?->facilityType?->facility_type }} / {{ $detail?->rate_type }}</div>
-                </div>
-                <div>
-                    <div class="text-zinc-500 dark:text-zinc-400">Schedule</div>
-                    <div class="font-medium">{{ optional($detail?->check_in_date)->format('M d, Y') }}</div>
-                    <div class="text-zinc-500 dark:text-zinc-400">to {{ optional($detail?->check_out_date)->format('M d, Y') }}</div>
-                </div>
-                <div>
-                    <div class="text-zinc-500 dark:text-zinc-400">Estimated total</div>
-                    <div class="font-medium">₱{{ number_format((float) $createdReservation->total_price, 2) }}</div>
-                    <div class="text-zinc-500 dark:text-zinc-400">Status: {{ $createdReservation->status }}</div>
-                </div>
-            </div>
-        </div>
-    @endif
 
     <form wire:submit="save" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div class="space-y-6">
@@ -400,7 +333,10 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                 @if ($extra_guests !== [])
                     <div class="mt-5 space-y-3">
                         @foreach ($extra_guests as $index => $extraGuest)
-                            <div class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">
+                            <div
+                                wire:key="reservation-extra-guest-{{ $index }}"
+                                class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3"
+                            >
                                 <flux:input wire:model="extra_guests.{{ $index }}.first_name" label="Extra guest {{ $index + 1 }} first name" />
                                 <flux:input wire:model="extra_guests.{{ $index }}.middle_name" label="Middle name" />
                                 <flux:input wire:model="extra_guests.{{ $index }}.last_name" label="Last name" />
@@ -447,7 +383,16 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                     <p class="mt-1">This is a reservation hold only. The cashier still verifies and handles payment/booking confirmation.</p>
                 </div>
 
-                <flux:button type="submit" variant="primary" class="mt-6 w-full">Submit reservation</flux:button>
+                <flux:button
+                    type="submit"
+                    variant="primary"
+                    class="mt-6 w-full"
+                    wire:loading.attr="disabled"
+                    wire:target="save"
+                >
+                    <span wire:loading.remove wire:target="save">Submit reservation</span>
+                    <span wire:loading wire:target="save">Submitting reservation...</span>
+                </flux:button>
             </div>
         </aside>
     </form>

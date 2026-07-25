@@ -1012,28 +1012,24 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 
 ?>
 
-<div class="space-y-6" wire:poll.15s>
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                Facility Inspections
-            </h1>
-
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                Accept only cashier-requested inspections, inspect the correct facility, and send fines to billing.
-            </p>
-        </div>
-
-        @if (Route::has('maintenance.dashboard'))
-            <flux:button
-                href="{{ route('maintenance.dashboard') }}"
-                wire:navigate
-                variant="ghost"
-            >
-                Back to Dashboard
-            </flux:button>
-        @endif
-    </div>
+<div class="space-y-6" wire:poll.15s.visible>
+    <x-staff-page-header
+        eyebrow="Maintenance operations"
+        title="Facility Inspections"
+        description="Accept only cashier-requested inspections, inspect the correct facility, and send fines to billing."
+    >
+        <x-slot:actions>
+            @if (Route::has('maintenance.dashboard'))
+                <flux:button
+                    href="{{ route('maintenance.dashboard') }}"
+                    wire:navigate
+                    variant="ghost"
+                >
+                    Back to Dashboard
+                </flux:button>
+            @endif
+        </x-slot:actions>
+    </x-staff-page-header>
 
     @if (session('success'))
         <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
@@ -1347,265 +1343,295 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         </flux:card>
     @endif
 
-    <flux:card class="overflow-hidden p-0">
-        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-            <div>
-                <h2 class="font-semibold">
-                    Inspection request queue and history
-                </h2>
+    <x-staff-table-shell
+        :first-item="$inspectionRequests->firstItem()"
+        :last-item="$inspectionRequests->lastItem()"
+        :total="$inspectionRequests->total()"
+        record-label="inspection requests"
+        loading-target="search,statusFilter,assignmentFilter,dateFilter,perPage,sortBy,clearFilters"
+    >
+        <x-slot:filters>
+            <x-staff-filter-panel
+                title="Inspection request queue and history"
+                description="New cashier requests appear automatically. Active inspections remain assigned to one maintenance staff member."
+                :count="$inspectionRequests->total()"
+                count-label="requests"
+            >
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <flux:input
+                        wire:model.live.debounce.300ms="search"
+                        label="Search"
+                        placeholder="Request, booking, guest, facility, staff"
+                        clearable
+                        class="xl:col-span-2"
+                    />
 
-                <p class="mt-1 text-sm text-zinc-500">
-                    New cashier requests appear automatically. Active inspections remain assigned to one maintenance staff member.
-                </p>
-            </div>
+                    <flux:select
+                        wire:model.live="statusFilter"
+                        label="Request status"
+                    >
+                        <option value="active">Pending / In Progress</option>
+                        <option value="pending">Pending only</option>
+                        <option value="in_progress">In Progress only</option>
+                        <option value="completed">Completed history</option>
+                    </flux:select>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                <flux:input
-                    wire:model.live.debounce.300ms="search"
-                    label="Search"
-                    placeholder="Request, booking, guest, facility, staff"
-                    clearable
-                    class="xl:col-span-2"
-                />
+                    <flux:select
+                        wire:model.live="assignmentFilter"
+                        label="Assignment"
+                    >
+                        <option value="">All assignments</option>
+                        <option value="unassigned">Unassigned pending</option>
+                        <option value="mine">Assigned to me</option>
+                        <option value="other">Assigned to another staff</option>
+                    </flux:select>
 
-                <flux:select
-                    wire:model.live="statusFilter"
-                    label="Request status"
-                >
-                    <option value="active">Pending / In Progress</option>
-                    <option value="pending">Pending only</option>
-                    <option value="in_progress">In Progress only</option>
-                    <option value="completed">Completed history</option>
-                </flux:select>
+                    <flux:select
+                        wire:model.live="dateFilter"
+                        label="Scheduled departure"
+                    >
+                        <option value="all">All departure dates</option>
+                        <option value="today">Due today</option>
+                        <option value="upcoming">Upcoming</option>
+                        <option value="overdue">Past scheduled date</option>
+                    </flux:select>
 
-                <flux:select
-                    wire:model.live="assignmentFilter"
-                    label="Assignment"
-                >
-                    <option value="">All assignments</option>
-                    <option value="unassigned">Unassigned pending</option>
-                    <option value="mine">Assigned to me</option>
-                    <option value="other">Assigned to another staff</option>
-                </flux:select>
+                    <flux:select
+                        wire:model.live="perPage"
+                        label="Rows per page"
+                    >
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
 
-                <flux:select
-                    wire:model.live="dateFilter"
-                    label="Scheduled departure"
-                >
-                    <option value="all">All departure dates</option>
-                    <option value="today">Due today</option>
-                    <option value="upcoming">Upcoming</option>
-                    <option value="overdue">Past scheduled date</option>
-                </flux:select>
+                <x-slot:actions>
+                    <flux:button
+                        type="button"
+                        wire:click="clearFilters"
+                        variant="ghost"
+                        size="sm"
+                    >
+                        Reset view
+                    </flux:button>
+                </x-slot:actions>
+            </x-staff-filter-panel>
+        </x-slot:filters>
 
-                <flux:select
-                    wire:model.live="perPage"
-                    label="Rows per page"
-                >
-                    <option value="10">10</option>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </flux:select>
-            </div>
+        <table class="w-full min-w-[94rem] text-left text-sm">
+            <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
+                <tr>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('facility_inspection_request_id')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Request {{ $this->sortIndicator('facility_inspection_request_id') }}
+                        </button>
+                    </th>
 
-            <div class="mt-4 flex justify-end">
-                <flux:button
-                    wire:click="clearFilters"
-                    variant="ghost"
-                >
-                    Clear Filters
-                </flux:button>
-            </div>
-        </div>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('requested_at')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Requested {{ $this->sortIndicator('requested_at') }}
+                        </button>
+                    </th>
 
-        <div class="overflow-x-auto">
-            <table class="w-full min-w-[94rem] text-left text-sm">
-                <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <tr>
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('facility_inspection_request_id')" class="font-semibold">
-                                Request {{ $this->sortIndicator('facility_inspection_request_id') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('b_ref_no')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Booking {{ $this->sortIndicator('b_ref_no') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('requested_at')" class="font-semibold">
-                                Requested {{ $this->sortIndicator('requested_at') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('guest_name')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Guest {{ $this->sortIndicator('guest_name') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('b_ref_no')" class="font-semibold">
-                                Booking {{ $this->sortIndicator('b_ref_no') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('facility_name')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Facility {{ $this->sortIndicator('facility_name') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('guest_name')" class="font-semibold">
-                                Guest {{ $this->sortIndicator('guest_name') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('check_out_date')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Scheduled Departure {{ $this->sortIndicator('check_out_date') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('facility_name')" class="font-semibold">
-                                Facility {{ $this->sortIndicator('facility_name') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3 font-semibold">Requested By</th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('check_out_date')" class="font-semibold">
-                                Scheduled Departure {{ $this->sortIndicator('check_out_date') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('assigned_to')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Assigned To {{ $this->sortIndicator('assigned_to') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">Requested By</th>
+                    <th class="px-4 py-3">
+                        <button
+                            type="button"
+                            wire:click="sortBy('request_status')"
+                            class="font-semibold transition hover:text-brand-text dark:hover:text-white"
+                        >
+                            Request Status {{ $this->sortIndicator('request_status') }}
+                        </button>
+                    </th>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('assigned_to')" class="font-semibold">
-                                Assigned To {{ $this->sortIndicator('assigned_to') }}
-                            </button>
-                        </th>
+                    <th class="px-4 py-3 font-semibold">Inspection Result</th>
+                    <th class="px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+            </thead>
 
-                        <th class="px-4 py-3">
-                            <button wire:click="sortBy('request_status')" class="font-semibold">
-                                Request Status {{ $this->sortIndicator('request_status') }}
-                            </button>
-                        </th>
+            <tbody class="divide-y divide-brand-border/70 dark:divide-zinc-800">
+                @forelse ($inspectionRequests as $request)
+                    <tr
+                        wire:key="inspection-request-{{ $request->facility_inspection_request_id }}"
+                        class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                    >
+                        <td class="px-4 py-4 font-medium">
+                            #{{ $request->facility_inspection_request_id }}
+                        </td>
 
-                        <th class="px-4 py-3">Inspection Result</th>
-                        <th class="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                </thead>
+                        <td class="px-4 py-4">
+                            {{ $request->requested_at?->format('M d, Y h:i A') ?? 'N/A' }}
+                        </td>
 
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    @forelse ($inspectionRequests as $request)
-                        <tr wire:key="inspection-request-{{ $request->facility_inspection_request_id }}" class="align-top">
-                            <td class="px-4 py-4 font-medium">
-                                #{{ $request->facility_inspection_request_id }}
-                            </td>
+                        <td class="px-4 py-4 font-medium">
+                            {{ $request->booking?->b_ref_no ?? 'Unknown' }}
+                        </td>
 
-                            <td class="px-4 py-4">
-                                {{ $request->requested_at?->format('M d, Y h:i A') ?? 'N/A' }}
-                            </td>
+                        <td class="px-4 py-4">
+                            <p class="font-medium">
+                                {{ $request->booking?->guest?->full_name
+                                    ?? trim(($request->booking?->guest?->first_name ?? '').' '.($request->booking?->guest?->last_name ?? ''))
+                                    ?: 'Unknown guest' }}
+                            </p>
 
-                            <td class="px-4 py-4 font-medium">
-                                {{ $request->booking?->b_ref_no ?? 'Unknown' }}
-                            </td>
+                            <p class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                {{ $request->booking?->guest?->contact_no ?? 'No contact' }}
+                            </p>
+                        </td>
 
-                            <td class="px-4 py-4">
-                                <p class="font-medium">
-                                    {{ $request->booking?->guest?->full_name
-                                        ?? trim(($request->booking?->guest?->first_name ?? '').' '.($request->booking?->guest?->last_name ?? ''))
-                                        ?: 'Unknown guest' }}
-                                </p>
+                        <td class="px-4 py-4">
+                            {{ $request->facility?->facility_name ?? 'No facility' }}
+                        </td>
 
-                                <p class="mt-1 text-xs text-zinc-500">
-                                    {{ $request->booking?->guest?->contact_no ?? 'No contact' }}
-                                </p>
-                            </td>
+                        <td class="px-4 py-4">
+                            {{ $request->bookingDetail?->check_out_date?->format('M d, Y') ?? 'N/A' }}
+                        </td>
 
-                            <td class="px-4 py-4">
-                                {{ $request->facility?->facility_name ?? 'No facility' }}
-                            </td>
+                        <td class="px-4 py-4">
+                            {{ $this->staffName($request->requestedBy, 'Unknown cashier') }}
+                        </td>
 
-                            <td class="px-4 py-4">
-                                {{ $request->bookingDetail?->check_out_date?->format('M d, Y') ?? 'N/A' }}
-                            </td>
+                        <td class="px-4 py-4">
+                            {{ $this->staffName($request->assignedTo) }}
+                        </td>
 
-                            <td class="px-4 py-4">
-                                {{ $this->staffName($request->requestedBy, 'Unknown cashier') }}
-                            </td>
+                        <td class="px-4 py-4">
+                            <x-status-badge :status="(string) $request->status" />
+                        </td>
 
-                            <td class="px-4 py-4">
-                                {{ $this->staffName($request->assignedTo) }}
-                            </td>
-
-                            <td class="px-4 py-4">
+                        <td class="px-4 py-4">
+                            @if ($request->inspection !== null)
                                 <flux:badge
-                                    color="{{ $this->requestStatusColor((string) $request->status) }}"
+                                    color="{{ $this->inspectionStatusColor((string) $request->inspection->inspection_status) }}"
                                     size="sm"
                                 >
-                                    {{ $request->status }}
+                                    {{ $request->inspection->inspection_status }}
                                 </flux:badge>
-                            </td>
+                            @else
+                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">
+                                    Not recorded
+                                </span>
+                            @endif
+                        </td>
 
-                            <td class="px-4 py-4">
-                                @if ($request->inspection !== null)
-                                    <flux:badge
-                                        color="{{ $this->inspectionStatusColor((string) $request->inspection->inspection_status) }}"
+                        <td class="px-4 py-4 text-right">
+                            <div class="flex flex-wrap justify-end gap-2">
+                                @if ($request->status === 'Pending')
+                                    <flux:button
+                                        type="button"
+                                        wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
                                         size="sm"
+                                        variant="primary"
                                     >
-                                        {{ $request->inspection->inspection_status }}
-                                    </flux:badge>
-                                @else
-                                    <span class="text-xs text-zinc-500">
-                                        Not recorded
+                                        Accept & Inspect
+                                    </flux:button>
+                                @elseif (
+                                    $request->status === 'In Progress'
+                                    && (int) $request->assigned_to_user_id
+                                        === (int) Auth::id()
+                                )
+                                    <flux:button
+                                        type="button"
+                                        wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
+                                        size="sm"
+                                        variant="primary"
+                                    >
+                                        Continue
+                                    </flux:button>
+                                @elseif ($request->status === 'In Progress')
+                                    <span class="self-center text-xs text-brand-text-muted dark:text-zinc-400">
+                                        Assigned to another staff
                                     </span>
+                                @else
+                                    <flux:button
+                                        type="button"
+                                        wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
+                                        size="sm"
+                                        variant="ghost"
+                                    >
+                                        View
+                                    </flux:button>
                                 @endif
-                            </td>
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="11" class="px-5 py-6">
+                            <x-dashboard-empty-state
+                                title="No inspection requests found"
+                                description="No inspection request matches the selected search, status, assignment, and departure filters."
+                                class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
+                            />
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
 
-                            <td class="px-4 py-4 text-right">
-                                <div class="flex flex-wrap justify-end gap-2">
-                                    @if ($request->status === 'Pending')
-                                        <flux:button
-                                            wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
-                                            size="sm"
-                                            variant="primary"
-                                        >
-                                            Accept & Inspect
-                                        </flux:button>
-                                    @elseif (
-                                        $request->status === 'In Progress'
-                                        && (int) $request->assigned_to_user_id
-                                            === (int) Auth::id()
-                                    )
-                                        <flux:button
-                                            wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
-                                            size="sm"
-                                            variant="primary"
-                                        >
-                                            Continue
-                                        </flux:button>
-                                    @elseif ($request->status === 'In Progress')
-                                        <span class="self-center text-xs text-zinc-500">
-                                            Assigned to another staff
-                                        </span>
-                                    @else
-                                        <flux:button
-                                            wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
-                                            size="sm"
-                                            variant="ghost"
-                                        >
-                                            View
-                                        </flux:button>
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="11" class="px-4 py-12 text-center text-zinc-500">
-                                No inspection request matches the selected filters.
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        <div class="flex flex-col gap-3 border-t border-zinc-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
-            <p class="text-sm text-zinc-500">
-                Showing
-                {{ $inspectionRequests->firstItem() ?? 0 }}
-                to
-                {{ $inspectionRequests->lastItem() ?? 0 }}
-                of
-                {{ $inspectionRequests->total() }}
-                inspection requests
-            </p>
-
+        <x-slot:pagination>
             {{ $inspectionRequests->links() }}
-        </div>
-    </flux:card>
+        </x-slot:pagination>
+    </x-staff-table-shell>
 </div>
