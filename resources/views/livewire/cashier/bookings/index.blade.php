@@ -190,6 +190,17 @@ new class extends Component {
         $this->resetPage();
     }
 
+    public function sortIndicator(string $field): string
+    {
+        if ($this->sortField !== $field) {
+            return '↕';
+        }
+
+        return $this->sortDirection === 'asc'
+            ? '↑'
+            : '↓';
+    }
+
     public function toggleCreateForm(): void
     {
         $this->showCreateForm = ! $this->showCreateForm;
@@ -479,18 +490,6 @@ new class extends Component {
             ->pluck('status');
     }
 
-    public function statusColor(string $status): string
-    {
-        return match (strtolower($status)) {
-            'booked', 'checked-in', 'paid', 'verified' => 'green',
-            'pending verification', 'pending', 'partially checked-in', 'partially checked-out' => 'amber',
-            'checked-out', 'completed' => 'blue',
-            'cancelled', 'payment rejected', 'rejected' => 'red',
-            'rescheduled', 'transferred', 'extended' => 'purple',
-            default => 'zinc',
-        };
-    }
-
     private function facilities()
     {
         return Facility::query()
@@ -583,16 +582,17 @@ new class extends Component {
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Booking Management</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">Create paid facility bookings, reschedule bookings, transfer facilities, and extend cottage day-rate bookings.</p>
-        </div>
-
-        <flux:button variant="primary" wire:click="toggleCreateForm">
-            {{ $showCreateForm ? 'Hide Form' : 'Add Booking' }}
-        </flux:button>
-    </div>
+    <x-staff-page-header
+        eyebrow="Cashier operations"
+        title="Booking Management"
+        description="Create paid facility bookings, reschedule stays, transfer facilities, and extend eligible cottage bookings."
+    >
+        <x-slot:actions>
+            <flux:button variant="primary" wire:click="toggleCreateForm">
+                {{ $showCreateForm ? 'Hide Form' : 'Add Booking' }}
+            </flux:button>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     @if (session('success'))
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
@@ -781,130 +781,135 @@ new class extends Component {
         </div>
     @endif
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <flux:input
-                wire:model.live.debounce.300ms="search"
-                label="Search"
-                placeholder="Reference, guest, contact, email, or facility"
-                clearable
-            />
+    <x-staff-table-shell
+        :first-item="$bookings->firstItem()"
+        :last-item="$bookings->lastItem()"
+        :total="$bookings->total()"
+        record-label="booking facility records"
+        loading-target="search,bookingStatusFilter,detailStatusFilter,perPage,sortBy,clearListFilters"
+    >
+        <x-slot:filters>
+            <x-staff-filter-panel
+                title="Booking registry"
+                description="Search the complete registry, narrow it by booking or facility status, and sort any operational column."
+                :count="$bookings->total()"
+                count-label="records"
+            >
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <flux:input
+                        wire:model.live.debounce.300ms="search"
+                        label="Search"
+                        placeholder="Reference, guest, contact, email, or facility"
+                        clearable
+                    />
 
-            <flux:select wire:model.live="bookingStatusFilter" label="Booking status">
-                <option value="">All booking statuses</option>
-                @foreach ($bookingStatuses as $bookingStatus)
-                    <option value="{{ $bookingStatus }}">{{ $bookingStatus }}</option>
-                @endforeach
-            </flux:select>
+                    <flux:select wire:model.live="bookingStatusFilter" label="Booking status">
+                        <option value="">All booking statuses</option>
+                        @foreach ($bookingStatuses as $bookingStatus)
+                            <option value="{{ $bookingStatus }}">{{ $bookingStatus }}</option>
+                        @endforeach
+                    </flux:select>
 
-            <flux:select wire:model.live="detailStatusFilter" label="Facility status">
-                <option value="">All facility statuses</option>
-                @foreach ($detailStatuses as $detailStatus)
-                    <option value="{{ $detailStatus }}">{{ $detailStatus }}</option>
-                @endforeach
-            </flux:select>
+                    <flux:select wire:model.live="detailStatusFilter" label="Facility status">
+                        <option value="">All facility statuses</option>
+                        @foreach ($detailStatuses as $detailStatus)
+                            <option value="{{ $detailStatus }}">{{ $detailStatus }}</option>
+                        @endforeach
+                    </flux:select>
 
-            <flux:select wire:model.live="perPage" label="Rows per page">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </flux:select>
+                    <flux:select wire:model.live="perPage" label="Rows per page">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </flux:select>
+                </div>
 
-            <div class="flex items-end">
-                <flux:button
-                    type="button"
-                    wire:click="clearListFilters"
-                    variant="ghost"
-                    class="w-full"
-                >
-                    Clear Filters
-                </flux:button>
-            </div>
-        </div>
+                <x-slot:actions>
+                    <flux:button
+                        type="button"
+                        wire:click="clearListFilters"
+                        variant="ghost"
+                        size="sm"
+                    >
+                        Reset view
+                    </flux:button>
+                </x-slot:actions>
+            </x-staff-filter-panel>
+        </x-slot:filters>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                <thead>
-                    <tr class="text-left text-zinc-600 dark:text-zinc-400">
-                        <th class="px-3 py-2"><button wire:click="sortBy('booking_id')">ID</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('b_ref_no')">Reference</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('guest_name')">Guest</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('facility_name')">Facility</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('booking_date')">Booked On</button></th>
-                        <th class="px-3 py-2">Date Range</th>
-                        <th class="px-3 py-2">Rate</th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('total_price')">Total</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('amount_due')">Due</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('booking_status')">Booking Status</button></th>
-                        <th class="px-3 py-2"><button wire:click="sortBy('status')">Facility Status</button></th>
-                        <th class="px-3 py-2">Actions</th>
+        <table class="w-full min-w-[86rem] text-left text-sm">
+            <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
+                <tr>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_id')" class="font-semibold hover:text-brand-text dark:hover:text-white">ID {{ $this->sortIndicator('booking_id') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('b_ref_no')" class="font-semibold hover:text-brand-text dark:hover:text-white">Reference {{ $this->sortIndicator('b_ref_no') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('guest_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">Facility {{ $this->sortIndicator('facility_name') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_date')" class="font-semibold hover:text-brand-text dark:hover:text-white">Booked On {{ $this->sortIndicator('booking_date') }}</button></th>
+                    <th class="px-5 py-3 font-semibold">Date Range</th>
+                    <th class="px-5 py-3 font-semibold">Rate</th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">Total {{ $this->sortIndicator('total_price') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">Due {{ $this->sortIndicator('amount_due') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">Booking Status {{ $this->sortIndicator('booking_status') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('status')" class="font-semibold hover:text-brand-text dark:hover:text-white">Facility Status {{ $this->sortIndicator('status') }}</button></th>
+                    <th class="px-5 py-3 text-right font-semibold">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                @forelse ($bookings as $booking)
+                    <tr wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}" class="text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
+                        <td class="px-5 py-4">{{ $booking->booking_id }}</td>
+                        <td class="px-5 py-4 font-semibold">{{ $booking->b_ref_no }}</td>
+                        <td class="px-5 py-4">{{ trim($booking->guest_name) }}</td>
+                        <td class="px-5 py-4">{{ $booking->facility_name ?? 'No facility' }}</td>
+                        <td class="px-5 py-4">{{ $booking->booking_date }}</td>
+                        <td class="px-5 py-4 whitespace-nowrap">{{ $booking->check_in_date }} → {{ $booking->check_out_date }}</td>
+                        <td class="px-5 py-4">{{ $booking->rate_type }}</td>
+                        <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->total_price, 2) }}</td>
+                        <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
+                        <td class="px-5 py-4">
+                            <x-status-badge :status="(string) $booking->booking_status" />
+                        </td>
+                        <td class="px-5 py-4">
+                            <x-status-badge :status="(string) $booking->status" />
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="flex flex-wrap justify-end gap-2">
+                                @if (Route::has('cashier.bookings.show'))
+                                    <flux:button
+                                        size="sm"
+                                        variant="primary"
+                                        href="{{ route('cashier.bookings.show', $booking->booking_id) }}"
+                                        wire:navigate
+                                    >
+                                        View
+                                    </flux:button>
+                                @endif
+
+                                @if ($booking->booking_details_id)
+                                    <flux:button size="sm" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:button>
+                                    <flux:button size="sm" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:button>
+                                    <flux:button size="sm" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:button>
+                                @endif
+                            </div>
+                        </td>
                     </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    @forelse ($bookings as $booking)
-                        <tr wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}" class="text-zinc-800 dark:text-zinc-200">
-                            <td class="px-3 py-3">{{ $booking->booking_id }}</td>
-                            <td class="px-3 py-3 font-medium">{{ $booking->b_ref_no }}</td>
-                            <td class="px-3 py-3">{{ trim($booking->guest_name) }}</td>
-                            <td class="px-3 py-3">{{ $booking->facility_name ?? 'No facility' }}</td>
-                            <td class="px-3 py-3">{{ $booking->booking_date }}</td>
-                            <td class="px-3 py-3">{{ $booking->check_in_date }} → {{ $booking->check_out_date }}</td>
-                            <td class="px-3 py-3">{{ $booking->rate_type }}</td>
-                            <td class="px-3 py-3">₱{{ number_format((float) $booking->total_price, 2) }}</td>
-                            <td class="px-3 py-3">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
-                            <td class="px-3 py-3">
-                                <flux:badge color="{{ $this->statusColor((string) $booking->booking_status) }}" size="sm">
-                                    {{ $booking->booking_status }}
-                                </flux:badge>
-                            </td>
-                            <td class="px-3 py-3">
-                                <flux:badge color="{{ $this->statusColor((string) $booking->status) }}" size="sm">
-                                    {{ $booking->status }}
-                                </flux:badge>
-                            </td>
-                            <td class="px-3 py-3">
-                                <div class="flex flex-wrap gap-2">
-                                    @if (Route::has('cashier.bookings.show'))
-                                        <flux:button
-                                            size="sm"
-                                            variant="primary"
-                                            href="{{ route('cashier.bookings.show', $booking->booking_id) }}"
-                                            wire:navigate
-                                        >
-                                            View
-                                        </flux:button>
-                                    @endif
+                @empty
+                    <tr>
+                        <td colspan="12" class="px-5 py-6">
+                            <x-dashboard-empty-state
+                                title="No booking records found"
+                                description="No booking facility records match the current search and status filters."
+                                class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
+                            />
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
 
-                                    @if ($booking->booking_details_id)
-                                        <flux:button size="sm" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:button>
-                                        <flux:button size="sm" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:button>
-                                        <flux:button size="sm" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:button>
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="12" class="px-3 py-8 text-center text-zinc-500">No booking facility records match the current filters.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p class="text-sm text-zinc-500">
-                Showing
-                {{ $bookings->firstItem() ?? 0 }}
-                to
-                {{ $bookings->lastItem() ?? 0 }}
-                of
-                {{ $bookings->total() }}
-                booking facility records
-            </p>
-
+        <x-slot:pagination>
             {{ $bookings->links() }}
-        </div>
-    </div>
+        </x-slot:pagination>
+    </x-staff-table-shell>
 </div>
