@@ -18,6 +18,7 @@ class PublicWebsiteFoundationTest extends TestCase
         foreach ([
             'guest.home',
             'guest.reservations.create',
+            'guest.reservations.success',
             'guest.bookings.create',
             'guest.reservations.manage',
             'guest.confirmations.lookup',
