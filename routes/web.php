@@ -70,7 +70,7 @@ Volt::route('/admin/activity-logs', 'admin.activity-logs.index')
 
 
 // Cashier Routes
-Volt::route('/cashier/dashboard', 'cashier.dashboard.index')
+Volt::route('/cashier/dashboard', 'cashier.dashboard')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.dashboard');
 
@@ -132,7 +132,7 @@ Volt::route('/cashier/bookings/{booking}/details', 'cashier.bookings.show')
     ->name('cashier.bookings.show');
 
 // Maintenance Staff Routes
-Volt::route('/maintenance/dashboard', 'maintenance.dashboard.index')
+Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.dashboard');
 

@@ -33,7 +33,11 @@ class CashierDashboardService
 
             'pending_gcash' => Payment::query()
                 ->where('payment_status', 'Pending')
+                ->whereNotNull('booking_id')
                 ->whereNotNull('proof_of_payment_path')
+                ->whereHas('modeOfPayment', function ($query): void {
+                    $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
+                })
                 ->count(),
 
             'check_ins_today' => BookingDetail::query()
@@ -150,7 +154,11 @@ class CashierDashboardService
                 'modeOfPayment',
             ])
             ->where('payment_status', 'Pending')
+            ->whereNotNull('booking_id')
             ->whereNotNull('proof_of_payment_path')
+            ->whereHas('modeOfPayment', function ($query): void {
+                $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
+            })
             ->latest('payment_id')
             ->limit($limit)
             ->get();

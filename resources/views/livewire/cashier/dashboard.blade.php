@@ -51,16 +51,13 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
 
 ?>
 
-<div wire:poll.15s class="space-y-6">
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tight">Cashier Dashboard</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Live cashier work queues. Updates automatically every 15 seconds.
-            </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
+<div wire:poll.15s.visible class="space-y-6">
+    <x-staff-page-header
+        eyebrow="Front desk operations"
+        title="Cashier work queue"
+        description="Prioritize payment verification, arrivals, active stays, and checkout readiness. Live data refreshes while this dashboard is visible."
+    >
+        <x-slot:actions>
             @if (Route::has('cashier.action-center'))
                 <flux:button href="{{ route('cashier.action-center') }}" wire:navigate variant="primary">
                     Open Action Center
@@ -72,76 +69,76 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
                     Record Payment
                 </flux:button>
             @endif
-        </div>
-    </div>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">My verified revenue today</p>
-            <p class="mt-2 text-3xl font-semibold">₱{{ number_format($this->overview['my_revenue_today'], 2) }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Payments recorded or verified by your account.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="My verified revenue today"
+            :value="'₱'.number_format($this->overview['my_revenue_today'], 2)"
+            description="Payments recorded or verified by your account."
+            tone="success"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Unpaid entrance slips</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['unpaid_entrance_slips'] }}</p>
-            @if (Route::has('cashier.entrance-slips.index'))
-                <a href="{{ route('cashier.entrance-slips.index') }}" wire:navigate class="mt-2 inline-block text-sm font-medium underline">
-                    Process slips
-                </a>
-            @endif
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Unpaid entrance slips"
+            :value="$this->overview['unpaid_entrance_slips']"
+            description="Walk-in slips waiting for cashier payment."
+            :href="Route::has('cashier.entrance-slips.index') ? route('cashier.entrance-slips.index') : null"
+            action="Process slips"
+            tone="danger"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Pending GCash verification</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['pending_gcash'] }}</p>
-            @if (Route::has('cashier.gcash-verifications.index'))
-                <a href="{{ route('cashier.gcash-verifications.index') }}" wire:navigate class="mt-2 inline-block text-sm font-medium underline">
-                    Review payments
-                </a>
-            @endif
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Pending GCash"
+            :value="$this->overview['pending_gcash']"
+            description="GCash proofs awaiting verification."
+            :href="Route::has('cashier.gcash-verifications.index') ? route('cashier.gcash-verifications.index') : null"
+            action="Review payments"
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Active reservations</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['active_reservations'] }}</p>
-            @if (Route::has('cashier.reservations.index'))
-                <a href="{{ route('cashier.reservations.index') }}" wire:navigate class="mt-2 inline-block text-sm font-medium underline">
-                    View reservations
-                </a>
-            @endif
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Active reservations"
+            :value="$this->overview['active_reservations']"
+            description="Reservations still available for payment or conversion."
+            :href="Route::has('cashier.reservations.index') ? route('cashier.reservations.index') : null"
+            action="View reservations"
+            tone="secondary"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Scheduled check-ins today</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['check_ins_today'] }}</p>
-            @if (Route::has('cashier.check-ins.index'))
-                <a href="{{ route('cashier.check-ins.index') }}" wire:navigate class="mt-2 inline-block text-sm font-medium underline">
-                    Open check-in
-                </a>
-            @endif
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Check-ins today"
+            :value="$this->overview['check_ins_today']"
+            description="Fully paid facilities scheduled to arrive today."
+            :href="Route::has('cashier.check-ins.index') ? route('cashier.check-ins.index') : null"
+            action="Open check-in"
+            tone="info"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Facilities currently checked in</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['checked_in_facilities'] }}</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Facilities checked in"
+            :value="$this->overview['checked_in_facilities']"
+            description="Facilities currently occupied by active stays."
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Open inspection requests</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['inspection_requests_open'] }}</p>
-            @if (Route::has('cashier.check-outs.index'))
-                <a href="{{ route('cashier.check-outs.index') }}" wire:navigate class="mt-2 inline-block text-sm font-medium underline">
-                    View check-out queue
-                </a>
-            @endif
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Open inspections"
+            :value="$this->overview['inspection_requests_open']"
+            description="Checkout inspections pending or in progress."
+            :href="Route::has('cashier.check-outs.index') ? route('cashier.check-outs.index') : null"
+            action="View checkout queue"
+            tone="warning"
+        />
 
-        <flux:card>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Ready for check-out</p>
-            <p class="mt-2 text-3xl font-semibold">{{ $this->overview['ready_for_checkout'] }}</p>
-            <p class="mt-1 text-xs text-zinc-500">Inspection complete and balance settled.</p>
-        </flux:card>
+        <x-dashboard-stat-card
+            label="Ready for checkout"
+            :value="$this->overview['ready_for_checkout']"
+            description="Inspection complete with the booking balance settled."
+            :href="Route::has('cashier.check-outs.index') ? route('cashier.check-outs.index') : null"
+            action="Complete checkout"
+            tone="success"
+        />
     </div>
 
     <div class="grid gap-6 xl:grid-cols-2">
@@ -232,13 +229,14 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
                                 </p>
                             </div>
 
-                            <flux:badge color="{{ $item['badge_color'] }}" size="sm">
-                                {{ $item['state'] }}
-                            </flux:badge>
+                            <x-status-badge :status="$item['state']" />
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">No checked-in facilities are waiting for check-out.</p>
+                    <x-dashboard-empty-state
+                        title="Checkout queue is clear"
+                        description="Checked-in facilities will appear here when checkout preparation is needed."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -273,11 +271,14 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
 
                         <div class="text-right">
                             <p class="text-sm font-semibold">₱{{ number_format((float) $payment->amount_paid, 2) }}</p>
-                            <flux:badge color="amber" size="sm">Pending</flux:badge>
+                            <x-status-badge status="Pending" />
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">No GCash proof is waiting for verification.</p>
+                    <x-dashboard-empty-state
+                        title="No GCash proof waiting"
+                        description="New guest-uploaded GCash proofs will appear here for verification."
+                    />
                 @endforelse
             </div>
         </flux:card>
@@ -310,13 +311,14 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
 
                         <div class="text-right">
                             <p class="text-sm font-semibold">₱{{ number_format((float) $payment->amount_paid, 2) }}</p>
-                            <flux:badge color="{{ $payment->payment_status === 'Verified' ? 'green' : ($payment->payment_status === 'Rejected' ? 'red' : 'amber') }}" size="sm">
-                                {{ $payment->payment_status }}
-                            </flux:badge>
+                            <x-status-badge :status="$payment->payment_status" />
                         </div>
                     </div>
                 @empty
-                    <p class="text-sm text-zinc-500">You have not recorded or verified any payments yet.</p>
+                    <x-dashboard-empty-state
+                        title="No recent cashier payments"
+                        description="Payments you record or verify will appear here."
+                    />
                 @endforelse
             </div>
         </flux:card>

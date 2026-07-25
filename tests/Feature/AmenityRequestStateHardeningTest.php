@@ -134,13 +134,13 @@ class AmenityRequestStateHardeningTest extends TestCase
         ]);
     }
 
-    public function test_cancel_unpaid_request_blocks_inconsistent_balance(): void
+    public function test_cancel_pending_request_blocks_inconsistent_balance(): void
     {
         $bookingId = $this->createBooking('Checked-in', 50.00);
 
         $requestId = $this->createAmenityRequest(
             bookingId: $bookingId,
-            status: 'Awaiting Payment',
+            status: 'Pending',
             totalPrice: 100.00,
         );
 

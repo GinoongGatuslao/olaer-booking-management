@@ -2,6 +2,7 @@
 
 use App\Models\Payment;
 use App\Services\GcashPaymentVerificationService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +19,15 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     public string $statusFilter = 'Pending';
     public ?int $selectedPaymentId = null;
     public string $rejectionReason = '';
+
+    public function mount(): void
+    {
+        $paymentId = request()->integer('payment');
+
+        if ($paymentId > 0) {
+            $this->selectPayment($paymentId);
+        }
+    }
 
     public function with(): array
     {
@@ -40,7 +50,13 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function selectPayment(int $paymentId): void
     {
-        $this->selectedPaymentId = $paymentId;
+        $this->selectedPaymentId = $this
+            ->gcashPaymentsQuery()
+            ->whereKey($paymentId)
+            ->exists()
+                ? $paymentId
+                : null;
+
         $this->rejectionReason = '';
     }
 
@@ -90,13 +106,9 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function payments(): LengthAwarePaginator
     {
-        $query = Payment::query()
-            ->with(['booking.guest', 'booking.details.facility', 'modeOfPayment', 'verifier'])
-            ->whereNotNull('booking_id')
-            ->whereNotNull('proof_of_payment_path')
-            ->whereHas('modeOfPayment', function ($query): void {
-                $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
-            });
+        $query = $this
+            ->gcashPaymentsQuery()
+            ->with(['booking.guest', 'booking.details.facility', 'modeOfPayment', 'verifier']);
 
         if ($this->statusFilter !== 'all') {
             $query->whereRaw('LOWER(payment_status) = ?', [strtolower($this->statusFilter)]);
@@ -130,9 +142,11 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             return null;
         }
 
-        return Payment::query()
+        return $this
+            ->gcashPaymentsQuery()
+            ->whereKey($this->selectedPaymentId)
             ->with(['booking.guest.address', 'booking.details.facility.facilityType', 'booking.extraGuests', 'modeOfPayment', 'verifier'])
-            ->find($this->selectedPaymentId);
+            ->first();
     }
 
     public function proofUrl(?Payment $payment): ?string
@@ -146,6 +160,16 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
         }
 
         return route('payments.gcash-proof', $payment);
+    }
+
+    private function gcashPaymentsQuery(): Builder
+    {
+        return Payment::query()
+            ->whereNotNull('booking_id')
+            ->whereNotNull('proof_of_payment_path')
+            ->whereHas('modeOfPayment', function ($query): void {
+                $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
+            });
     }
 };
 ?>
@@ -260,7 +284,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             {{ $selectedPayment->reference_number ?: 'No reference provided' }}
                         </p>
                         <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                            Match this reference and amount with the uploaded proof before reviewing.
+                            Match this with the uploaded proof before verifying.
                         </p>
                     </div>
 

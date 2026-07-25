@@ -1,78 +1,41 @@
 <?php
 
-use App\Concerns\ProfileValidationRules;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Session;
-use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Profile settings')] class extends Component {
-    use ProfileValidationRules;
+    public string $displayName = '';
 
-    public string $name = '';
+    public string $username = '';
+
     public string $email = '';
 
-    /**
-     * Mount the component.
-     */
+    public string $contactNumber = '';
+
+    public string $roleName = 'Staff';
+
+    public string $status = 'Unknown';
+
+    public bool $canManageStaff = false;
+
     public function mount(): void
     {
-        $this->name = Auth::user()->name;
-        $this->email = Auth::user()->email;
-    }
+        $user = Auth::user()?->loadMissing('role');
 
-    /**
-     * Update the profile information for the currently authenticated user.
-     */
-    public function updateProfileInformation(): void
-    {
-        $user = Auth::user();
+        abort_if($user === null, 403);
 
-        $validated = $this->validate($this->profileRules($user->id));
-
-        $user->fill($validated);
-
-        if ($user->isDirty('email')) {
-            $user->email_verified_at = null;
-        }
-
-        $user->save();
-
-        Flux::toast(variant: 'success', text: __('Profile updated.'));
-    }
-
-    /**
-     * Send an email verification notification to the current user.
-     */
-    public function resendVerificationNotification(): void
-    {
-        $user = Auth::user();
-
-        if ($user->hasVerifiedEmail()) {
-            $this->redirectIntended(default: route('dashboard', absolute: false));
-
-            return;
-        }
-
-        $user->sendEmailVerificationNotification();
-
-        Session::flash('status', 'verification-link-sent');
-    }
-
-    #[Computed]
-    public function hasUnverifiedEmail(): bool
-    {
-        return Auth::user() instanceof MustVerifyEmail && ! Auth::user()->hasVerifiedEmail();
-    }
-
-    #[Computed]
-    public function showDeleteUser(): bool
-    {
-        return ! Auth::user() instanceof MustVerifyEmail
-            || (Auth::user() instanceof MustVerifyEmail && Auth::user()->hasVerifiedEmail());
+        $this->displayName = $user->full_name ?: 'Staff user';
+        $this->username = (string) $user->username;
+        $this->email = (string) $user->email;
+        $this->contactNumber = (string) ($user->contact_no ?: 'Not provided');
+        $this->roleName = (string) ($user->role?->role_name ?? 'Staff');
+        $this->status = (string) ($user->status ?: 'Unknown');
+        $this->canManageStaff = in_array(
+            $this->roleName,
+            ['Admin', 'Manager'],
+            true,
+        );
     }
 }; ?>
 
@@ -81,44 +44,88 @@ new #[Title('Profile settings')] class extends Component {
 
     <flux:heading class="sr-only">{{ __('Profile settings') }}</flux:heading>
 
-    <x-pages::settings.layout :heading="__('Profile')" :subheading="__('Update your name and email address')">
-        <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
-            <flux:input wire:model="name" :label="__('Name')" type="text" required autofocus autocomplete="name" />
+    <x-pages::settings.layout
+        :heading="__('Profile')"
+        :subheading="__('View your Olaer staff account and assigned role')"
+    >
+        <div class="my-6 space-y-6">
+            <div class="rounded-xl border border-brand-border bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <flux:avatar
+                        :name="$displayName"
+                        size="lg"
+                        class="bg-brand-spring text-brand-primary"
+                    />
 
-            <div>
-                <flux:input wire:model="email" :label="__('Email')" type="email" required autocomplete="email" />
-
-                @if ($this->hasUnverifiedEmail)
-                    <div>
-                        <flux:text class="mt-4">
-                            {{ __('Your email address is unverified.') }}
-
-                            <flux:link class="text-sm cursor-pointer" wire:click.prevent="resendVerificationNotification">
-                                {{ __('Click here to re-send the verification email.') }}
-                            </flux:link>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <flux:heading size="lg">{{ $displayName }}</flux:heading>
+                            <x-status-badge :status="$status" />
+                        </div>
+                        <flux:text class="mt-1">
+                            {{ $roleName }} · {{ '@'.$username }}
                         </flux:text>
-
-                        @if (session('status') === 'verification-link-sent')
-                            <flux:text class="mt-2 font-medium !dark:text-green-400 !text-green-600">
-                                {{ __('A new verification link has been sent to your email address.') }}
-                            </flux:text>
-                        @endif
                     </div>
-                @endif
+                </div>
             </div>
 
-            <div class="flex items-center gap-4">
-                <div class="flex items-center justify-end">
-                    <flux:button variant="primary" type="submit" class="w-full" data-test="update-profile-button">
-                        {{ __('Save') }}
-                    </flux:button>
+            <dl class="grid gap-4 sm:grid-cols-2">
+                <div class="rounded-xl border border-brand-border bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-brand-text-muted">
+                        Email address
+                    </dt>
+                    <dd class="mt-1 break-words text-sm font-medium text-brand-text dark:text-zinc-100">
+                        {{ $email }}
+                    </dd>
                 </div>
 
-            </div>
-        </form>
+                <div class="rounded-xl border border-brand-border bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-brand-text-muted">
+                        Contact number
+                    </dt>
+                    <dd class="mt-1 text-sm font-medium text-brand-text dark:text-zinc-100">
+                        {{ $contactNumber }}
+                    </dd>
+                </div>
 
-        @if ($this->showDeleteUser)
-            <livewire:pages::settings.delete-user-form />
-        @endif
+                <div class="rounded-xl border border-brand-border bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-brand-text-muted">
+                        Username
+                    </dt>
+                    <dd class="mt-1 text-sm font-medium text-brand-text dark:text-zinc-100">
+                        {{ $username }}
+                    </dd>
+                </div>
+
+                <div class="rounded-xl border border-brand-border bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-brand-text-muted">
+                        Assigned role
+                    </dt>
+                    <dd class="mt-1 text-sm font-medium text-brand-text dark:text-zinc-100">
+                        {{ $roleName }}
+                    </dd>
+                </div>
+            </dl>
+
+            <flux:callout
+                icon="information-circle"
+                heading="Profile changes are managed centrally"
+            >
+                Staff names, contact information, roles, and account status are maintained by an Admin or Manager.
+            </flux:callout>
+
+            @if ($canManageStaff)
+                <div class="flex justify-end">
+                    <flux:button
+                        :href="route('admin.users.index')"
+                        icon="users"
+                        variant="primary"
+                        wire:navigate
+                    >
+                        Manage Staff Accounts
+                    </flux:button>
+                </div>
+            @endif
+        </div>
     </x-pages::settings.layout>
 </section>

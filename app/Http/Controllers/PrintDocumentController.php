@@ -6,12 +6,14 @@ use App\Models\Booking;
 use App\Models\EntranceSlip;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Services\BillingStatementService;
 use Illuminate\View\View;
 
 class PrintDocumentController extends Controller
 {
-    public function entranceSlip(EntranceSlip $entranceSlip): View
-    {
+    public function entranceSlip(
+        EntranceSlip $entranceSlip,
+    ): View {
         $entranceSlip->load([
             'createdBy.role',
             'handledBy.role',
@@ -27,8 +29,9 @@ class PrintDocumentController extends Controller
         ]);
     }
 
-    public function reservationConfirmation(Reservation $reservation): View
-    {
+    public function reservationConfirmation(
+        Reservation $reservation,
+    ): View {
         $reservation->load([
             'guest.address',
             'user.role',
@@ -38,13 +41,17 @@ class PrintDocumentController extends Controller
             'payments.modeOfPayment',
         ]);
 
-        return view('print.reservation-confirmation', [
-            'reservation' => $reservation,
-        ]);
+        return view(
+            'print.reservation-confirmation',
+            [
+                'reservation' => $reservation,
+            ],
+        );
     }
 
-    public function bookingConfirmation(Booking $booking): View
-    {
+    public function bookingConfirmation(
+        Booking $booking,
+    ): View {
         $booking->load([
             'guest.address',
             'user.role',
@@ -61,8 +68,19 @@ class PrintDocumentController extends Controller
         ]);
     }
 
-    public function paymentReceipt(Payment $payment): View
-    {
+    public function paymentReceipt(
+        Payment $payment,
+    ): View {
+        abort_unless(
+            strtolower(
+                trim(
+                    (string) $payment->payment_status,
+                ),
+            ) === 'verified',
+            409,
+            'Only verified payments can be printed as receipts.',
+        );
+
         $payment->load([
             'modeOfPayment',
             'user.role',
@@ -77,23 +95,16 @@ class PrintDocumentController extends Controller
         ]);
     }
 
-    public function billingStatement(Booking $booking): View
-    {
-        $booking->load([
-            'guest.address',
-            'details.facility.facilityType',
-            'details.discount',
-            'extraGuests',
-            'amenityRequests.details.amenity.amenityName',
-            'amenityRequests.details.facility',
-            'guestFines.fine.amenity.amenityName',
-            'guestFines.fine.damageType',
-            'guestFines.facility',
-            'payments.modeOfPayment',
-        ]);
-
+    public function billingStatement(
+        Booking $booking,
+        BillingStatementService $billingStatements,
+    ): View {
         return view('print.billing-statement', [
-            'booking' => $booking,
+            'statement' =>
+                $billingStatements
+                    ->statementForBooking(
+                        (int) $booking->booking_id,
+                    ),
         ]);
     }
 }

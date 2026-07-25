@@ -73,21 +73,51 @@ class BillingStatementService
     ): array {
         $query = $this->billingRecordsQuery($filters);
 
+        $bookingSummaryRows = DB::query()
+            ->fromSub(
+                clone $query,
+                'billing_summary_records',
+            )
+            ->selectRaw('booking_id')
+            ->selectRaw(
+                'MAX(booking_total) as booking_total',
+            )
+            ->selectRaw(
+                'MAX(booking_amount_due) as booking_amount_due',
+            )
+            ->groupBy('booking_id');
+
+        $bookingSummary = DB::query()
+            ->fromSub(
+                $bookingSummaryRows,
+                'billing_booking_summary',
+            );
+
         $summary = [
             'count' => (clone $query)->count(),
             'total_amount' => round(
-                (float) (clone $query)->sum('amount'),
+                (float) (clone $bookingSummary)
+                    ->sum('booking_total'),
                 2,
             ),
             'total_due' => round(
-                (float) (clone $query)->sum('amount_due'),
+                (float) (clone $bookingSummary)
+                    ->sum('booking_amount_due'),
                 2,
             ),
-            'paid_count' => (clone $query)
-                ->where('payment_status', 'Paid')
+            'paid_count' => (clone $bookingSummary)
+                ->where(
+                    'booking_amount_due',
+                    '<=',
+                    0,
+                )
                 ->count(),
-            'unpaid_count' => (clone $query)
-                ->where('payment_status', 'Unpaid')
+            'unpaid_count' => (clone $bookingSummary)
+                ->where(
+                    'booking_amount_due',
+                    '>',
+                    0,
+                )
                 ->count(),
         ];
 
@@ -295,8 +325,22 @@ class BillingStatementService
                     'date' => optional($request->date_created)->toDateString(),
                     'description' => $names !== '' ? $names : 'Amenity request',
                     'amount' => round((float) $request->total_price, 2),
-                    'amount_due' => $request->amenity_request_status === 'Awaiting Payment' ? round((float) $request->total_price, 2) : 0.00,
-                    'payment_status' => $request->amenity_request_status === 'Awaiting Payment' ? 'Unpaid' : 'Paid',
+                    'amount_due' => round(
+                        (float) (
+                            $request->booking?->amount_due
+                            ?? 0
+                        ),
+                        2,
+                    ),
+                    'payment_status' => round(
+                        (float) (
+                            $request->booking?->amount_due
+                            ?? 0
+                        ),
+                        2,
+                    ) <= 0
+                        ? 'Paid'
+                        : 'Unpaid',
                 ];
             });
     }
@@ -327,8 +371,22 @@ class BillingStatementService
                     'date' => optional($guestFine->date_checked)->toDateString(),
                     'description' => $description,
                     'amount' => round((float) $guestFine->total_charge, 2),
-                    'amount_due' => round((float) ($guestFine->booking?->amount_due ?? 0), 2) > 0 ? round((float) $guestFine->total_charge, 2) : 0.00,
-                    'payment_status' => round((float) ($guestFine->booking?->amount_due ?? 0), 2) <= 0 ? 'Paid' : 'Unpaid',
+                    'amount_due' => round(
+                        (float) (
+                            $guestFine->booking?->amount_due
+                            ?? 0
+                        ),
+                        2,
+                    ),
+                    'payment_status' => round(
+                        (float) (
+                            $guestFine->booking?->amount_due
+                            ?? 0
+                        ),
+                        2,
+                    ) <= 0
+                        ? 'Paid'
+                        : 'Unpaid',
                 ];
             });
     }
@@ -462,6 +520,12 @@ class BillingStatementService
                         THEN 'Paid'
                     ELSE 'Unpaid'
                 END as payment_status"
+            )
+            ->selectRaw(
+                'billing_booking.total_price as booking_total'
+            )
+            ->selectRaw(
+                'billing_booking.amount_due as booking_amount_due'
             );
     }
 
@@ -536,20 +600,20 @@ class BillingStatementService
                 'billing_amenity_request.total_price as amount'
             )
             ->selectRaw(
-                "CASE
-                    WHEN billing_amenity_request.amenity_request_status
-                        = 'Awaiting Payment'
-                    THEN billing_amenity_request.total_price
-                    ELSE 0
-                END as amount_due"
+                'amenity_booking.amount_due as amount_due'
             )
             ->selectRaw(
                 "CASE
-                    WHEN billing_amenity_request.amenity_request_status
-                        = 'Awaiting Payment'
-                    THEN 'Unpaid'
-                    ELSE 'Paid'
+                    WHEN amenity_booking.amount_due <= 0
+                    THEN 'Paid'
+                    ELSE 'Unpaid'
                 END as payment_status"
+            )
+            ->selectRaw(
+                'amenity_booking.total_price as booking_total'
+            )
+            ->selectRaw(
+                'amenity_booking.amount_due as booking_amount_due'
             );
     }
 
@@ -640,11 +704,7 @@ class BillingStatementService
                 'billing_guest_fine.total_charge as amount'
             )
             ->selectRaw(
-                "CASE
-                    WHEN fine_booking.amount_due > 0
-                    THEN billing_guest_fine.total_charge
-                    ELSE 0
-                END as amount_due"
+                'fine_booking.amount_due as amount_due'
             )
             ->selectRaw(
                 "CASE
@@ -652,6 +712,12 @@ class BillingStatementService
                     THEN 'Paid'
                     ELSE 'Unpaid'
                 END as payment_status"
+            )
+            ->selectRaw(
+                'fine_booking.total_price as booking_total'
+            )
+            ->selectRaw(
+                'fine_booking.amount_due as booking_amount_due'
             );
     }
 

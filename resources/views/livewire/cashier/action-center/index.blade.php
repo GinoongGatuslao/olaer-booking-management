@@ -27,7 +27,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Action Center - Olaer Spring Resor
 
 ?>
 
-<div wire:poll.10s="refreshActionCenter" class="space-y-6">
+<div wire:poll.10s.visible="refreshActionCenter" class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Cashier Action Center</h1>
@@ -106,7 +106,9 @@ new #[Layout('layouts.app')] #[Title('Cashier Action Center - Olaer Spring Resor
                             default => 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
                         };
                         $routeName = $alert['route_name'] ?? null;
-                        $url = $routeName && Route::has($routeName) ? route($routeName) : '#';
+                        $url = $routeName && Route::has($routeName)
+                            ? route($routeName, $alert['route_params'] ?? [])
+                            : '#';
                     @endphp
 
                     <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">

@@ -57,8 +57,8 @@ class MaintenanceDashboardService
     }
 
     /**
-     * Paid requests that are unassigned, plus deliveries currently assigned
-     * to the logged-in maintenance staff.
+     * Pending requests that are unassigned, plus deliveries currently
+     * assigned to the logged-in maintenance staff.
      */
     public function amenityWorkQueue(int $maintenanceUserId, int $limit = 8): Collection
     {

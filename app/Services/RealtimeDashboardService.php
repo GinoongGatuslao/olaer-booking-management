@@ -13,7 +13,7 @@ class RealtimeDashboardService
     public function cashier(): array
     {
         return [
-            'pending_gcash' => Payment::query()->where('payment_status', 'Pending')->count(),
+            'pending_gcash' => $this->pendingGcashCount(),
             'pending_checkouts' => FacilityInspectionRequest::query()->whereIn('status', ['Pending', 'In Progress'])->count(),
             'completed_inspections' => FacilityInspectionRequest::query()->where('status', 'Completed')->whereDate('completed_at', today())->count(),
             'unpaid_bookings' => Booking::query()->where('amount_due', '>', 0)->count(),
@@ -38,8 +38,20 @@ class RealtimeDashboardService
         return [
             'today_revenue' => (float) Payment::query()->where('payment_status', 'Verified')->whereDate('date_paid', today())->sum('amount_paid'),
             'active_bookings' => Booking::query()->whereIn('status', ['Booked', 'Checked-in', 'Partially Checked-out'])->count(),
-            'pending_gcash' => Payment::query()->where('payment_status', 'Pending')->count(),
+            'pending_gcash' => $this->pendingGcashCount(),
             'facility_usage' => DB::table('tbl_booking_details')->whereIn('status', ['Booked', 'Checked-in'])->count(),
         ];
+    }
+
+    private function pendingGcashCount(): int
+    {
+        return Payment::query()
+            ->where('payment_status', 'Pending')
+            ->whereNotNull('booking_id')
+            ->whereNotNull('proof_of_payment_path')
+            ->whereHas('modeOfPayment', function ($query): void {
+                $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
+            })
+            ->count();
     }
 }
