@@ -28,6 +28,11 @@ class OperationalTableVisualFoundationTest extends TestCase
             "Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index')",
             $routes,
         );
+
+        $this->assertStringContainsString(
+            "Volt::route('/maintenance/facility-inspections', 'maintenance.facility-inspections.index')",
+            $routes,
+        );
     }
 
     public function test_operational_list_foundation_is_presentation_only(): void
@@ -134,6 +139,25 @@ class OperationalTableVisualFoundationTest extends TestCase
                 'workflowAction' =>
                     'wire:confirm="Accept this amenity request for delivery?"',
             ],
+            [
+                'path' =>
+                    'views/livewire/maintenance/facility-inspections/index.blade.php',
+                'aliases' => [
+                    "#[Url(as: 'q', except: '')]",
+                    "#[Url(as: 'status', except: 'active')]",
+                    "#[Url(as: 'assignment', except: '')]",
+                    "#[Url(as: 'departure', except: 'all')]",
+                    "#[Url(as: 'sort', except: 'requested_at')]",
+                    "#[Url(as: 'direction', except: 'asc')]",
+                    "#[Url(as: 'per_page', except: 10)]",
+                ],
+                'clearAction' =>
+                    'wire:click="clearFilters"',
+                'pagination' =>
+                    '$inspectionRequests->links()',
+                'workflowAction' =>
+                    'wire:click="selectRequest({{ $request->facility_inspection_request_id }})"',
+            ],
         ];
 
         foreach ($pages as $page) {
@@ -203,6 +227,47 @@ class OperationalTableVisualFoundationTest extends TestCase
         );
         $this->assertStringNotContainsString(
             '@php($reservations = $this->reservations())',
+            $content,
+        );
+    }
+
+    public function test_facility_inspection_queue_keeps_polling_deep_link_and_ownership_contracts(): void
+    {
+        $content = file_get_contents(
+            resource_path(
+                'views/livewire/maintenance/facility-inspections/index.blade.php',
+            ),
+        );
+
+        $this->assertIsString($content);
+
+        foreach (
+            [
+                'wire:poll.15s.visible',
+                "\$requestId = request()->integer('request');",
+                '$this->selectRequest($requestId);',
+                'wire:key="inspection-request-{{ $request->facility_inspection_request_id }}"',
+                'Accept & Inspect',
+                'Continue',
+                'View',
+                'assigned_to_user_id',
+                'Auth::id()',
+                'wire:click="markNoDamage"',
+                'wire:click="addFine"',
+            ] as $requiredContent
+        ) {
+            $this->assertStringContainsString(
+                $requiredContent,
+                $content,
+            );
+        }
+
+        $this->assertStringNotContainsString(
+            'wire:poll.15s>',
+            $content,
+        );
+        $this->assertStringNotContainsString(
+            "route('cashier.bookings.show'",
             $content,
         );
     }
