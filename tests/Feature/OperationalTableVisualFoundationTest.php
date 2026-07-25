@@ -20,6 +20,11 @@ class OperationalTableVisualFoundationTest extends TestCase
         );
 
         $this->assertStringContainsString(
+            "Volt::route('/cashier/reservations', 'cashier.reservations.index')",
+            $routes,
+        );
+
+        $this->assertStringContainsString(
             "Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index')",
             $routes,
         );
@@ -76,6 +81,23 @@ class OperationalTableVisualFoundationTest extends TestCase
     public function test_selected_operational_pages_share_the_visual_foundation_and_keep_livewire_contracts(): void
     {
         $pages = [
+            [
+                'path' =>
+                    'views/livewire/cashier/reservations/index.blade.php',
+                'aliases' => [
+                    "#[Url(as: 'q', except: '')]",
+                    "#[Url(as: 'status', except: 'Active')]",
+                    "#[Url(as: 'sort', except: 'reservation_id')]",
+                    "#[Url(as: 'direction', except: 'desc')]",
+                    "#[Url(as: 'per_page', except: 10)]",
+                ],
+                'clearAction' =>
+                    'wire:click="clearListFilters"',
+                'pagination' =>
+                    '$reservations->links()',
+                'workflowAction' =>
+                    'wire:click="beginReschedule({{ $reservation->reservation_id }})"',
+            ],
             [
                 'path' =>
                     'views/livewire/cashier/bookings/index.blade.php',
@@ -152,5 +174,36 @@ class OperationalTableVisualFoundationTest extends TestCase
                 );
             }
         }
+    }
+
+    public function test_reservation_registry_prepares_its_paginator_outside_blade(): void
+    {
+        $content = file_get_contents(
+            resource_path(
+                'views/livewire/cashier/reservations/index.blade.php',
+            ),
+        );
+
+        $this->assertIsString($content);
+        $this->assertStringContainsString(
+            'use Illuminate\Pagination\LengthAwarePaginator;',
+            $content,
+        );
+        $this->assertStringContainsString(
+            'public function with(): array',
+            $content,
+        );
+        $this->assertStringContainsString(
+            "'reservations' => \$this->reservations(),",
+            $content,
+        );
+        $this->assertStringContainsString(
+            'public function reservations(): LengthAwarePaginator',
+            $content,
+        );
+        $this->assertStringNotContainsString(
+            '@php($reservations = $this->reservations())',
+            $content,
+        );
     }
 }
