@@ -25,6 +25,11 @@ class OperationalTableVisualFoundationTest extends TestCase
         );
 
         $this->assertStringContainsString(
+            "Volt::route('/cashier/check-outs', 'cashier.check-outs.index')",
+            $routes,
+        );
+
+        $this->assertStringContainsString(
             "Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index')",
             $routes,
         );
@@ -102,6 +107,8 @@ class OperationalTableVisualFoundationTest extends TestCase
                     '$reservations->links()',
                 'workflowAction' =>
                     'wire:click="beginReschedule({{ $reservation->reservation_id }})"',
+                'statusPresentation' =>
+                    '<x-status-badge',
             ],
             [
                 'path' =>
@@ -120,6 +127,29 @@ class OperationalTableVisualFoundationTest extends TestCase
                     '$bookings->links()',
                 'workflowAction' =>
                     'wire:click="openReschedule({{ $booking->booking_details_id }})"',
+                'statusPresentation' =>
+                    '<x-status-badge',
+            ],
+            [
+                'path' =>
+                    'views/livewire/cashier/check-outs/index.blade.php',
+                'aliases' => [
+                    "#[Url(as: 'q', except: '')]",
+                    "#[Url(as: 'list', except: 'eligible')]",
+                    "#[Url(as: 'stage', except: 'all')]",
+                    "#[Url(as: 'departure', except: 'all')]",
+                    "#[Url(as: 'sort', except: 'check_out_date')]",
+                    "#[Url(as: 'direction', except: 'asc')]",
+                    "#[Url(as: 'per_page', except: 10)]",
+                ],
+                'clearAction' =>
+                    'wire:click="clearFilters"',
+                'pagination' =>
+                    '$bookingDetails->links()',
+                'workflowAction' =>
+                    'wire:click="selectCheckOut({{ $detail->booking_details_id }})"',
+                'statusPresentation' =>
+                    'workflowStageColor($stage)',
             ],
             [
                 'path' =>
@@ -138,6 +168,8 @@ class OperationalTableVisualFoundationTest extends TestCase
                     '$requests->links()',
                 'workflowAction' =>
                     'wire:confirm="Accept this amenity request for delivery?"',
+                'statusPresentation' =>
+                    '<x-status-badge',
             ],
             [
                 'path' =>
@@ -157,6 +189,8 @@ class OperationalTableVisualFoundationTest extends TestCase
                     '$inspectionRequests->links()',
                 'workflowAction' =>
                     'wire:click="selectRequest({{ $request->facility_inspection_request_id }})"',
+                'statusPresentation' =>
+                    '<x-status-badge',
             ],
         ];
 
@@ -175,7 +209,7 @@ class OperationalTableVisualFoundationTest extends TestCase
                     '<x-staff-table-shell',
                     '<x-staff-filter-panel',
                     '<x-dashboard-empty-state',
-                    '<x-status-badge',
+                    $page['statusPresentation'],
                     'use Livewire\WithPagination;',
                     'wire:model.live.debounce.300ms="search"',
                     'public function sortBy(string $field): void',
@@ -227,6 +261,51 @@ class OperationalTableVisualFoundationTest extends TestCase
         );
         $this->assertStringNotContainsString(
             '@php($reservations = $this->reservations())',
+            $content,
+        );
+    }
+
+    public function test_cashier_checkout_queue_keeps_polling_deep_link_and_workflow_contracts(): void
+    {
+        $content = file_get_contents(
+            resource_path(
+                'views/livewire/cashier/check-outs/index.blade.php',
+            ),
+        );
+
+        $this->assertIsString($content);
+
+        foreach (
+            [
+                'wire:poll.10s.visible="refreshSelectedState"',
+                "\$bookingId = request()->integer('booking');",
+                '$checkedInDetails->count() === 1',
+                '$this->selectCheckOut((int) $checkedInDetails->first()->booking_details_id);',
+                'wire:key="check-out-detail-{{ $detail->booking_details_id }}"',
+                "route('cashier.bookings.show', \$detail->booking_id)",
+                'wire:click="selectCheckOut({{ $detail->booking_details_id }})"',
+                'wire:click="sendInspectionRequest"',
+                "route('cashier.payments.index', ['booking' => \$selectedBookingId])",
+                '$selectedBookingAmountDue > 0',
+                "\$selectedInspectionRequest->status === 'Completed'",
+                '$selectedInspection !== null',
+                '$selectedBookingAmountDue <= 0',
+                'wire:click="confirmCheckOut"',
+                'wire:confirm="Confirm this facility check-out?"',
+                'CheckOutInspectionRequestService $inspectionRequestService',
+                '$inspectionRequestService->requestInspection(',
+                'CheckOutWorkflowService $checkOutWorkflow',
+                '$checkOutWorkflow->checkOutBookingDetail(',
+            ] as $requiredContent
+        ) {
+            $this->assertStringContainsString(
+                $requiredContent,
+                $content,
+            );
+        }
+
+        $this->assertStringNotContainsString(
+            'wire:poll.10s="refreshSelectedState"',
             $content,
         );
     }
