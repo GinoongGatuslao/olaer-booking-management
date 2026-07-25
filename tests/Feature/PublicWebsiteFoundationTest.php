@@ -102,6 +102,24 @@ class PublicWebsiteFoundationTest extends TestCase
             ->assertSee(route('guest.bookings.create'), false);
     }
 
+    public function test_direct_booking_page_uses_global_exceptions_without_ineffective_imports(): void
+    {
+        $bookingPage = file_get_contents(
+            resource_path('views/livewire/guest/bookings/create.blade.php'),
+        );
+
+        $this->assertIsString($bookingPage);
+        $this->assertStringNotContainsString('use Throwable;', $bookingPage);
+        $this->assertStringContainsString(
+            'catch (\InvalidArgumentException $exception)',
+            $bookingPage,
+        );
+        $this->assertStringContainsString(
+            'catch (\Throwable $exception)',
+            $bookingPage,
+        );
+    }
+
     public function test_public_contact_details_match_the_resort_configuration(): void
     {
         $resort = config('olaer.public');
