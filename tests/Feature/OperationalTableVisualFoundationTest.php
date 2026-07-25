@@ -25,6 +25,11 @@ class OperationalTableVisualFoundationTest extends TestCase
         );
 
         $this->assertStringContainsString(
+            "Volt::route('/cashier/check-ins', 'cashier.check-ins.index')",
+            $routes,
+        );
+
+        $this->assertStringContainsString(
             "Volt::route('/cashier/check-outs', 'cashier.check-outs.index')",
             $routes,
         );
@@ -129,6 +134,26 @@ class OperationalTableVisualFoundationTest extends TestCase
                     'wire:click="openReschedule({{ $booking->booking_details_id }})"',
                 'statusPresentation' =>
                     '<x-status-badge',
+            ],
+            [
+                'path' =>
+                    'views/livewire/cashier/check-ins/index.blade.php',
+                'aliases' => [
+                    "#[Url(as: 'q', except: '')]",
+                    "#[Url(as: 'list', except: 'eligible')]",
+                    "#[Url(as: 'arrival', except: 'all')]",
+                    "#[Url(as: 'sort', except: 'check_in_date')]",
+                    "#[Url(as: 'direction', except: 'asc')]",
+                    "#[Url(as: 'per_page', except: 10)]",
+                ],
+                'clearAction' =>
+                    'wire:click="clearFilters"',
+                'pagination' =>
+                    '$bookingDetails->links()',
+                'workflowAction' =>
+                    'wire:click="selectCheckIn({{ $detail->booking_details_id }})"',
+                'statusPresentation' =>
+                    'statusColor((string) $detail->status)',
             ],
             [
                 'path' =>
@@ -263,6 +288,42 @@ class OperationalTableVisualFoundationTest extends TestCase
             '@php($reservations = $this->reservations())',
             $content,
         );
+    }
+
+    public function test_cashier_check_in_queue_keeps_deep_link_and_hardened_workflow_contracts(): void
+    {
+        $content = file_get_contents(
+            resource_path(
+                'views/livewire/cashier/check-ins/index.blade.php',
+            ),
+        );
+
+        $this->assertIsString($content);
+
+        foreach (
+            [
+                "\$bookingId = request()->integer('booking');",
+                "->whereIn('status', ['Booked', 'Rescheduled', 'Transferred', 'Extended'])",
+                "->where('amount_due', '<=', 0)",
+                "->whereNotIn('status', ['Cancelled', 'Checked-out'])",
+                '$eligibleDetails->count() === 1',
+                '$this->selectCheckIn((int) $eligibleDetails->first()->booking_details_id);',
+                'wire:key="check-in-detail-{{ $detail->booking_details_id }}"',
+                "route('cashier.bookings.show', \$detail->booking_id)",
+                "@if (\$statusFilter === 'eligible')",
+                'wire:click="selectCheckIn({{ $detail->booking_details_id }})"',
+                'wire:click="confirmCheckIn"',
+                'wire:click="cancelSelection"',
+                'CheckInWorkflowService $checkInWorkflow',
+                '$checkInWorkflow->checkInBookingDetail(',
+                '(int) Auth::id()',
+            ] as $requiredContent
+        ) {
+            $this->assertStringContainsString(
+                $requiredContent,
+                $content,
+            );
+        }
     }
 
     public function test_cashier_checkout_queue_keeps_polling_deep_link_and_workflow_contracts(): void
