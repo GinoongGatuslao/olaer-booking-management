@@ -17,7 +17,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use InvalidArgumentException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -701,7 +700,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 $validated['cancellationReason'],
                 (int) Auth::id(),
             );
-        } catch (InvalidArgumentException $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError(
                 'cancellationReason',
                 $exception->getMessage(),
