@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Booking;
 use App\Models\Facility;
 use App\Services\PublicBookingSearchService;
 use App\Services\PublicBookingWorkflowService;
@@ -39,8 +38,6 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
     public string $reference_number = '';
     public $proof_of_payment = null;
 
-    public ?int $created_booking_id = null;
-    public ?string $success_message = null;
     public ?string $error_message = null;
 
     public function mount(): void
@@ -104,7 +101,6 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
         GcashProofStorageService $proofStorage,
     ): void
     {
-        $this->success_message = null;
         $this->error_message = null;
         $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
@@ -162,15 +158,14 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     ...$validated,
                     'proof_of_payment_path' => $proofPath,
                 ]);
-
-            $this->created_booking_id = (int) $booking->booking_id;
-            $this->success_message = 'Booking submitted. Your payment proof is pending cashier verification.';
         } catch (\InvalidArgumentException $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
             }
 
             $this->error_message = $exception->getMessage();
+
+            return;
         } catch (\Throwable $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
@@ -179,7 +174,19 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             report($exception);
 
             $this->error_message = 'The booking could not be submitted. Please try again or contact the resort.';
+
+            return;
         }
+
+        session()->put(
+            'guest.booking_confirmation_id',
+            (int) $booking->booking_id,
+        );
+
+        $this->redirect(
+            route('guest.bookings.success'),
+            navigate: true,
+        );
     }
 
     public function selectedFacility(): ?Facility
@@ -217,17 +224,6 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
         );
     }
 
-    public function createdBooking(): ?Booking
-    {
-        if (! $this->created_booking_id) {
-            return null;
-        }
-
-        return Booking::query()
-            ->with(['guest.address', 'details.facility.facilityType', 'extraGuests', 'payments.modeOfPayment'])
-            ->find($this->created_booking_id);
-    }
-
     public function with(): array
     {
         $search = app(PublicBookingSearchService::class);
@@ -245,7 +241,6 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             'maxTotalGuests' => $this->maxTotalGuests(),
             'occupancy' => $this->occupancyPreview(),
             'quote' => $this->quotePreview(),
-            'createdBooking' => $this->createdBooking(),
         ];
     }
 
@@ -300,52 +295,6 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             </div>
             <a href="{{ route('guest.home') }}" class="text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400">Back to homepage</a>
         </div>
-
-        @if ($success_message && $createdBooking)
-            <div class="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-900 dark:bg-emerald-950/40">
-                <h2 class="text-xl font-semibold text-emerald-950 dark:text-emerald-100">Booking submitted</h2>
-                <p class="mt-2 text-sm text-emerald-800 dark:text-emerald-200">{{ $success_message }}</p>
-
-                <div class="mt-6 grid gap-4 rounded-xl bg-white p-4 text-sm dark:bg-zinc-950 md:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                        <p class="text-zinc-500">Booking reference</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ $createdBooking->b_ref_no }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Guest</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ $createdBooking->guest->first_name }} {{ $createdBooking->guest->last_name }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Facility</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ optional($createdBooking->details->first()?->facility)->facility_name }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Status</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ $createdBooking->status }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Total</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">₱{{ number_format((float) $createdBooking->total_price, 2) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Amount due until verified</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">₱{{ number_format((float) $createdBooking->amount_due, 2) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">GCash reference</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ optional($createdBooking->payments->first())->reference_number }}</p>
-                    </div>
-                    <div>
-                        <p class="text-zinc-500">Payment status</p>
-                        <p class="font-semibold text-zinc-950 dark:text-white">{{ optional($createdBooking->payments->first())->payment_status }}</p>
-                    </div>
-                </div>
-
-                <p class="mt-4 text-sm text-emerald-800 dark:text-emerald-200">
-                    Save this reference number. The cashier will use it to verify your payment and booking.
-                </p>
-            </div>
-        @endif
 
         @if ($error_message)
             <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -424,7 +373,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     @if ($extra_guests !== [])
                         <div class="mt-5 grid gap-4">
                             @foreach ($extra_guests as $index => $extraGuest)
-                                <div class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">
+                                <div wire:key="booking-extra-guest-{{ $index }}" class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">
                                     <flux:input wire:model="extra_guests.{{ $index }}.first_name" label="Extra guest {{ $index + 1 }} first name" />
                                     <flux:input wire:model="extra_guests.{{ $index }}.middle_name" label="Middle name" />
                                     <flux:input wire:model="extra_guests.{{ $index }}.last_name" label="Last name" />
@@ -520,8 +469,9 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     </div>
                 @endif
 
-                <flux:button type="submit" variant="primary" class="mt-6 w-full" wire:loading.attr="disabled">
-                    Submit booking
+                <flux:button type="submit" variant="primary" class="mt-6 w-full" wire:loading.attr="disabled" wire:target="save">
+                    <span wire:loading.remove wire:target="save">Submit booking</span>
+                    <span wire:loading wire:target="save">Submitting booking...</span>
                 </flux:button>
 
                 <p class="mt-3 text-xs leading-5 text-zinc-500">

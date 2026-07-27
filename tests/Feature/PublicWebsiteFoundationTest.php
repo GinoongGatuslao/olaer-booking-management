@@ -20,6 +20,7 @@ class PublicWebsiteFoundationTest extends TestCase
             'guest.reservations.create',
             'guest.reservations.success',
             'guest.bookings.create',
+            'guest.bookings.success',
             'guest.reservations.manage',
             'guest.confirmations.lookup',
         ] as $routeName) {

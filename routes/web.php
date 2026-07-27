@@ -178,6 +178,9 @@ Volt::route('/reservation/success', 'guest.reservations.success')
 Volt::route('/book', 'guest.bookings.create')
     ->name('guest.bookings.create');
 
+Volt::route('/booking/success', 'guest.bookings.success')
+    ->name('guest.bookings.success');
+
 Volt::route('/reservation/manage', 'guest.reservations.manage')
     ->name('guest.reservations.manage');
 
