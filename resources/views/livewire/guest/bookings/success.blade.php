@@ -54,7 +54,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                         Thank you for your booking request.
                     </h1>
                     <p class="mt-3 max-w-3xl text-sm leading-6 text-emerald-800 dark:text-emerald-200 sm:text-base">
-                        Your facility is being held while our cashier reviews the GCash proof you submitted@if ($booking->guest?->first_name), {{ $booking->guest->first_name }}@endif. Your request is pending cashier verification; your payment and booking are not confirmed until verification is complete.
+                        Your facility is being held while our cashier reviews the GCash proof you submitted. Your request is pending cashier verification; your payment and booking are not confirmed until verification is complete.
                     </p>
                 </header>
 
