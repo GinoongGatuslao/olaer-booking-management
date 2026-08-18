@@ -28,9 +28,6 @@ Volt::route('/dashboard', 'dashboard')
     ->middleware(['auth', 'active'])
     ->name('dashboard');
 
-
-
-
 // Admin Routes
 Volt::route('/admin/dashboard', 'admin.dashboard')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
@@ -67,7 +64,6 @@ Volt::route('/admin/reports', 'admin.reports.index')
 Volt::route('/admin/activity-logs', 'admin.activity-logs.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.activity-logs.index');
-
 
 // Cashier Routes
 Volt::route('/cashier/dashboard', 'cashier.dashboard')
@@ -152,11 +148,9 @@ Volt::route('/maintenance/action-center', 'maintenance.action-center.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.action-center');
 
-Volt::route('/maintenance/create-amenity-request', 'cashier.amenity-requests.index')
+Volt::route('/maintenance/create-amenity-request', 'maintenance.amenity-requests.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.create-amenity-request.index');
-
-
 
 // Security Guard Routes
 Volt::route('/security/dashboard', 'security.dashboard')
@@ -167,9 +161,7 @@ Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
     ->middleware(['auth', 'active', 'role:Security Guard'])
     ->name('security.entrance-slips.create');
 
-
-
-//Guest Routes
+// Guest Routes
 Volt::route('/', 'guest.home')
     ->name('guest.home');
 
@@ -191,8 +183,7 @@ Volt::route('/reservation/manage', 'guest.reservations.manage')
 Volt::route('/confirmation', 'guest.confirmations.lookup')
     ->name('guest.confirmations.lookup');
 
-
-//secure gcash routes
+// secure gcash routes
 Route::get(
     '/secure/gcash-proofs/{payment}',
     GcashProofController::class,
@@ -205,8 +196,7 @@ Route::get(
     ])
     ->name('payments.gcash-proof');
 
-
-//Print
+// Print
 Route::middleware(['auth', 'active'])->prefix('print')->name('print.')->group(function () {
     Route::get('/entrance-slip/{entranceSlip}', [PrintDocumentController::class, 'entranceSlip'])
         ->middleware('role:Admin,Manager,Cashier,Security Guard')

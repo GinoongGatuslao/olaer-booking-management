@@ -3,6 +3,8 @@
 use App\Models\Booking;
 use App\Models\Reservation;
 use App\Services\GuestConfirmationLookupService;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -46,6 +48,24 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
         $this->searched = true;
         $this->reservation_id = null;
         $this->booking_id = null;
+
+        $rateLimitKey = $this->rateLimitKey(
+            $validated['type'],
+            $validated['reference_no'],
+            $validated['email'],
+        );
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 10)) {
+            $this->searched = false;
+            $this->addError(
+                'reference_no',
+                'Too many confirmation lookup attempts. Please try again later.',
+            );
+
+            return;
+        }
+
+        RateLimiter::hit($rateLimitKey, 60);
 
         if ($validated['type'] === 'reservation') {
             $reservation = $lookup->reservation($validated['reference_no'], $validated['email']);
@@ -103,6 +123,21 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
         $this->reservation_id = null;
         $this->booking_id = null;
         $this->resetValidation();
+    }
+
+    private function rateLimitKey(
+        string $type,
+        string $referenceNumber,
+        string $email,
+    ): string {
+        $identity = implode('|', [
+            request()->ip(),
+            $type,
+            Str::upper(Str::squish($referenceNumber)),
+            Str::lower(trim($email)),
+        ]);
+
+        return 'confirmation-lookup:'.hash('sha256', $identity);
     }
 };
 ?>

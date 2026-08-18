@@ -2,12 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Models\GuestVerificationOtp;
+use App\Models\Reservation;
 use App\Services\GuestReservationManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class GuestReservationManagementHardeningTest extends TestCase
@@ -171,6 +176,168 @@ class GuestReservationManagementHardeningTest extends TestCase
             now()->greaterThan($expiresAt),
             'Active OTPs should be expired after cancellation.',
         );
+    }
+
+    public function test_otp_requests_are_limited_to_three_per_ten_minutes_without_disclosing_existence(): void
+    {
+        Mail::fake();
+
+        $typeId = $this->createFacilityType();
+        $facilityId = $this->createFacility($typeId, 'Room OTP');
+        $reservationId = $this->createReservation(
+            facilityId: $facilityId,
+            status: 'Active',
+            amountDue: 1000.00,
+            checkIn: '2026-12-10',
+            checkOut: '2026-12-12',
+        );
+        $reservation = Reservation::query()
+            ->with('guest')
+            ->findOrFail($reservationId);
+        $reference = (string) $reservation->r_ref_no;
+        $email = (string) $reservation->guest->email;
+        $rateLimitKey = $this->reservationOtpRateLimitKey(
+            $reference,
+            $email,
+        );
+        RateLimiter::clear($rateLimitKey);
+
+        $component = Livewire::test('guest.reservations.manage')
+            ->set('referenceNumber', $reference)
+            ->set('email', $email);
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $component
+                ->call('requestOtp')
+                ->assertSet('otpRequested', true)
+                ->assertSet('errorMessage', null)
+                ->assertSet('debugOtp', null);
+        }
+
+        $this->assertGreaterThanOrEqual(
+            599,
+            RateLimiter::availableIn($rateLimitKey),
+        );
+
+        $component
+            ->call('requestOtp')
+            ->assertSet('otpRequested', false)
+            ->assertSet(
+                'errorMessage',
+                'We could not send a one-time code. Check your details or try again later.',
+            );
+
+        $this->assertDatabaseCount('tbl_guest_verification_otp', 3);
+
+        $latestOtp = GuestVerificationOtp::query()
+            ->latest('guest_verification_otp_id')
+            ->firstOrFail();
+        $this->assertTrue(
+            $latestOtp->expires_at->between(
+                now()->addMinutes(9)->addSeconds(55),
+                now()->addMinutes(10)->addSeconds(5),
+            ),
+        );
+
+        $missingReference = 'R-NOT-FOUND-OTP';
+        $missingEmail = 'missing-otp@example.test';
+        RateLimiter::clear($this->reservationOtpRateLimitKey(
+            $missingReference,
+            $missingEmail,
+        ));
+
+        $missingComponent = Livewire::test('guest.reservations.manage')
+            ->set('referenceNumber', $missingReference)
+            ->set('email', $missingEmail);
+
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $missingComponent->call('requestOtp');
+        }
+
+        $this->assertSame(
+            $component->get('errorMessage'),
+            $missingComponent->get('errorMessage'),
+        );
+    }
+
+    public function test_otp_expiration_and_verification_attempt_limit_remain_enforced(): void
+    {
+        Mail::fake();
+
+        $typeId = $this->createFacilityType();
+        $facilityId = $this->createFacility(
+            $typeId,
+            'Room OTP Verification',
+        );
+        $reservationId = $this->createReservation(
+            facilityId: $facilityId,
+            status: 'Active',
+            amountDue: 1000.00,
+            checkIn: '2027-01-10',
+            checkOut: '2027-01-12',
+        );
+        $reservation = Reservation::query()
+            ->with('guest')
+            ->findOrFail($reservationId);
+        $service = app(GuestReservationManagementService::class);
+
+        $service->requestOtp(
+            (string) $reservation->r_ref_no,
+            (string) $reservation->guest->email,
+        );
+
+        $otp = GuestVerificationOtp::query()
+            ->latest('guest_verification_otp_id')
+            ->firstOrFail();
+        $otp->update(['otp_hash' => Hash::make('123456')]);
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            try {
+                $service->verifyOtp(
+                    $reservationId,
+                    (string) $reservation->guest->email,
+                    '000000',
+                );
+                $this->fail('An invalid OTP was accepted.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertSame('Invalid OTP.', $exception->getMessage());
+            }
+        }
+
+        $this->assertSame(5, (int) $otp->refresh()->attempts);
+
+        try {
+            $service->verifyOtp(
+                $reservationId,
+                (string) $reservation->guest->email,
+                '123456',
+            );
+            $this->fail('The OTP attempt limit was bypassed.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertSame(
+                'Too many OTP attempts. Please request a new OTP.',
+                $exception->getMessage(),
+            );
+        }
+
+        $otp->update([
+            'attempts' => 0,
+            'expires_at' => now()->subSecond(),
+        ]);
+
+        try {
+            $service->verifyOtp(
+                $reservationId,
+                (string) $reservation->guest->email,
+                '123456',
+            );
+            $this->fail('An expired OTP was accepted.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertSame(
+                'OTP expired. Please request a new OTP.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     private function createFacilityType(): int
@@ -366,5 +533,18 @@ class GuestReservationManagementHardeningTest extends TestCase
 
         return DB::table('tbl_payment')
             ->insertGetId($payload);
+    }
+
+    private function reservationOtpRateLimitKey(
+        string $referenceNumber,
+        string $email,
+    ): string {
+        $identity = implode('|', [
+            '127.0.0.1',
+            strtoupper(trim($referenceNumber)),
+            strtolower(trim($email)),
+        ]);
+
+        return 'reservation-management-otp:'.hash('sha256', $identity);
     }
 }

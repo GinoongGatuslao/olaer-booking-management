@@ -340,6 +340,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 (int) $validated['editingRequestId'],
                 (int) $validated['editForm']['facility_id'],
                 $validated['editItems'],
+                (int) Auth::id(),
             );
 
             $this->cancelEdit();
@@ -364,6 +365,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
         try {
             $workflow->cancelUnpaidRequest(
                 $amenityRequestId,
+                (int) Auth::id(),
             );
 
             $this->resetPage();

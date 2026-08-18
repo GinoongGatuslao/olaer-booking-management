@@ -18,7 +18,9 @@ use InvalidArgumentException;
 class GuestReservationManagementService
 {
     private const OTP_PURPOSE = 'reservation_manage';
+
     private const OTP_TTL_MINUTES = 10;
+
     private const MAX_OTP_ATTEMPTS = 5;
 
     public function __construct(
@@ -78,7 +80,7 @@ class GuestReservationManagementService
             throw new InvalidArgumentException('OTP verification details are incomplete.');
         }
 
-        return DB::transaction(function () use ($reservationId, $email, $otp): Reservation {
+        $reservation = DB::transaction(function () use ($reservationId, $email, $otp): ?Reservation {
             $record = GuestVerificationOtp::query()
                 ->where('reservation_id', $reservationId)
                 ->where('email', $email)
@@ -103,7 +105,7 @@ class GuestReservationManagementService
             $record->increment('attempts');
 
             if (! Hash::check($otp, $record->otp_hash)) {
-                throw new InvalidArgumentException('Invalid OTP.');
+                return null;
             }
 
             $record->update(['verified_at' => Carbon::now()]);
@@ -112,6 +114,12 @@ class GuestReservationManagementService
                 ->with(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments'])
                 ->findOrFail($reservationId);
         });
+
+        if ($reservation === null) {
+            throw new InvalidArgumentException('Invalid OTP.');
+        }
+
+        return $reservation;
     }
 
     public function facilityTypes(): Collection
@@ -409,7 +417,7 @@ class GuestReservationManagementService
     private function sendOtpEmail(string $email, string $referenceNumber, string $otp): void
     {
         Mail::raw(
-            "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in " . self::OTP_TTL_MINUTES . ' minutes.',
+            "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in ".self::OTP_TTL_MINUTES.' minutes.',
             function ($message) use ($email): void {
                 $message->to($email)->subject('Olaer Spring Resort Reservation OTP');
             }

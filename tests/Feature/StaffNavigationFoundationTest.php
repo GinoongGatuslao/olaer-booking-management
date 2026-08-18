@@ -41,6 +41,7 @@ class StaffNavigationFoundationTest extends TestCase
             'maintenance.dashboard',
             'maintenance.facility-inspections.index',
             'maintenance.amenity-requests.index',
+            'maintenance.create-amenity-request.index',
             'maintenance.notifications.index',
             'maintenance.action-center',
             'security.dashboard',

@@ -3,6 +3,7 @@
 use App\Models\Reservation;
 use App\Services\GuestReservationManagementService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -54,14 +55,28 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             'email' => ['required', 'email', 'max:100'],
         ]);
 
+        $rateLimitKey = $this->otpRequestRateLimitKey();
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 3)) {
+            $this->errorMessage =
+                'We could not send a one-time code. Check your details or try again later.';
+
+            return;
+        }
+
+        RateLimiter::hit($rateLimitKey, 600);
+
         try {
             $result = $service->requestOtp($this->referenceNumber, $this->email);
             $this->reservationId = $result['reservation_id'];
-            $this->debugOtp = $result['debug_otp'];
+            $this->debugOtp = app()->environment('local')
+                ? $result['debug_otp']
+                : null;
             $this->otpRequested = true;
             $this->successMessage = 'OTP sent to the reservation email.';
-        } catch (Throwable $exception) {
-            $this->errorMessage = $exception->getMessage();
+        } catch (Throwable) {
+            $this->errorMessage =
+                'We could not send a one-time code. Check your details or try again later.';
         }
     }
 
@@ -360,6 +375,17 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     {
         $this->successMessage = null;
         $this->errorMessage = null;
+    }
+
+    private function otpRequestRateLimitKey(): string
+    {
+        $identity = implode('|', [
+            request()->ip(),
+            Str::upper(Str::squish($this->referenceNumber)),
+            Str::lower(trim($this->email)),
+        ]);
+
+        return 'reservation-management-otp:'.hash('sha256', $identity);
     }
 
     private function resetVerification(): void

@@ -109,6 +109,7 @@ class StaffNavigationRouteRenderTest extends TestCase
                 [
                     'maintenance.dashboard',
                     'maintenance.amenity-requests.index',
+                    'maintenance.create-amenity-request.index',
                     'maintenance.facility-inspections.index',
                     'maintenance.notifications.index',
                     'maintenance.action-center',
