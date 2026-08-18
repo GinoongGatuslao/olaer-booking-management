@@ -19,6 +19,7 @@ class Facility extends Model
     protected $fillable = [
         'facility_name',
         'facility_type_id',
+        'facility_product_id',
         'facility_size',
         'facility_status',
         'capacity',
@@ -27,6 +28,12 @@ class Facility extends Model
     public function facilityType(): BelongsTo
     {
         return $this->belongsTo(FacilityType::class, 'facility_type_id', 'facility_type_id');
+    }
+
+    /** @return BelongsTo<FacilityProduct, $this> */
+    public function facilityProduct(): BelongsTo
+    {
+        return $this->belongsTo(FacilityProduct::class, 'facility_product_id', 'facility_product_id');
     }
 
     public function prices(): HasMany

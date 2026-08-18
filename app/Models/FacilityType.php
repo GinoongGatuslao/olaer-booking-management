@@ -24,4 +24,10 @@ class FacilityType extends Model
     {
         return $this->hasMany(Facility::class, 'facility_type_id', 'facility_type_id');
     }
+
+    /** @return HasMany<FacilityProduct, $this> */
+    public function facilityProducts(): HasMany
+    {
+        return $this->hasMany(FacilityProduct::class, 'facility_type_id', 'facility_type_id');
+    }
 }
