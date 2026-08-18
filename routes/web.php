@@ -128,7 +128,7 @@ Volt::route('/cashier/action-center', 'cashier.action-center.index')
 
 Volt::route('/cashier/bookings/{booking}/details', 'cashier.bookings.show')
     ->whereNumber('booking')
-    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->middleware(['auth', 'active', 'role:Cashier,Admin,Manager'])
     ->name('cashier.bookings.show');
 
 // Maintenance Staff Routes
@@ -151,6 +151,10 @@ Volt::route('/maintenance/notifications', 'maintenance.notifications.index')
 Volt::route('/maintenance/action-center', 'maintenance.action-center.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.action-center');
+
+Volt::route('/maintenance/create-amenity-request', 'cashier.amenity-requests.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.create-amenity-request.index');
 
 
 
