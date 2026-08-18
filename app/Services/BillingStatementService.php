@@ -7,7 +7,6 @@ use App\Models\Booking;
 use App\Models\FacilityPrice;
 use App\Models\GuestFine;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -188,6 +187,14 @@ class BillingStatementService
         });
 
         $facilityLines = $booking->details->map(function ($detail): array {
+            $storedUnitRate = $detail->getAttribute('unit_rate');
+            $legacyRate = $storedUnitRate !== null
+                ? (float) $storedUnitRate
+                : $this->currentFacilityRate(
+                    (int) $detail->facility_id,
+                    (string) $detail->rate_type,
+                );
+
             return [
                 'facility' => $detail->facility?->facility_name ?? 'Facility unavailable',
                 'facility_type' => $detail->facility?->facilityType?->facility_type ?? 'N/A',
@@ -195,7 +202,7 @@ class BillingStatementService
                 'check_in_date' => optional($detail->check_in_date)->toDateString(),
                 'check_out_date' => optional($detail->check_out_date)->toDateString(),
                 'status' => (string) $detail->status,
-                'base_price' => $this->moneyOrFallback($detail->base_price, $this->currentFacilityRate((int) $detail->facility_id, (string) $detail->rate_type)),
+                'base_price' => $this->moneyOrFallback($detail->base_price, $legacyRate),
                 'discount_amount' => round((float) ($detail->discount_amount ?? 0), 2),
                 'extra_guest_fee' => round((float) ($detail->extra_guest_fee ?? 0), 2),
                 'line_total' => $this->moneyOrFallback($detail->line_total, null),
@@ -230,7 +237,7 @@ class BillingStatementService
         $fineLines = $booking->guestFines->map(function ($guestFine): array {
             $fine = $guestFine->fine;
             $description = $fine?->fine_type === 'Amenity'
-                ? trim(($fine?->amenity?->amenityName?->amenity_name ?? 'Amenity') . ' - ' . ($fine?->damageType?->damage_type ?? 'Damage'))
+                ? trim(($fine?->amenity?->amenityName?->amenity_name ?? 'Amenity').' - '.($fine?->damageType?->damage_type ?? 'Damage'))
                 : ($fine?->situational_fine ?? 'Situational Fine');
 
             return [
@@ -318,7 +325,7 @@ class BillingStatementService
 
                 return [
                     'transaction_type' => 'Amenity Request',
-                    'reference_no' => 'AR-' . $request->amenity_request_id,
+                    'reference_no' => 'AR-'.$request->amenity_request_id,
                     'booking_ref_no' => (string) ($request->booking?->b_ref_no ?? 'N/A'),
                     'booking_id' => (int) ($request->booking_id ?? 0),
                     'guest_name' => $request->booking?->guest?->full_name ?? 'Guest unavailable',
@@ -359,12 +366,12 @@ class BillingStatementService
             ->map(function (GuestFine $guestFine): array {
                 $fine = $guestFine->fine;
                 $description = $fine?->fine_type === 'Amenity'
-                    ? trim(($fine?->amenity?->amenityName?->amenity_name ?? 'Amenity') . ' - ' . ($fine?->damageType?->damage_type ?? 'Damage'))
+                    ? trim(($fine?->amenity?->amenityName?->amenity_name ?? 'Amenity').' - '.($fine?->damageType?->damage_type ?? 'Damage'))
                     : ($fine?->situational_fine ?? 'Fine');
 
                 return [
                     'transaction_type' => 'Fine',
-                    'reference_no' => 'GF-' . $guestFine->guest_fine_id,
+                    'reference_no' => 'GF-'.$guestFine->guest_fine_id,
                     'booking_ref_no' => (string) ($guestFine->booking?->b_ref_no ?? 'N/A'),
                     'booking_id' => (int) ($guestFine->booking_id ?? 0),
                     'guest_name' => $guestFine->booking?->guest?->full_name ?? 'Guest unavailable',
@@ -477,21 +484,19 @@ class BillingStatementService
             )
             ->when(
                 $this->from($filters),
-                fn (QueryBuilder $query, string $from) =>
-                    $query->whereDate(
-                        'billing_booking.booking_date',
-                        '>=',
-                        $from,
-                    ),
+                fn (QueryBuilder $query, string $from) => $query->whereDate(
+                    'billing_booking.booking_date',
+                    '>=',
+                    $from,
+                ),
             )
             ->when(
                 $this->to($filters),
-                fn (QueryBuilder $query, string $to) =>
-                    $query->whereDate(
-                        'billing_booking.booking_date',
-                        '<=',
-                        $to,
-                    ),
+                fn (QueryBuilder $query, string $to) => $query->whereDate(
+                    'billing_booking.booking_date',
+                    '<=',
+                    $to,
+                ),
             )
             ->selectRaw("'Booking' as transaction_type")
             ->selectRaw(
@@ -563,21 +568,19 @@ class BillingStatementService
             )
             ->when(
                 $this->from($filters),
-                fn (QueryBuilder $query, string $from) =>
-                    $query->whereDate(
-                        'billing_amenity_request.date_created',
-                        '>=',
-                        $from,
-                    ),
+                fn (QueryBuilder $query, string $from) => $query->whereDate(
+                    'billing_amenity_request.date_created',
+                    '>=',
+                    $from,
+                ),
             )
             ->when(
                 $this->to($filters),
-                fn (QueryBuilder $query, string $to) =>
-                    $query->whereDate(
-                        'billing_amenity_request.date_created',
-                        '<=',
-                        $to,
-                    ),
+                fn (QueryBuilder $query, string $to) => $query->whereDate(
+                    'billing_amenity_request.date_created',
+                    '<=',
+                    $to,
+                ),
             )
             ->selectRaw(
                 "'Amenity Request' as transaction_type"
@@ -671,21 +674,19 @@ class BillingStatementService
             )
             ->when(
                 $this->from($filters),
-                fn (QueryBuilder $query, string $from) =>
-                    $query->whereDate(
-                        'billing_guest_fine.date_checked',
-                        '>=',
-                        $from,
-                    ),
+                fn (QueryBuilder $query, string $from) => $query->whereDate(
+                    'billing_guest_fine.date_checked',
+                    '>=',
+                    $from,
+                ),
             )
             ->when(
                 $this->to($filters),
-                fn (QueryBuilder $query, string $to) =>
-                    $query->whereDate(
-                        'billing_guest_fine.date_checked',
-                        '<=',
-                        $to,
-                    ),
+                fn (QueryBuilder $query, string $to) => $query->whereDate(
+                    'billing_guest_fine.date_checked',
+                    '<=',
+                    $to,
+                ),
             )
             ->selectRaw("'Fine' as transaction_type")
             ->selectRaw($reference.' as reference_no')
@@ -724,16 +725,14 @@ class BillingStatementService
     private function guestNameExpression(string $alias): string
     {
         return match (DB::connection()->getDriverName()) {
-            'sqlite', 'pgsql' =>
-                "TRIM(
+            'sqlite', 'pgsql' => "TRIM(
                     COALESCE({$alias}.first_name, '')
                     || ' '
                     || COALESCE({$alias}.middle_name, '')
                     || ' '
                     || COALESCE({$alias}.last_name, '')
                 )",
-            'sqlsrv' =>
-                "LTRIM(RTRIM(
+            'sqlsrv' => "LTRIM(RTRIM(
                     CONCAT(
                         COALESCE({$alias}.first_name, ''),
                         ' ',
@@ -742,8 +741,7 @@ class BillingStatementService
                         COALESCE({$alias}.last_name, '')
                     )
                 ))",
-            default =>
-                "TRIM(
+            default => "TRIM(
                     CONCAT_WS(
                         ' ',
                         {$alias}.first_name,
@@ -765,20 +763,16 @@ class BillingStatementService
         );
 
         return match (DB::connection()->getDriverName()) {
-            'sqlite', 'pgsql' =>
-                "'{$escapedPrefix}' || CAST({$column} AS TEXT)",
-            'sqlsrv' =>
-                "CONCAT('{$escapedPrefix}', CAST({$column} AS VARCHAR(30)))",
-            default =>
-                "CONCAT('{$escapedPrefix}', {$column})",
+            'sqlite', 'pgsql' => "'{$escapedPrefix}' || CAST({$column} AS TEXT)",
+            'sqlsrv' => "CONCAT('{$escapedPrefix}', CAST({$column} AS VARCHAR(30)))",
+            default => "CONCAT('{$escapedPrefix}', {$column})",
         };
     }
 
     private function fineDescriptionExpression(): string
     {
         return match (DB::connection()->getDriverName()) {
-            'sqlite', 'pgsql' =>
-                "CASE
+            'sqlite', 'pgsql' => "CASE
                     WHEN billing_fine.fine_type
                         IN ('Amenity', 'Amenity Fine')
                     THEN TRIM(
@@ -797,8 +791,7 @@ class BillingStatementService
                         'Fine'
                     )
                 END",
-            default =>
-                "CASE
+            default => "CASE
                     WHEN billing_fine.fine_type
                         IN ('Amenity', 'Amenity Fine')
                     THEN TRIM(

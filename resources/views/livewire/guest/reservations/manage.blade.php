@@ -126,7 +126,8 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         $this->checkInDate = optional($detail->check_in_date)->format('Y-m-d') ?: Carbon::tomorrow()->toDateString();
         $this->checkOutDate = optional($detail->check_out_date)->format('Y-m-d') ?: Carbon::tomorrow()->addDay()->toDateString();
         $this->totalGuestCount = (int) (
-            $reservation->total_guest_count
+            $detail->guest_count
+            ?: $reservation->total_guest_count
             ?: (
                 $detail->facility
                     ? app(\App\Services\FacilityOccupancyService::class)
@@ -177,13 +178,11 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
     public function updatedFacilityId(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
     }
 
     public function updatedTotalGuestCount(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
     }
 
@@ -194,8 +193,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
 
         $this->resetMessages();
-        $this->clampTotalGuests();
-        $this->syncPaidExtraGuestRows();
+        $guestCountRules = ['required', 'integer', 'min:1'];
+        $strictMaximum = $this->strictMaximum();
+
+        if ($strictMaximum !== null) {
+            $guestCountRules[] = 'max:'.$strictMaximum;
+        }
 
         $this->validate([
             'facilityTypeId' => ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'],
@@ -203,16 +206,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             'facilityId' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
             'checkInDate' => ['required', 'date', 'after_or_equal:today'],
             'checkOutDate' => ['required', 'date', 'after:checkInDate'],
-            'totalGuestCount' => [
-                'required',
-                'integer',
-                'min:1',
-                'max:'.$this->maxTotalGuests(),
-            ],
+            'totalGuestCount' => $guestCountRules,
             'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
             'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
         ]);
+        $this->syncPaidExtraGuestRows();
 
         try {
             $service->updateReservation((int) $this->reservationId, [
@@ -308,14 +307,18 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
     }
 
-    public function maxTotalGuests(): int
+    public function strictMaximum(): ?int
     {
         if (! $this->facilityId) {
-            return 1;
+            return null;
         }
 
-        return app(\App\Services\FacilityOccupancyService::class)
-            ->maxTotalGuests($this->facilityId);
+        try {
+            return app(\App\Services\FacilityOccupancyService::class)
+                ->strictMaximum($this->facilityId);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function occupancyPreview(): ?array
@@ -335,22 +338,17 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
     }
 
-    private function clampTotalGuests(): void
-    {
-        $this->totalGuestCount = max(
-            1,
-            min(
-                $this->maxTotalGuests(),
-                $this->totalGuestCount,
-            ),
-        );
-    }
-
     private function syncPaidExtraGuestRows(): void
     {
         $this->extraGuests = array_values($this->extraGuests);
+        $occupancy = $this->occupancyPreview();
+
+        if ($this->facilityId !== null && $occupancy === null) {
+            return;
+        }
+
         $required = (int) (
-            $this->occupancyPreview()['paid_extra_guest_count']
+            $occupancy['paid_extra_guest_count']
             ?? 0
         );
 
@@ -693,7 +691,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                             <label wire:key="manage-available-facility-{{ $facility->facility_id }}" class="cursor-pointer rounded-2xl border p-4 transition {{ (int) $facilityId === (int) $facility->facility_id ? 'border-public-spring bg-public-spring-light ring-1 ring-public-spring' : 'border-public-forest/10 hover:border-public-spring/60 hover:bg-public-cream/50' }}">
                                 <input type="radio" wire:model.live="facilityId" value="{{ $facility->facility_id }}" class="sr-only">
                                 <p class="font-semibold text-public-forest dark:text-white">{{ $facility->facility_name }}</p>
-                                <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->capacity }} guests maximum</p>
+                                <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</p>
                             </label>
                         @empty
                             <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection.</p>
@@ -705,16 +703,20 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                 <div class="mt-6 max-w-xl">
                     <flux:field>
                         <flux:label>Total guests</flux:label>
-                        <flux:input type="number" min="1" max="{{ $this->maxTotalGuests() }}" wire:model.live="totalGuestCount" />
+                        <flux:input type="number" min="1" max="{{ $this->strictMaximum() }}" wire:model.live="totalGuestCount" />
                         <flux:error name="totalGuestCount" />
                     </flux:field>
                     <p class="mt-2 text-xs leading-5 text-public-muted dark:text-zinc-400">
-                        Total guests includes the primary guest. Rooms include 4 guests; only guests above 4 are charged. Cottages and function halls have no extra-guest charge but cannot exceed capacity.
+                        Total guests includes the primary guest. Rooms include 4 guests and enforce the maximum shown below. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
                     </p>
                     @if ($this->occupancyPreview())
                         @php($occupancy = $this->occupancyPreview())
                         <p class="mt-2 text-xs font-medium text-public-forest dark:text-emerald-200">
-                            Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                            @if ($occupancy['strict_maximum'])
+                                Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
+                            @else
+                                Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
+                            @endif
                         </p>
                     @endif
                 </div>

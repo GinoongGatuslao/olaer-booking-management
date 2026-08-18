@@ -7,7 +7,7 @@ use App\Models\FacilityPrice;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
-use App\Models\ReservationExtraGuest;
+use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +30,7 @@ class GuestReservationManagementService
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly BookingAvailabilityService $availability,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
+        private readonly DetailExtraGuestService $detailGuests,
     ) {}
 
     /** @return array{reservation_id:int, debug_otp:?string} */
@@ -161,7 +162,7 @@ class GuestReservationManagementService
         }
 
         $facilities = Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
             ->whereHas('prices', function ($query) use ($rateType): void {
@@ -218,7 +219,10 @@ class GuestReservationManagementService
             $this->guardActiveReservation($reservation);
             $this->guardNoVerifiedPayments($reservation);
 
-            $detail = $reservation->details()->lockForUpdate()->first();
+            $detail = ReservationDetail::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->first();
 
             if (! $detail) {
                 throw new InvalidArgumentException('Reservation has no facility details to update.');
@@ -231,10 +235,7 @@ class GuestReservationManagementService
 
             $this->scheduleLock->lockOne($facilityId);
 
-            $totalGuestCount = max(
-                1,
-                (int) ($data['total_guest_count'] ?? 1),
-            );
+            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
                 $data['extra_guests'] ?? [],
             );
@@ -287,18 +288,15 @@ class GuestReservationManagementService
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'discount_id' => $discount?->discount_id,
+                ...$quote['detail_snapshot'],
             ]);
 
-            ReservationExtraGuest::query()->where('reservation_id', $reservation->reservation_id)->delete();
-
-            foreach ($extraGuests as $extraGuest) {
-                ReservationExtraGuest::query()->create([
-                    'reservation_id' => $reservation->reservation_id,
-                    'first_name' => $extraGuest['first_name'],
-                    'middle_name' => $extraGuest['middle_name'],
-                    'last_name' => $extraGuest['last_name'],
-                ]);
-            }
+            $reservation->extraGuests()->delete();
+            $this->detailGuests->createForReservation(
+                $reservation,
+                $detail,
+                $extraGuests,
+            );
 
             return $reservation->fresh(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments']);
         });

@@ -9,6 +9,8 @@ use App\Models\Guest;
 use App\Models\Reservation;
 use App\Services\FacilityAvailabilityService;
 use App\Services\FacilityOccupancyService;
+use App\Services\DecimalMoneyService;
+use App\Services\DetailExtraGuestService;
 use App\Services\ReservationQuoteService;
 use App\Services\StaffReservationCancellationService;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -174,7 +176,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $availability = app(FacilityAvailabilityService::class);
 
         $facilities = Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', (int) $this->facilityTypeId)
             ->where('facility_status', 'Available')
             ->whereHas('prices', function ($query): void {
@@ -288,7 +290,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $availability = app(FacilityAvailabilityService::class);
 
         $facilities = Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $currentDetail->facility->facility_type_id)
             ->where('facility_status', 'Available')
             ->whereHas('prices', function ($query): void {
@@ -396,7 +398,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public function updatedTotalGuestCount(): void
     {
-        $this->totalGuestCount = max(1, $this->totalGuestCount);
         $this->syncPaidExtraGuestRows();
     }
 
@@ -420,6 +421,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     private function syncPaidExtraGuestRows(): void
     {
         $occupancy = $this->occupancy();
+
+        if ($this->facilityId !== '' && $occupancy === null) {
+            return;
+        }
+
         $required = (int) (
             $occupancy['paid_extra_guest_count'] ?? 0
         );
@@ -439,7 +445,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public function createReservation(): void
     {
-        $this->syncPaidExtraGuestRows();
+        $guestCountRules = ['required', 'integer', 'min:1'];
+        $strictMaximum = $this->strictMaximum();
+
+        if ($strictMaximum !== null) {
+            $guestCountRules[] = 'max:'.$strictMaximum;
+        }
 
         $validated = $this->validate([
             'guestFirstName' => ['required', 'string', 'max:50'],
@@ -457,7 +468,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'checkInDate' => ['required', 'date'],
             'checkOutDate' => ['required', 'date', 'after_or_equal:checkInDate'],
             'discountId' => ['nullable', 'exists:tbl_discount,discount_id'],
-            'totalGuestCount' => ['required', 'integer', 'min:1'],
+            'totalGuestCount' => $guestCountRules,
             'extraGuests' => ['array'],
             'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
@@ -465,6 +476,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         ], [
             'guestContactNo.regex' => 'Contact number must be an 11-digit Philippine mobile number starting with 09.',
         ]);
+
+        $this->syncPaidExtraGuestRows();
 
         if (! app(FacilityAvailabilityService::class)->isAvailable((int) $validated['facilityId'], $validated['checkInDate'], $validated['checkOutDate'])) {
             $this->addError('facilityId', 'Selected facility is no longer available for the chosen date range.');
@@ -514,25 +527,20 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'status' => 'Active',
             ]);
 
-            $reservation->details()->create([
+            $detail = $reservation->details()->create([
                 'facility_id' => (int) $validated['facilityId'],
                 'rate_type' => $validated['rateType'],
                 'check_in_date' => $validated['checkInDate'],
                 'check_out_date' => $validated['checkOutDate'],
                 'discount_id' => $this->discountId !== '' ? (int) $this->discountId : null,
+                ...$quote['detail_snapshot'],
             ]);
 
-            foreach ($this->extraGuests as $extraGuest) {
-                if (! filled($extraGuest['first_name'] ?? null) && ! filled($extraGuest['last_name'] ?? null)) {
-                    continue;
-                }
-
-                $reservation->extraGuests()->create([
-                    'first_name' => trim((string) $extraGuest['first_name']),
-                    'middle_name' => filled($extraGuest['middle_name'] ?? null) ? trim((string) $extraGuest['middle_name']) : null,
-                    'last_name' => trim((string) $extraGuest['last_name']),
-                ]);
-            }
+            app(DetailExtraGuestService::class)->createForReservation(
+                $reservation,
+                $detail,
+                $this->extraGuests,
+            );
         });
 
         $this->resetCreateForm();
@@ -633,13 +641,20 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         }
 
         DB::transaction(function () use ($reservation, $validated, $quote): void {
-            $paidAmount = (float) $reservation->payments
+            $paidAmount = (string) $reservation->payments
                 ->where('payment_status', 'Verified')
                 ->sum('amount_paid');
 
+            $amountDue = app(DecimalMoneyService::class)->maxZero(
+                app(DecimalMoneyService::class)->subtract(
+                    $quote['total_price'],
+                    $paidAmount,
+                ),
+            );
+
             $reservation->update([
                 'total_price' => $quote['total_price'],
-                'amount_due' => max($quote['total_price'] - $paidAmount, 0),
+                'amount_due' => $amountDue,
             ]);
 
             $detail = $reservation->details->first();
@@ -651,6 +666,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     'check_in_date' => $validated['rescheduleCheckInDate'],
                     'check_out_date' => $validated['rescheduleCheckOutDate'],
                     'discount_id' => $this->rescheduleDiscountId !== '' ? (int) $this->rescheduleDiscountId : null,
+                    ...$quote['detail_snapshot'],
                 ]);
             }
         });
@@ -771,6 +787,20 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         return $reference;
     }
 
+    private function strictMaximum(): ?int
+    {
+        if ($this->facilityId === '') {
+            return null;
+        }
+
+        try {
+            return app(FacilityOccupancyService::class)
+                ->strictMaximum((int) $this->facilityId);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function emptyQuote(): array
     {
         return [
@@ -884,7 +914,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             <select wire:model.live="facilityId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
                                 <option value="">Select available facility</option>
                                 @foreach ($this->availableFacilities() as $facility)
-                                    <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity }} pax</option>
+                                    <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</option>
                                 @endforeach
                             </select>
                             @error('facilityId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
@@ -910,7 +940,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                     <h3 class="font-medium">Guest capacity</h3>
                     <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                        Enter the complete party size, including the primary guest. Rooms include up to 4 guests; only guests above 4 are charged ₱100 each. Cottages and function halls have no extra-guest charge but cannot exceed facility capacity.
+                        Enter the complete party size, including the primary guest. Rooms include 4 guests and enforce their strict maximum. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
                     </p>
 
                     <div class="mt-4 max-w-xs">
@@ -925,7 +955,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     @if ($this->occupancy())
                         @php($occupancy = $this->occupancy())
                         <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900">
-                            Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                            @if ($occupancy['strict_maximum'])
+                                Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
+                            @else
+                                Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
+                            @endif
                         </div>
                     @endif
 

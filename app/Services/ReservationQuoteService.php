@@ -4,17 +4,18 @@ namespace App\Services;
 
 use App\Models\Discount;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
 class ReservationQuoteService
 {
-    private const ROOM_EXTRA_GUEST_PRICE = 100.00;
+    private const ROOM_EXTRA_GUEST_PRICE = '100.00';
 
     public function __construct(
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityProductConfigurationService $products,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function quote(
@@ -26,20 +27,8 @@ class ReservationQuoteService
         int $extraGuestCount = 0,
         ?int $totalGuestCount = null,
     ): array {
-        $facility = Facility::query()
-            ->with('facilityType')
-            ->findOrFail($facilityId);
-
-        $price = FacilityPrice::query()
-            ->where('facility_id', $facilityId)
-            ->where('rate_type', $rateType)
-            ->first();
-
-        if (! $price) {
-            throw new InvalidArgumentException(
-                'The selected rate type is not configured for this facility.'
-            );
-        }
+        $facility = $this->products->configuredFacility($facilityId);
+        $productRate = $this->products->rateFor($facility, $rateType);
 
         $resolvedTotalGuestCount = $totalGuestCount
             ?? $this->occupancy->legacyTotalGuestCount(
@@ -57,10 +46,16 @@ class ReservationQuoteService
             $checkInDate,
             $checkOutDate,
         );
-        $basePrice = (float) $price->facility_price * $baseUnits;
-        $extraGuestCharge = $occupancy['paid_extra_guest_count']
-            * self::ROOM_EXTRA_GUEST_PRICE;
-        $discountAmount = 0.00;
+        $basePrice = $this->money->multiply(
+            $productRate->amount,
+            $baseUnits,
+        );
+        $extraGuestCharge = $this->money->multiply(
+            self::ROOM_EXTRA_GUEST_PRICE,
+            $occupancy['paid_extra_guest_count'],
+        );
+        $discountRate = '0.000000';
+        $discountAmount = '0.00';
         $discountName = null;
 
         if ($discountId) {
@@ -84,24 +79,31 @@ class ReservationQuoteService
                 );
             }
 
-            $discountRate = $this->normalizeDiscountRate(
-                (float) $discount->discount_amount,
+            $discountRate = $this->money->discountRate(
+                $discount->discount_amount,
             );
-            $discountAmount = round(
-                $basePrice * $discountRate,
-                2,
+            $discountAmount = $this->money->percentage(
+                $basePrice,
+                $discountRate,
             );
             $discountName = $discount->discount_name;
         }
 
-        $totalPrice = max(
-            round(
-                $basePrice
-                + $extraGuestCharge
-                - $discountAmount,
-                2,
+        $totalPrice = $this->money->maxZero(
+            $this->money->subtract(
+                $this->money->add($basePrice, $extraGuestCharge),
+                $discountAmount,
             ),
-            0,
+        );
+        $detailSnapshot = $this->products->detailSnapshot(
+            facility: $facility,
+            rate: $productRate,
+            guestCount: $resolvedTotalGuestCount,
+            basePrice: $basePrice,
+            discountRate: $discountRate,
+            discountAmount: $discountAmount,
+            extraGuestFee: $extraGuestCharge,
+            lineTotal: $totalPrice,
         );
 
         return [
@@ -115,13 +117,15 @@ class ReservationQuoteService
             'extra_guest_count' => $occupancy['paid_extra_guest_count'],
             'max_paid_extra_guests' => $occupancy['max_paid_extra_guests'],
             'base_units' => $baseUnits,
-            'base_price' => round($basePrice, 2),
-            'extra_guest_charge' => round($extraGuestCharge, 2),
+            'base_price' => $basePrice,
+            'extra_guest_charge' => $extraGuestCharge,
             'discount_id' => $discountId,
             'discount_name' => $discountName,
+            'discount_rate' => $discountRate,
             'discount_amount' => $discountAmount,
             'total_price' => $totalPrice,
             'amount_due' => $totalPrice,
+            'detail_snapshot' => $detailSnapshot,
         ];
     }
 
@@ -184,12 +188,5 @@ class ReservationQuoteService
         }
 
         return true;
-    }
-
-    private function normalizeDiscountRate(float $value): float
-    {
-        return $value > 1
-            ? min($value / 100, 1)
-            : max($value, 0);
     }
 }

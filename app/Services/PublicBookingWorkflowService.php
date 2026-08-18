@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Address;
 use App\Models\Booking;
 use App\Models\BookingDetail;
-use App\Models\BookingExtraGuest;
 use App\Models\Guest;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
@@ -23,6 +22,8 @@ class PublicBookingWorkflowService
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
+        private readonly DetailExtraGuestService $detailGuests,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function createGuestBookingWithPendingGcash(array $data): Booking
@@ -35,10 +36,7 @@ class PublicBookingWorkflowService
 
             $this->scheduleLock->lockOne($facilityId);
 
-            $totalGuestCount = max(
-                1,
-                (int) ($data['total_guest_count'] ?? 1),
-            );
+            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
                 $data['extra_guests'] ?? [],
             );
@@ -66,10 +64,12 @@ class PublicBookingWorkflowService
                 totalGuestCount: $totalGuestCount,
             );
 
-            $paymentAmount = round((float) $data['payment_amount'], 2);
-            $total = round((float) $quote['total'], 2);
+            $paymentAmount = $this->money->normalize(
+                (string) $data['payment_amount'],
+            );
+            $total = $this->money->normalize($quote['total']);
 
-            if ($paymentAmount !== $total) {
+            if (! $this->money->equals($paymentAmount, $total)) {
                 throw new InvalidArgumentException('Online booking requires exact full GCash payment before submission. Staff will still verify the proof.');
             }
 
@@ -123,7 +123,7 @@ class PublicBookingWorkflowService
                 'status' => 'Pending Verification',
             ]);
 
-            BookingDetail::query()->create([
+            $detail = BookingDetail::query()->create([
                 'booking_id' => $booking->booking_id,
                 'facility_id' => $facilityId,
                 'rate_type' => $rateType,
@@ -133,20 +133,14 @@ class PublicBookingWorkflowService
                 'status' => 'Pending Verification',
                 'discount_id' => null,
                 'user_id' => null,
-                'base_price' => $quote['base_price'] ?? null,
-                'discount_amount' => $quote['discount_amount'] ?? 0.00,
-                'extra_guest_fee' => $quote['extra_guest_fee'] ?? 0.00,
-                'line_total' => $total,
+                ...$quote['detail_snapshot'],
             ]);
 
-            foreach ($extraGuests as $extraGuest) {
-                BookingExtraGuest::query()->create([
-                    'booking_id' => $booking->booking_id,
-                    'first_name' => $extraGuest['first_name'],
-                    'middle_name' => $extraGuest['middle_name'] ?? null,
-                    'last_name' => $extraGuest['last_name'],
-                ]);
-            }
+            $this->detailGuests->createForBooking(
+                $booking,
+                $detail,
+                $extraGuests,
+            );
 
             Payment::query()->create([
                 'p_ref_no' => $this->newPaymentReference(),
@@ -209,7 +203,7 @@ class PublicBookingWorkflowService
         $time = trim($time);
 
         if (preg_match('/^\d{2}:\d{2}$/', $time) === 1) {
-            return $time . ':00';
+            return $time.':00';
         }
 
         return $time;
@@ -218,7 +212,7 @@ class PublicBookingWorkflowService
     private function newBookingReference(): string
     {
         do {
-            $reference = 'B' . now()->format('ymdHis') . strtoupper(Str::random(4));
+            $reference = 'B'.now()->format('ymdHis').strtoupper(Str::random(4));
         } while (Booking::query()->where('b_ref_no', $reference)->exists());
 
         return $reference;
@@ -227,7 +221,7 @@ class PublicBookingWorkflowService
     private function newPaymentReference(): string
     {
         do {
-            $reference = 'P' . now()->format('ymdHis') . strtoupper(Str::random(4));
+            $reference = 'P'.now()->format('ymdHis').strtoupper(Str::random(4));
         } while (Payment::query()->where('p_ref_no', $reference)->exists());
 
         return $reference;

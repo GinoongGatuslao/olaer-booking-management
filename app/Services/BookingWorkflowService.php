@@ -5,8 +5,6 @@ namespace App\Services;
 use App\Models\Address;
 use App\Models\Booking;
 use App\Models\BookingDetail;
-use App\Models\BookingExtraGuest;
-use App\Models\Facility;
 use App\Models\Guest;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
@@ -23,6 +21,8 @@ class BookingWorkflowService
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly GcashReferenceIntegrityService $gcashReferences,
+        private readonly DetailExtraGuestService $detailGuests,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function createBooking(array $data): Booking
@@ -36,10 +36,7 @@ class BookingWorkflowService
 
             $this->scheduleLock->lockOne($facilityId);
 
-            $totalGuestCount = max(
-                1,
-                (int) ($data['total_guest_count'] ?? 1),
-            );
+            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
                 $data['extra_guests'] ?? [],
             );
@@ -66,9 +63,11 @@ class BookingWorkflowService
                 discountId: $discountId,
                 totalGuestCount: $totalGuestCount,
             );
-            $paymentAmount = round((float) $data['payment_amount'], 2);
+            $paymentAmount = $this->money->normalize(
+                (string) $data['payment_amount'],
+            );
 
-            if ($paymentAmount !== round((float) $quote['total'], 2)) {
+            if (! $this->money->equals($paymentAmount, $quote['total'])) {
                 throw new InvalidArgumentException('Booking requires exact full payment before confirmation.');
             }
 
@@ -110,7 +109,7 @@ class BookingWorkflowService
                 'status' => 'Booked',
             ]);
 
-            BookingDetail::query()->create([
+            $detail = BookingDetail::query()->create([
                 'booking_id' => $booking->booking_id,
                 'facility_id' => $facilityId,
                 'rate_type' => $rateType,
@@ -120,20 +119,14 @@ class BookingWorkflowService
                 'status' => 'Booked',
                 'discount_id' => $discountId,
                 'user_id' => (int) $data['user_id'],
-                'base_price' => $quote['base_price'],
-                'discount_amount' => $quote['discount_amount'],
-                'extra_guest_fee' => $quote['extra_guest_fee'],
-                'line_total' => $quote['total'],
+                ...$quote['detail_snapshot'],
             ]);
 
-            foreach ($extraGuests as $extraGuest) {
-                BookingExtraGuest::query()->create([
-                    'booking_id' => $booking->booking_id,
-                    'first_name' => $extraGuest['first_name'],
-                    'middle_name' => $extraGuest['middle_name'] ?? null,
-                    'last_name' => $extraGuest['last_name'],
-                ]);
-            }
+            $this->detailGuests->createForBooking(
+                $booking,
+                $detail,
+                $extraGuests,
+            );
 
             Payment::query()->create([
                 'p_ref_no' => $this->newReference('P'),
@@ -244,22 +237,34 @@ class BookingWorkflowService
 
             $oldPrice = $this->quoteService->priceForFacilityRate((int) $detail->facility_id, (string) $detail->rate_type);
             $newPrice = $this->quoteService->priceForFacilityRate($newFacilityId, (string) $detail->rate_type);
-            $upgradeCharge = max(0, round($newPrice - $oldPrice, 2));
+            $upgradeCharge = $this->money->maxZero(
+                $this->money->subtract($newPrice, $oldPrice),
+            );
 
             $newLineTotal = $detail->line_total !== null
-                ? round((float) $detail->line_total + $upgradeCharge, 2)
+                ? $this->money->add($detail->line_total, $upgradeCharge)
                 : null;
 
             $detail->update([
                 'facility_id' => $newFacilityId,
                 'status' => 'Transferred',
-                'base_price' => $detail->base_price !== null ? round((float) $detail->base_price + $upgradeCharge, 2) : null,
+                'base_price' => $detail->base_price !== null
+                    ? $this->money->add($detail->base_price, $upgradeCharge)
+                    : null,
                 'line_total' => $newLineTotal,
             ]);
 
-            if ($upgradeCharge > 0) {
-                $booking->increment('total_price', $upgradeCharge);
-                $booking->increment('amount_due', $upgradeCharge);
+            if (bccomp($upgradeCharge, '0.00', 2) === 1) {
+                $booking->update([
+                    'total_price' => $this->money->add(
+                        $booking->total_price,
+                        $upgradeCharge,
+                    ),
+                    'amount_due' => $this->money->add(
+                        $booking->amount_due,
+                        $upgradeCharge,
+                    ),
+                ]);
             }
         });
     }
@@ -299,12 +304,25 @@ class BookingWorkflowService
             $detail->update([
                 'rate_type' => 'Day + Night Extension',
                 'status' => 'Extended',
-                'extra_guest_fee' => round((float) ($detail->extra_guest_fee ?? 0) + $charge, 2),
-                'line_total' => $detail->line_total !== null ? round((float) $detail->line_total + $charge, 2) : null,
+                'extra_guest_fee' => $this->money->add(
+                    $detail->extra_guest_fee ?? '0.00',
+                    $charge,
+                ),
+                'line_total' => $detail->line_total !== null
+                    ? $this->money->add($detail->line_total, $charge)
+                    : null,
             ]);
 
-            $booking->increment('total_price', $charge);
-            $booking->increment('amount_due', $charge);
+            $booking->update([
+                'total_price' => $this->money->add(
+                    $booking->total_price,
+                    $charge,
+                ),
+                'amount_due' => $this->money->add(
+                    $booking->amount_due,
+                    $charge,
+                ),
+            ]);
         });
     }
 
@@ -346,7 +364,7 @@ class BookingWorkflowService
         $time = trim($time);
 
         if (preg_match('/^\d{2}:\d{2}$/', $time) === 1) {
-            return $time . ':00';
+            return $time.':00';
         }
 
         return $time;
@@ -380,6 +398,6 @@ class BookingWorkflowService
 
     private function newReference(string $prefix): string
     {
-        return $prefix . now()->format('ymdHis') . strtoupper(Str::random(4));
+        return $prefix.now()->format('ymdHis').strtoupper(Str::random(4));
     }
 }

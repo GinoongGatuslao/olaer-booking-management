@@ -6,7 +6,6 @@ use App\Models\Address;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
-use App\Models\ReservationExtraGuest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,6 +20,7 @@ class PublicReservationWorkflowService
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
+        private readonly DetailExtraGuestService $detailGuests,
     ) {}
 
     public function createGuestReservation(array $data): Reservation
@@ -36,10 +36,7 @@ class PublicReservationWorkflowService
             $preferredDiscountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
             $resolvedDiscount = $this->discountResolver->resolveForFacility($facilityId, $checkInDate, $preferredDiscountId);
             $discountId = $resolvedDiscount?->discount_id;
-            $totalGuestCount = max(
-                1,
-                (int) ($data['total_guest_count'] ?? 1),
-            );
+            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
                 $data['extra_guests'] ?? [],
             );
@@ -95,23 +92,21 @@ class PublicReservationWorkflowService
                 'status' => 'Active',
             ]);
 
-            ReservationDetail::query()->create([
+            $detail = ReservationDetail::query()->create([
                 'reservation_id' => $reservation->reservation_id,
                 'facility_id' => $facilityId,
                 'rate_type' => $rateType,
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'discount_id' => $discountId,
+                ...$quote['detail_snapshot'],
             ]);
 
-            foreach ($extraGuests as $extraGuest) {
-                ReservationExtraGuest::query()->create([
-                    'reservation_id' => $reservation->reservation_id,
-                    'first_name' => $extraGuest['first_name'],
-                    'middle_name' => $extraGuest['middle_name'],
-                    'last_name' => $extraGuest['last_name'],
-                ]);
-            }
+            $this->detailGuests->createForReservation(
+                $reservation,
+                $detail,
+                $extraGuests,
+            );
 
             return $reservation->fresh([
                 'guest.address',
@@ -156,7 +151,7 @@ class PublicReservationWorkflowService
     private function newReservationReference(): string
     {
         do {
-            $reference = 'R' . now()->format('ymdHis') . strtoupper(Str::random(4));
+            $reference = 'R'.now()->format('ymdHis').strtoupper(Str::random(4));
         } while (Reservation::query()->where('r_ref_no', $reference)->exists());
 
         return $reference;

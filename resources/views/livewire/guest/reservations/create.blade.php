@@ -59,22 +59,18 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
 
     public function updatedFacilityId(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
     }
 
     public function updatedTotalGuestCount(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
     }
 
     public function save(PublicReservationWorkflowService $service): void
     {
-        $this->clampTotalGuests();
-        $this->syncPaidExtraGuestRows();
-
         $validated = $this->validate($this->rules(), $this->messages());
+        $this->syncPaidExtraGuestRows();
 
         try {
             $reservation = $service->createGuestReservation($validated);
@@ -112,6 +108,13 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
 
     protected function rules(): array
     {
+        $guestCountRules = ['required', 'integer', 'min:1'];
+        $strictMaximum = $this->strictMaximum();
+
+        if ($strictMaximum !== null) {
+            $guestCountRules[] = 'max:'.$strictMaximum;
+        }
+
         return [
             'first_name' => ['required', 'string', 'max:50'],
             'middle_name' => ['nullable', 'string', 'max:50'],
@@ -131,12 +134,7 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                 'integer',
                 Rule::exists('tbl_facility', 'facility_id'),
             ],
-            'total_guest_count' => [
-                'required',
-                'integer',
-                'min:1',
-                'max:'.$this->maxTotalGuests(),
-            ],
+            'total_guest_count' => $guestCountRules,
             'extra_guests' => ['array'],
             'extra_guests.*.first_name' => ['required', 'string', 'max:50'],
             'extra_guests.*.middle_name' => ['nullable', 'string', 'max:50'],
@@ -153,37 +151,40 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
         ];
     }
 
-    public function maxTotalGuests(): int
+    public function strictMaximum(): ?int
     {
-        return app(PublicFacilitySearchService::class)
-            ->maxTotalGuests($this->facility_id);
+        try {
+            return app(PublicFacilitySearchService::class)
+                ->strictMaximum($this->facility_id);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function occupancyPreview(): ?array
     {
-        return app(PublicFacilitySearchService::class)
-            ->occupancyPreview(
-                $this->facility_id,
-                $this->total_guest_count,
-            );
-    }
-
-    private function clampTotalGuests(): void
-    {
-        $this->total_guest_count = max(
-            1,
-            min(
-                $this->maxTotalGuests(),
-                (int) $this->total_guest_count,
-            ),
-        );
+        try {
+            return app(PublicFacilitySearchService::class)
+                ->occupancyPreview(
+                    $this->facility_id,
+                    $this->total_guest_count,
+                );
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function syncPaidExtraGuestRows(): void
     {
+        $occupancy = $this->occupancyPreview();
+
+        if ($this->facility_id !== null && $occupancy === null) {
+            return;
+        }
+
         $rows = [];
         $paidExtraGuestCount = (int) (
-            $this->occupancyPreview()['paid_extra_guest_count']
+            $occupancy['paid_extra_guest_count']
             ?? 0
         );
 
@@ -302,7 +303,7 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                         <option value="">Choose available facility</option>
                         @foreach ($availableFacilities as $facility)
                             <option value="{{ $facility->facility_id }}">
-                                {{ $facility->facility_name }} — {{ $facility->facility_size }} — capacity {{ $facility->capacity }}
+                                {{ $facility->facility_name }} — {{ $facility->facility_size }} — {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
                             </option>
                         @endforeach
                     </select>
@@ -316,17 +317,21 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
             <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <h2 class="text-lg font-semibold">Guest capacity</h2>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    Enter the complete party size. Rooms include 4 guests and charge ₱100 only for guests above 4. Cottages and function halls have no extra-guest charge but cannot exceed capacity.
+                    Enter the complete party size. Rooms include 4 guests, enforce the maximum shown below, and charge ₱100 only above 4. Cottage and function-hall capacities are recommendations only.
                 </p>
 
                 <div class="mt-4 max-w-xs">
-                    <flux:input wire:model.live="total_guest_count" type="number" min="1" max="{{ $this->maxTotalGuests() }}" label="Total guests, including primary guest" />
+                    <flux:input wire:model.live="total_guest_count" type="number" min="1" max="{{ $this->strictMaximum() }}" label="Total guests, including primary guest" />
                 </div>
 
                 @if ($this->occupancyPreview())
                     @php($occupancy = $this->occupancyPreview())
                     <p class="mt-2 text-xs text-zinc-500">
-                        Capacity: {{ $occupancy['capacity'] }} · Included: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                        @if ($occupancy['strict_maximum'])
+                            Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
+                        @else
+                            Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
+                        @endif
                     </p>
                 @endif
 
