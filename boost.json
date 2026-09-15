@@ -2,7 +2,7 @@
     "agents": [
         "codex"
     ],
-    "cloud": false,
+    "cloud": true,
     "guidelines": true,
     "mcp": true,
     "nightwatch": false,
@@ -13,6 +13,7 @@
         "fluxui-development",
         "livewire-development",
         "volt-development",
-        "tailwindcss-development"
+        "tailwindcss-development",
+        "deploying-laravel-cloud"
     ]
 }

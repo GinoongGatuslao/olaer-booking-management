@@ -2,12 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\FacilityCapacityPolicy;
+use App\FacilityProductCode;
+use App\FacilityRateCode;
+use App\FacilitySchedulePolicy;
 use App\Models\Booking;
 use App\Models\Facility;
 use App\Models\FacilityPrice;
+use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
+use App\Models\ProductRate;
 use App\Services\PublicBookingWorkflowService;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -193,8 +199,7 @@ class PublicBookingJourneyTest extends TestCase
             'extra_guests' => [],
             'payment_amount' => 1500.00,
             'reference_number' => '9876543210001',
-            'proof_of_payment_path' =>
-                'gcash-proofs/existing.pdf',
+            'proof_of_payment_path' => 'gcash-proofs/existing.pdf',
         ]);
 
         Livewire::test('guest.bookings.create')
@@ -240,11 +245,29 @@ class PublicBookingJourneyTest extends TestCase
         $facilityType = FacilityType::query()->create([
             'facility_type' => 'Room',
         ]);
+        $product = FacilityProduct::query()->create([
+            'product_code' => FacilityProductCode::RoomStandard,
+            'facility_type_id' => $facilityType->facility_type_id,
+            'display_name' => 'Standard Room',
+            'size_label' => 'Standard',
+            'schedule_policy' => FacilitySchedulePolicy::Overnight,
+            'capacity_policy' => FacilityCapacityPolicy::Strict,
+            'included_guest_count' => 4,
+            'strict_maximum' => 10,
+            'is_active' => true,
+        ]);
+        ProductRate::query()->create([
+            'facility_product_id' => $product->facility_product_id,
+            'rate_code' => FacilityRateCode::Overnight,
+            'display_name' => 'Overnight',
+            'amount' => 1500,
+            'is_active' => true,
+        ]);
 
         $facility = Facility::query()->create([
             'facility_name' => 'Spring Room 1',
-            'facility_type_id' =>
-                $facilityType->facility_type_id,
+            'facility_type_id' => $facilityType->facility_type_id,
+            'facility_product_id' => $product->facility_product_id,
             'facility_size' => 'Standard',
             'facility_status' => 'Available',
             'capacity' => '4',

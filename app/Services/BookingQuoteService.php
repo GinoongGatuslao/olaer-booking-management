@@ -4,17 +4,18 @@ namespace App\Services;
 
 use App\Models\Discount;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 
 class BookingQuoteService
 {
-    public const ROOM_EXTRA_GUEST_FEE = 100.00;
-    public const COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE = 100.00;
+    public const ROOM_EXTRA_GUEST_FEE = '100.00';
+
+    public const COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE = '100.00';
 
     public function __construct(
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityProductConfigurationService $products,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function quote(
@@ -24,20 +25,8 @@ class BookingQuoteService
         ?int $discountId = null,
         ?int $totalGuestCount = null,
     ): array {
-        $facility = Facility::query()
-            ->with('facilityType')
-            ->findOrFail($facilityId);
-
-        $facilityPrice = FacilityPrice::query()
-            ->where('facility_id', $facilityId)
-            ->where('rate_type', $rateType)
-            ->first();
-
-        if (! $facilityPrice) {
-            throw new InvalidArgumentException(
-                'Selected rate type is not configured for this facility.'
-            );
-        }
+        $facility = $this->products->configuredFacility($facilityId);
+        $productRate = $this->products->rateFor($facility, $rateType);
 
         $resolvedTotalGuestCount = $totalGuestCount
             ?? $this->occupancy->legacyTotalGuestCount(
@@ -50,9 +39,9 @@ class BookingQuoteService
             $resolvedTotalGuestCount,
         );
 
-        $basePrice = (float) $facilityPrice->facility_price;
-        $discountAmount = 0.00;
-        $discountRate = 0.00;
+        $basePrice = $this->money->normalize($productRate->amount);
+        $discountAmount = '0.00';
+        $discountRate = '0.000000';
 
         if ($discountId !== null) {
             $discount = Discount::query()->find($discountId);
@@ -64,29 +53,36 @@ class BookingQuoteService
                     $facility,
                 )
             ) {
-                $discountRate = $this->normalizeDiscountRate(
-                    (float) $discount->discount_amount,
+                $discountRate = $this->money->discountRate(
+                    $discount->discount_amount,
                 );
-                $discountAmount = round(
-                    $basePrice * $discountRate,
-                    2,
+                $discountAmount = $this->money->percentage(
+                    $basePrice,
+                    $discountRate,
                 );
             }
         }
 
-        $extraGuestFee = round(
-            $occupancy['paid_extra_guest_count']
-            * self::ROOM_EXTRA_GUEST_FEE,
-            2,
+        $extraGuestFee = $this->money->multiply(
+            self::ROOM_EXTRA_GUEST_FEE,
+            $occupancy['paid_extra_guest_count'],
         );
 
-        $total = max(
-            0,
-            round(
-                ($basePrice - $discountAmount)
-                + $extraGuestFee,
-                2,
+        $total = $this->money->maxZero(
+            $this->money->add(
+                $this->money->subtract($basePrice, $discountAmount),
+                $extraGuestFee,
             ),
+        );
+        $detailSnapshot = $this->products->detailSnapshot(
+            facility: $facility,
+            rate: $productRate,
+            guestCount: $resolvedTotalGuestCount,
+            basePrice: $basePrice,
+            discountRate: $discountRate,
+            discountAmount: $discountAmount,
+            extraGuestFee: $extraGuestFee,
+            lineTotal: $total,
         );
 
         return [
@@ -104,25 +100,17 @@ class BookingQuoteService
             'discount_amount' => $discountAmount,
             'extra_guest_fee' => $extraGuestFee,
             'total' => $total,
+            'detail_snapshot' => $detailSnapshot,
         ];
     }
 
     public function priceForFacilityRate(
         int $facilityId,
         string $rateType,
-    ): float {
-        $price = FacilityPrice::query()
-            ->where('facility_id', $facilityId)
-            ->where('rate_type', $rateType)
-            ->value('facility_price');
+    ): string {
+        $facility = $this->products->configuredFacility($facilityId);
 
-        if ($price === null) {
-            throw new InvalidArgumentException(
-                'Selected rate type is not configured for this facility.'
-            );
-        }
-
-        return (float) $price;
+        return $this->products->rateFor($facility, $rateType)->amount;
     }
 
     private function discountAppliesToFacility(
@@ -157,14 +145,5 @@ class BookingQuoteService
             'function hall' => (bool) $discount->app_to_function_hall,
             default => false,
         };
-    }
-
-    private function normalizeDiscountRate(float $value): float
-    {
-        if ($value > 1) {
-            return $value / 100;
-        }
-
-        return max(0, min(1, $value));
     }
 }

@@ -101,6 +101,7 @@ class AmenityCheckoutPaymentRevisionTest extends TestCase
         $facilityId = $this->createFacility();
         $bookingId = $this->createBooking('Checked-in', 200.00, 1200.00);
         $this->createBookingDetail($bookingId, $facilityId, 'Checked-in');
+        $cashierId = $this->createUser('Cashier');
 
         $requestId = $this->createAmenityRequest(
             bookingId: $bookingId,
@@ -129,6 +130,7 @@ class AmenityCheckoutPaymentRevisionTest extends TestCase
                         'quantity' => 1,
                     ],
                 ],
+                $cashierId,
             );
 
         $this->assertSame('150.00', (string) $request->total_price);
@@ -144,6 +146,7 @@ class AmenityCheckoutPaymentRevisionTest extends TestCase
     {
         $bookingId = $this->createBooking('Checked-in', 100.00, 1100.00);
         $maintenanceId = $this->createUser('Maintenance Staff');
+        $cashierId = $this->createUser('Cashier');
 
         $requestId = $this->createAmenityRequest(
             bookingId: $bookingId,
@@ -158,7 +161,7 @@ class AmenityCheckoutPaymentRevisionTest extends TestCase
         );
 
         app(AmenityRequestWorkflowService::class)
-            ->cancelUnpaidRequest($requestId);
+            ->cancelUnpaidRequest($requestId, $cashierId);
     }
 
     public function test_legacy_awaiting_payment_requests_are_released_to_pending_without_payment_check(): void

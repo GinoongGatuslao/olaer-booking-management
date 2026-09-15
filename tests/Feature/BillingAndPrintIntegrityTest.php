@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class BillingAndPrintIntegrityTest extends TestCase
@@ -19,6 +20,30 @@ class BillingAndPrintIntegrityTest extends TestCase
         parent::setUp();
 
         $this->withoutVite();
+    }
+
+    public function test_billing_print_control_targets_the_selected_dedicated_statement_route(): void
+    {
+        $cashier = $this->createUser(
+            'Cashier',
+            'billing_print_control_cashier',
+        );
+        $scenario = $this->createBookingScenario(
+            $cashier,
+            totalPrice: 1000.00,
+            amountDue: 1000.00,
+        );
+
+        Livewire::actingAs($cashier)
+            ->test('cashier.billings.index')
+            ->call('selectBooking', $scenario['booking_id'])
+            ->assertSeeHtml(
+                'href="'.route(
+                    'print.billing',
+                    $scenario['booking_id'],
+                ).'"',
+            )
+            ->assertDontSeeHtml('window.print()');
     }
 
     public function test_billing_summary_counts_each_booking_once_and_uses_booking_wide_balance(): void
@@ -85,14 +110,12 @@ class BillingAndPrintIntegrityTest extends TestCase
         );
 
         $amenityRow = $rows->first(
-            fn (array $row): bool =>
-                $row['transaction_type']
+            fn (array $row): bool => $row['transaction_type']
                 === 'Amenity Request',
         );
 
         $fineRow = $rows->first(
-            fn (array $row): bool =>
-                $row['transaction_type']
+            fn (array $row): bool => $row['transaction_type']
                 === 'Fine',
         );
 
@@ -198,6 +221,15 @@ class BillingAndPrintIntegrityTest extends TestCase
             amountDue: 300.00,
         );
 
+        $otherScenario = $this->createBookingScenario(
+            $cashier,
+            totalPrice: 900.00,
+            amountDue: 900.00,
+        );
+        $otherBookingReference = (string) DB::table('tbl_booking')
+            ->where('booking_id', $otherScenario['booking_id'])
+            ->value('b_ref_no');
+
         $this->createAmenityRequest(
             $scenario,
             'Delivered Mattress',
@@ -242,7 +274,10 @@ class BillingAndPrintIntegrityTest extends TestCase
             ->assertSee('P-BILLING-PRINT')
             ->assertSee('Verified Paid')
             ->assertSee('1,000.00')
-            ->assertSee('300.00');
+            ->assertSee('300.00')
+            ->assertDontSee($otherBookingReference)
+            ->assertDontSee('Billing Records')
+            ->assertDontSee('Cashier workspace');
     }
 
     public function test_maintenance_staff_cannot_access_cashier_print_documents(): void
@@ -396,10 +431,8 @@ class BillingAndPrintIntegrityTest extends TestCase
 
         $amenityId = DB::table('tbl_amenity')
             ->insertGetId([
-                'amenity_name_id' =>
-                    $amenityNameId,
-                'amenity_description' =>
-                    'Billing and print integrity test amenity.',
+                'amenity_name_id' => $amenityNameId,
+                'amenity_description' => 'Billing and print integrity test amenity.',
                 'amenity_type' => 'Rentable',
                 'amenity_price' => $totalPrice,
                 'created_at' => now(),
@@ -503,10 +536,8 @@ class BillingAndPrintIntegrityTest extends TestCase
 
         $amenityId = DB::table('tbl_amenity')
             ->insertGetId([
-                'amenity_name_id' =>
-                    $amenityNameId,
-                'amenity_description' =>
-                    'Fine test amenity.',
+                'amenity_name_id' => $amenityNameId,
+                'amenity_description' => 'Fine test amenity.',
                 'amenity_type' => 'Rentable',
                 'amenity_price' => $charge,
                 'created_at' => now(),
@@ -525,8 +556,7 @@ class BillingAndPrintIntegrityTest extends TestCase
                 'amenity_id' => $amenityId,
                 'damage_type_id' => $damageTypeId,
                 'situational_fine' => 'Damaged item',
-                'situational_fine_description' =>
-                    'Item damaged during the stay.',
+                'situational_fine_description' => 'Item damaged during the stay.',
                 'fine_charge' => $charge,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -598,21 +628,17 @@ class BillingAndPrintIntegrityTest extends TestCase
             'booking_id' => $bookingId,
             'reservation_id' => null,
             'entrance_slip_id' => null,
-            'mode_of_payment_id' =>
-                $this->createPaymentMode('GCash'),
-            'reference_number' =>
-                'GCASH-'.$reference,
+            'mode_of_payment_id' => $this->createPaymentMode('GCash'),
+            'reference_number' => 'GCASH-'.$reference,
             'proof_of_payment_path' => null,
             'amount_paid' => $amount,
             'date_paid' => '2026-07-20',
             'user_id' => $cashier->user_id,
             'payment_status' => $status,
-            'verified_by_user_id' =>
-                strtolower($status) === 'verified'
+            'verified_by_user_id' => strtolower($status) === 'verified'
                     ? $cashier->user_id
                     : null,
-            'verified_at' =>
-                strtolower($status) === 'verified'
+            'verified_at' => strtolower($status) === 'verified'
                     ? now()
                     : null,
             'created_at' => now(),
@@ -676,10 +702,8 @@ class BillingAndPrintIntegrityTest extends TestCase
 
         return DB::table('tbl_facility')
             ->insertGetId([
-                'facility_name' =>
-                    'Billing Room '.uniqid(),
-                'facility_type_id' =>
-                    $facilityTypeId,
+                'facility_name' => 'Billing Room '.uniqid(),
+                'facility_type_id' => $facilityTypeId,
                 'facility_size' => 'Standard',
                 'facility_status' => 'Occupied',
                 'capacity' => '10',
@@ -696,10 +720,8 @@ class BillingAndPrintIntegrityTest extends TestCase
                 'middle_name' => null,
                 'last_name' => 'Guest',
                 'contact_no' => '09123456789',
-                'address_id' =>
-                    $this->createAddress(),
-                'email' =>
-                    uniqid('billing_', true)
+                'address_id' => $this->createAddress(),
+                'email' => uniqid('billing_', true)
                     .'@example.test',
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -713,17 +735,14 @@ class BillingAndPrintIntegrityTest extends TestCase
         return User::query()->create([
             'first_name' => 'Test',
             'middle_name' => null,
-            'last_name' =>
-                str_replace(' ', '', $roleName),
+            'last_name' => str_replace(' ', '', $roleName),
             'username' => $username,
             'password' => Hash::make('password'),
             'email' => $username.'@example.test',
             'contact_no' => '09999999999',
             'status' => 'Active',
-            'address_id' =>
-                $this->createAddress(),
-            'role_id' =>
-                $this->createRole($roleName),
+            'address_id' => $this->createAddress(),
+            'role_id' => $this->createRole($roleName),
         ]);
     }
 

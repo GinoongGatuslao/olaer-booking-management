@@ -2,7 +2,11 @@
 
 namespace Tests\Unit;
 
+use App\FacilityCapacityPolicy;
+use App\FacilityProductCode;
+use App\FacilitySchedulePolicy;
 use App\Models\Facility;
+use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Services\FacilityOccupancyService;
 use InvalidArgumentException;
@@ -37,28 +41,30 @@ class FacilityOccupancyServiceTest extends TestCase
     }
 
     #[Test]
-    public function cottage_uses_capacity_without_paid_extra_guests(): void
+    public function cottage_allows_estimates_above_recommended_capacity_without_paid_extra_guests(): void
     {
         $result = $this->service->forFacility(
-            $this->facility('Cottage', '20'),
+            $this->facility('Cottage', '4-6'),
             20,
         );
 
-        $this->assertSame(20, $result['included_guest_count']);
+        $this->assertSame(6, $result['suggested_maximum']);
+        $this->assertNull($result['included_guest_count']);
         $this->assertSame(0, $result['paid_extra_guest_count']);
     }
 
     #[Test]
-    public function function_hall_cannot_exceed_capacity(): void
+    public function facility_estimate_cannot_exceed_parent_unique_party(): void
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
-            'can accommodate only 100 guest(s)',
+            'cannot exceed',
         );
 
         $this->service->forFacility(
-            $this->facility('Function Hall', '100 pax'),
-            101,
+            $this->facility('Function Hall', '25'),
+            30,
+            20,
         );
     }
 
@@ -93,12 +99,40 @@ class FacilityOccupancyServiceTest extends TestCase
             'capacity' => $capacity,
         ]);
         $facility->facility_id = 1;
+        $facility->facility_type_id = 1;
         $facility->setRelation(
             'facilityType',
             new FacilityType([
                 'facility_type' => $type,
             ]),
         );
+        $isRoom = $type === 'Room';
+        $product = new FacilityProduct([
+            'product_code' => $isRoom
+                ? FacilityProductCode::RoomStandard
+                : ($type === 'Cottage'
+                    ? FacilityProductCode::CottageSmall
+                    : FacilityProductCode::FunctionHall1),
+            'facility_type_id' => 1,
+            'display_name' => $type,
+            'schedule_policy' => $isRoom
+                ? FacilitySchedulePolicy::Overnight
+                : ($type === 'Cottage'
+                    ? FacilitySchedulePolicy::DatedSlots
+                    : FacilitySchedulePolicy::WholeCalendarDay),
+            'capacity_policy' => $isRoom
+                ? FacilityCapacityPolicy::Strict
+                : FacilityCapacityPolicy::RecommendedInformational,
+            'suggested_minimum' => $type === 'Cottage' ? 4 : null,
+            'suggested_maximum' => $isRoom ? null : ($type === 'Cottage' ? 6 : 25),
+            'included_guest_count' => $isRoom ? 4 : null,
+            'strict_maximum' => $isRoom ? 10 : null,
+            'is_active' => true,
+        ]);
+        $product->facility_product_id = 1;
+        $product->setRelation('productRates', collect());
+        $facility->facility_product_id = 1;
+        $facility->setRelation('facilityProduct', $product);
 
         return $facility;
     }

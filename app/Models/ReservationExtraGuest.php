@@ -18,14 +18,22 @@ class ReservationExtraGuest extends Model
 
     protected $fillable = [
         'reservation_id',
+        'reservation_details_id',
         'first_name',
         'middle_name',
         'last_name',
     ];
 
+    /** @return BelongsTo<Reservation, $this> */
     public function reservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
+    }
+
+    /** @return BelongsTo<ReservationDetail, $this> */
+    public function reservationDetail(): BelongsTo
+    {
+        return $this->belongsTo(ReservationDetail::class, 'reservation_details_id', 'reservation_details_id');
     }
 
     public function getFullNameAttribute(): string

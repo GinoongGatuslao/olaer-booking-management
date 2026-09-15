@@ -2,8 +2,10 @@
 
 namespace Database\Seeders;
 
+use App\FacilityProductCode;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 class FacilitySeeder extends Seeder
 {
@@ -13,28 +15,38 @@ class FacilitySeeder extends Seeder
         $roomTypeId = DB::table('tbl_facility_type')->where('facility_type', 'Room')->value('facility_type_id');
         $functionHallTypeId = DB::table('tbl_facility_type')->where('facility_type', 'Function Hall')->value('facility_type_id');
 
-        $this->seedCottages($cottageTypeId);
-        $this->seedRooms($roomTypeId);
-        $this->seedFunctionHalls($functionHallTypeId);
+        $productIds = DB::table('tbl_facility_product')
+            ->pluck('facility_product_id', 'product_code')
+            ->map(fn (mixed $productId): int => (int) $productId);
+
+        if ($productIds->count() !== 7) {
+            throw new LogicException('The approved facility products must be seeded before physical facilities.');
+        }
+
+        $this->seedCottages($cottageTypeId, $productIds->all());
+        $this->seedRooms($roomTypeId, (int) $productIds[FacilityProductCode::RoomStandard->value]);
+        $this->seedFunctionHalls($functionHallTypeId, $productIds->all());
         $this->attachInclusiveAmenities();
     }
 
-    private function seedCottages(int $typeId): void
+    /** @param array<string, int> $productIds */
+    private function seedCottages(int $typeId, array $productIds): void
     {
         $groups = [
-            ['prefix' => 'C300', 'count' => 55, 'size' => 'Small Cottage', 'capacity' => '4-6', 'price' => 300.00],
-            ['prefix' => 'C400', 'count' => 46, 'size' => 'Medium Cottage', 'capacity' => '8-10', 'price' => 400.00],
-            ['prefix' => 'C600', 'count' => 26, 'size' => 'Large Cottage', 'capacity' => '10-15', 'price' => 600.00],
-            ['prefix' => 'C900', 'count' => 5, 'size' => 'Extra Large Cottage', 'capacity' => '15-25', 'price' => 900.00],
+            ['prefix' => 'C300', 'count' => 55, 'size' => 'Small Cottage', 'capacity' => '4-6', 'price' => 300.00, 'product_code' => FacilityProductCode::CottageSmall],
+            ['prefix' => 'C400', 'count' => 46, 'size' => 'Medium Cottage', 'capacity' => '8-10', 'price' => 400.00, 'product_code' => FacilityProductCode::CottageMedium],
+            ['prefix' => 'C600', 'count' => 26, 'size' => 'Large Cottage', 'capacity' => '10-15', 'price' => 600.00, 'product_code' => FacilityProductCode::CottageLarge],
+            ['prefix' => 'C900', 'count' => 5, 'size' => 'Extra Large Cottage', 'capacity' => '15-25', 'price' => 900.00, 'product_code' => FacilityProductCode::CottageExtraLarge],
         ];
 
         foreach ($groups as $group) {
             for ($i = 1; $i <= $group['count']; $i++) {
-                $facilityName = $group['prefix'] . '-' . str_pad((string) $i, 3, '0', STR_PAD_LEFT);
+                $facilityName = $group['prefix'].'-'.str_pad((string) $i, 3, '0', STR_PAD_LEFT);
 
                 $this->upsertFacilityWithPrice(
                     facilityName: $facilityName,
                     facilityTypeId: $typeId,
+                    facilityProductId: (int) $productIds[$group['product_code']->value],
                     facilitySize: $group['size'],
                     capacity: $group['capacity'],
                     prices: [
@@ -46,12 +58,13 @@ class FacilitySeeder extends Seeder
         }
     }
 
-    private function seedRooms(int $typeId): void
+    private function seedRooms(int $typeId, int $productId): void
     {
         for ($i = 1; $i <= 12; $i++) {
             $this->upsertFacilityWithPrice(
-                facilityName: 'R-' . str_pad((string) $i, 3, '0', STR_PAD_LEFT),
+                facilityName: 'R-'.str_pad((string) $i, 3, '0', STR_PAD_LEFT),
                 facilityTypeId: $typeId,
+                facilityProductId: $productId,
                 facilitySize: 'Standard Room',
                 capacity: '4 default / 10 max',
                 prices: [
@@ -61,17 +74,19 @@ class FacilitySeeder extends Seeder
         }
     }
 
-    private function seedFunctionHalls(int $typeId): void
+    /** @param array<string, int> $productIds */
+    private function seedFunctionHalls(int $typeId, array $productIds): void
     {
         $halls = [
-            ['name' => 'FH-1', 'size' => 'Function Hall 1', 'capacity' => '25', 'price' => 1200.00],
-            ['name' => 'FH-2', 'size' => 'Function Hall 2', 'capacity' => '30', 'price' => 1500.00],
+            ['name' => 'FH-1', 'size' => 'Function Hall 1', 'capacity' => '25', 'price' => 1200.00, 'product_code' => FacilityProductCode::FunctionHall1],
+            ['name' => 'FH-2', 'size' => 'Function Hall 2', 'capacity' => '30', 'price' => 1500.00, 'product_code' => FacilityProductCode::FunctionHall2],
         ];
 
         foreach ($halls as $hall) {
             $this->upsertFacilityWithPrice(
                 facilityName: $hall['name'],
                 facilityTypeId: $typeId,
+                facilityProductId: (int) $productIds[$hall['product_code']->value],
                 facilitySize: $hall['size'],
                 capacity: $hall['capacity'],
                 prices: [
@@ -82,9 +97,11 @@ class FacilitySeeder extends Seeder
         }
     }
 
+    /** @param array<string, int|float> $prices */
     private function upsertFacilityWithPrice(
         string $facilityName,
         int $facilityTypeId,
+        int $facilityProductId,
         string $facilitySize,
         string $capacity,
         array $prices
@@ -93,6 +110,7 @@ class FacilitySeeder extends Seeder
             ['facility_name' => $facilityName],
             [
                 'facility_type_id' => $facilityTypeId,
+                'facility_product_id' => $facilityProductId,
                 'facility_size' => $facilitySize,
                 'facility_status' => 'Available',
                 'capacity' => $capacity,
@@ -153,10 +171,11 @@ class FacilitySeeder extends Seeder
         }
     }
 
+    /** @param array<string, int> $amenities */
     private function attachAmenitiesToFacilitiesByPrefix(string $prefix, array $amenities): void
     {
         $facilityNames = DB::table('tbl_facility')
-            ->where('facility_name', 'like', $prefix . '%')
+            ->where('facility_name', 'like', $prefix.'%')
             ->pluck('facility_name');
 
         foreach ($facilityNames as $facilityName) {

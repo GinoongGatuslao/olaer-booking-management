@@ -3,19 +3,22 @@
 namespace App\Services;
 
 use App\Models\Facility;
+use App\Models\FacilityProduct;
 use InvalidArgumentException;
 
 class FacilityOccupancyService
 {
     public const ROOM_INCLUDED_GUESTS = 4;
 
+    public function __construct(
+        private readonly FacilityProductConfigurationService $products,
+    ) {}
+
     public function forFacilityId(
         int $facilityId,
         int $totalGuestCount,
     ): array {
-        $facility = Facility::query()
-            ->with('facilityType')
-            ->findOrFail($facilityId);
+        $facility = $this->products->configuredFacility($facilityId);
 
         return $this->forFacility(
             $facility,
@@ -25,61 +28,83 @@ class FacilityOccupancyService
 
     public function forFacility(
         Facility $facility,
-        int $totalGuestCount,
+        int $detailGuestCount,
+        ?int $parentGuestCount = null,
     ): array {
-        $capacity = $this->capacityFor($facility);
-        $facilityType = strtolower(
-            trim((string) $facility->facilityType?->facility_type)
-        );
+        $product = $this->products->productFor($facility);
+        $parentGuestCount ??= $detailGuestCount;
 
-        if ($totalGuestCount < 1) {
+        if ($parentGuestCount < 1) {
             throw new InvalidArgumentException(
                 'Total guests must be at least 1, including the primary guest.'
             );
         }
 
-        if ($totalGuestCount > $capacity) {
+        if ($detailGuestCount < 1) {
             throw new InvalidArgumentException(
-                "{$facility->facility_name} can accommodate only {$capacity} guest(s)."
+                'Facility guest count must be at least 1.',
             );
         }
 
-        $includedGuestCount = $facilityType === 'room'
-            ? min(self::ROOM_INCLUDED_GUESTS, $capacity)
-            : $capacity;
+        if ($detailGuestCount > $parentGuestCount) {
+            throw new InvalidArgumentException(
+                'A facility guest estimate cannot exceed the transaction\'s total unique guest count.',
+            );
+        }
 
-        $paidExtraGuestCount = $facilityType === 'room'
-            ? max(0, $totalGuestCount - $includedGuestCount)
+        $isRoom = $this->products->isRoomProduct($product);
+        $strictMaximum = $product->strict_maximum;
+
+        if (
+            $isRoom
+            && (
+                $strictMaximum === null
+                || $strictMaximum < 1
+                || $detailGuestCount > $strictMaximum
+            )
+        ) {
+            throw new InvalidArgumentException(
+                "{$facility->facility_name} allows a maximum of ".($strictMaximum ?? 0).' guest(s).',
+            );
+        }
+
+        $includedGuestCount = $isRoom
+            ? (int) ($product->included_guest_count ?? 0)
+            : null;
+
+        $paidExtraGuestCount = $isRoom
+            ? max(0, $detailGuestCount - $includedGuestCount)
             : 0;
 
         return [
             'facility_id' => (int) $facility->facility_id,
             'facility_name' => (string) $facility->facility_name,
             'facility_type' => $facility->facilityType?->facility_type,
-            'capacity' => $capacity,
-            'total_guest_count' => $totalGuestCount,
+            'facility_product_id' => (int) $product->facility_product_id,
+            'capacity_policy' => $product->capacity_policy->value,
+            'capacity' => $strictMaximum ?? $product->suggested_maximum,
+            'suggested_minimum' => $product->suggested_minimum,
+            'suggested_maximum' => $product->suggested_maximum,
+            'strict_maximum' => $strictMaximum,
+            'total_guest_count' => $parentGuestCount,
+            'guest_count' => $detailGuestCount,
             'included_guest_count' => $includedGuestCount,
             'paid_extra_guest_count' => $paidExtraGuestCount,
-            'max_paid_extra_guests' => $facilityType === 'room'
-                ? max(0, $capacity - $includedGuestCount)
+            'max_paid_extra_guests' => $isRoom
+                ? max(0, (int) $strictMaximum - $includedGuestCount)
                 : 0,
-            'has_paid_extra_guests' => $facilityType === 'room',
+            'has_paid_extra_guests' => $isRoom,
         ];
     }
 
     public function maxTotalGuests(?int $facilityId): int
     {
-        if (! $facilityId) {
-            return 1;
-        }
+        return $this->strictMaximum($facilityId) ?? PHP_INT_MAX;
+    }
 
-        $facility = Facility::query()
-            ->with('facilityType')
-            ->find($facilityId);
-
-        return $facility
-            ? $this->capacityFor($facility)
-            : 1;
+    public function strictMaximum(?int $facilityId): ?int
+    {
+        return $this->products->strictMaximum($facilityId);
     }
 
     public function maxPaidExtraGuests(?int $facilityId): int
@@ -89,20 +114,21 @@ class FacilityOccupancyService
         }
 
         $facility = Facility::query()
-            ->with('facilityType')
+            ->with(['facilityType', 'facilityProduct.productRates'])
             ->find($facilityId);
 
         if (! $facility) {
             return 0;
         }
 
-        $capacity = $this->capacityFor($facility);
-        $facilityType = strtolower(
-            trim((string) $facility->facilityType?->facility_type)
-        );
+        $product = $this->products->productFor($facility);
 
-        return $facilityType === 'room'
-            ? max(0, $capacity - min(self::ROOM_INCLUDED_GUESTS, $capacity))
+        return $this->products->isRoomProduct($product)
+            ? max(
+                0,
+                (int) $product->strict_maximum
+                    - (int) $product->included_guest_count,
+            )
             : 0;
     }
 
@@ -110,6 +136,21 @@ class FacilityOccupancyService
         Facility $facility,
         int $storedExtraGuestCount,
     ): int {
+        $facility->loadMissing(['facilityType', 'facilityProduct']);
+        $product = $facility->facilityProduct;
+
+        if ($product instanceof FacilityProduct) {
+            $isRoom = $this->products->isRoomProduct($product);
+            $inferred = $isRoom
+                ? (int) ($product->included_guest_count ?? self::ROOM_INCLUDED_GUESTS)
+                    + max(0, $storedExtraGuestCount)
+                : 1 + max(0, $storedExtraGuestCount);
+
+            return $isRoom
+                ? max(1, min((int) $product->strict_maximum, $inferred))
+                : max(1, $inferred);
+        }
+
         $capacity = $this->capacityFor($facility);
         $facilityType = strtolower(
             trim((string) $facility->facilityType?->facility_type)

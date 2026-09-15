@@ -57,8 +57,7 @@ class ActivityLogService
             model: $model,
             oldValues: null,
             newValues: $values,
-            description:
-                'Created '.$this->subjectLabel($model),
+            description: 'Created '.$this->subjectLabel($model),
         );
     }
 
@@ -127,8 +126,7 @@ class ActivityLogService
             model: $model,
             oldValues: $values,
             newValues: null,
-            description:
-                'Deleted '.$this->subjectLabel($model),
+            description: 'Deleted '.$this->subjectLabel($model),
         );
     }
 
@@ -143,24 +141,19 @@ class ActivityLogService
             ActivityLog::query()->create([
                 'user_id' => auth()->id(),
                 'action' => $action,
-                'module' =>
-                    $this->moduleName($model),
+                'module' => $this->moduleName($model),
                 'subject_type' => $model::class,
-                'subject_id' =>
-                    is_numeric($model->getKey())
+                'subject_id' => is_numeric($model->getKey())
                         ? (int) $model->getKey()
                         : null,
-                'subject_label' =>
-                    $this->subjectLabel($model),
+                'subject_label' => $this->subjectLabel($model),
                 'description' => $description,
                 'old_values' => $oldValues,
                 'new_values' => $newValues,
-                'ip_address' =>
-                    app()->runningInConsole()
+                'ip_address' => app()->runningInConsole()
                         ? null
                         : request()->ip(),
-                'user_agent' =>
-                    app()->runningInConsole()
+                'user_agent' => app()->runningInConsole()
                         ? null
                         : Str::limit(
                             (string) request()
@@ -257,8 +250,7 @@ class ActivityLogService
 
         if (is_array($value)) {
             return array_map(
-                fn (mixed $item): mixed =>
-                    $this->normalizeValue($item),
+                fn (mixed $item): mixed => $this->normalizeValue($item),
                 $value,
             );
         }
@@ -284,33 +276,25 @@ class ActivityLogService
     ): string {
         return match (class_basename($model)) {
             'User' => 'User Management',
-            'EntranceFee' =>
-                'Entrance Fee Management',
-            'Discount' =>
-                'Discount Management',
+            'EntranceFee' => 'Entrance Fee Management',
+            'Discount' => 'Discount Management',
             'Facility',
+            'FacilityProduct',
+            'ProductRate',
             'FacilityPrice',
-            'FacilityAmenity' =>
-                'Facility Management',
-            'Amenity' =>
-                'Amenity Management',
+            'FacilityAmenity' => 'Facility Management',
+            'Amenity' => 'Amenity Management',
             'Fine',
-            'DamageType' =>
-                'Fines Management',
+            'DamageType' => 'Fines Management',
             'Reservation',
-            'ReservationDetail' =>
-                'Reservation',
+            'ReservationDetail' => 'Reservation',
             'Booking',
-            'BookingDetail' =>
-                'Booking',
-            'EntranceSlip' =>
-                'Entrance Slip',
+            'BookingDetail' => 'Booking',
+            'EntranceSlip' => 'Entrance Slip',
             'Payment' => 'Payment',
-            'AmenityRequest' =>
-                'Amenity Request',
+            'AmenityRequest' => 'Amenity Request',
             'FacilityInspectionRequest',
-            'FacilityInspection' =>
-                'Facility Inspection',
+            'FacilityInspection' => 'Facility Inspection',
             'GuestFine' => 'Guest Fine',
             default => Str::headline(
                 class_basename($model),

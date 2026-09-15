@@ -155,10 +155,41 @@ class BookingModificationStatusHardeningTest extends TestCase
                 ]);
         }
 
+        $productId = DB::table('tbl_facility_product')
+            ->where('product_code', 'ROOM_STANDARD')
+            ->value('facility_product_id');
+
+        if ($productId === null) {
+            $productId = DB::table('tbl_facility_product')->insertGetId([
+                'product_code' => 'ROOM_STANDARD',
+                'facility_type_id' => $typeId,
+                'display_name' => 'Standard Room',
+                'size_label' => 'Standard',
+                'schedule_policy' => 'overnight',
+                'capacity_policy' => 'strict',
+                'included_guest_count' => 4,
+                'strict_maximum' => 10,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('tbl_facility_product_rate')->insert([
+                'facility_product_id' => $productId,
+                'rate_code' => 'OVERNIGHT',
+                'display_name' => 'Overnight',
+                'amount' => $price,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         $facilityId = DB::table('tbl_facility')
             ->insertGetId([
                 'facility_name' => $name.' '.uniqid(),
                 'facility_type_id' => $typeId,
+                'facility_product_id' => $productId,
                 'facility_size' => 'Standard',
                 'facility_status' => 'Available',
                 'capacity' => '10',

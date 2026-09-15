@@ -45,7 +45,7 @@ class PublicFacilitySearchService
         }
 
         $facilities = Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
             ->whereHas('prices', function ($query) use ($rateType): void {
@@ -110,5 +110,10 @@ class PublicFacilitySearchService
     public function maxTotalGuests(?int $facilityId): int
     {
         return $this->occupancy->maxTotalGuests($facilityId);
+    }
+
+    public function strictMaximum(?int $facilityId): ?int
+    {
+        return $this->occupancy->strictMaximum($facilityId);
     }
 }

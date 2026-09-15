@@ -7,7 +7,7 @@ use App\Models\FacilityPrice;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
-use App\Models\ReservationExtraGuest;
+use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,9 @@ use InvalidArgumentException;
 class GuestReservationManagementService
 {
     private const OTP_PURPOSE = 'reservation_manage';
+
     private const OTP_TTL_MINUTES = 10;
+
     private const MAX_OTP_ATTEMPTS = 5;
 
     public function __construct(
@@ -28,6 +30,7 @@ class GuestReservationManagementService
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly BookingAvailabilityService $availability,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
+        private readonly DetailExtraGuestService $detailGuests,
     ) {}
 
     /** @return array{reservation_id:int, debug_otp:?string} */
@@ -78,7 +81,7 @@ class GuestReservationManagementService
             throw new InvalidArgumentException('OTP verification details are incomplete.');
         }
 
-        return DB::transaction(function () use ($reservationId, $email, $otp): Reservation {
+        $reservation = DB::transaction(function () use ($reservationId, $email, $otp): ?Reservation {
             $record = GuestVerificationOtp::query()
                 ->where('reservation_id', $reservationId)
                 ->where('email', $email)
@@ -103,7 +106,7 @@ class GuestReservationManagementService
             $record->increment('attempts');
 
             if (! Hash::check($otp, $record->otp_hash)) {
-                throw new InvalidArgumentException('Invalid OTP.');
+                return null;
             }
 
             $record->update(['verified_at' => Carbon::now()]);
@@ -112,6 +115,12 @@ class GuestReservationManagementService
                 ->with(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments'])
                 ->findOrFail($reservationId);
         });
+
+        if ($reservation === null) {
+            throw new InvalidArgumentException('Invalid OTP.');
+        }
+
+        return $reservation;
     }
 
     public function facilityTypes(): Collection
@@ -153,7 +162,7 @@ class GuestReservationManagementService
         }
 
         $facilities = Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
             ->whereHas('prices', function ($query) use ($rateType): void {
@@ -210,7 +219,10 @@ class GuestReservationManagementService
             $this->guardActiveReservation($reservation);
             $this->guardNoVerifiedPayments($reservation);
 
-            $detail = $reservation->details()->lockForUpdate()->first();
+            $detail = ReservationDetail::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->first();
 
             if (! $detail) {
                 throw new InvalidArgumentException('Reservation has no facility details to update.');
@@ -223,10 +235,7 @@ class GuestReservationManagementService
 
             $this->scheduleLock->lockOne($facilityId);
 
-            $totalGuestCount = max(
-                1,
-                (int) ($data['total_guest_count'] ?? 1),
-            );
+            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
                 $data['extra_guests'] ?? [],
             );
@@ -279,18 +288,15 @@ class GuestReservationManagementService
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'discount_id' => $discount?->discount_id,
+                ...$quote['detail_snapshot'],
             ]);
 
-            ReservationExtraGuest::query()->where('reservation_id', $reservation->reservation_id)->delete();
-
-            foreach ($extraGuests as $extraGuest) {
-                ReservationExtraGuest::query()->create([
-                    'reservation_id' => $reservation->reservation_id,
-                    'first_name' => $extraGuest['first_name'],
-                    'middle_name' => $extraGuest['middle_name'],
-                    'last_name' => $extraGuest['last_name'],
-                ]);
-            }
+            $reservation->extraGuests()->delete();
+            $this->detailGuests->createForReservation(
+                $reservation,
+                $detail,
+                $extraGuests,
+            );
 
             return $reservation->fresh(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments']);
         });
@@ -409,7 +415,7 @@ class GuestReservationManagementService
     private function sendOtpEmail(string $email, string $referenceNumber, string $otp): void
     {
         Mail::raw(
-            "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in " . self::OTP_TTL_MINUTES . ' minutes.',
+            "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in ".self::OTP_TTL_MINUTES.' minutes.',
             function ($message) use ($email): void {
                 $message->to($email)->subject('Olaer Spring Resort Reservation OTP');
             }

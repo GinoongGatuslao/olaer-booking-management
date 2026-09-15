@@ -14,9 +14,11 @@ use App\Models\FacilityAmenity;
 use App\Models\FacilityInspection;
 use App\Models\FacilityInspectionRequest;
 use App\Models\FacilityPrice;
+use App\Models\FacilityProduct;
 use App\Models\Fine;
 use App\Models\GuestFine;
 use App\Models\Payment;
+use App\Models\ProductRate;
 use App\Models\Reservation;
 use App\Models\User;
 use App\Observers\AuditObserver;
@@ -36,6 +38,8 @@ class AuditServiceProvider extends ServiceProvider
             EntranceFee::class,
             Discount::class,
             Facility::class,
+            FacilityProduct::class,
+            ProductRate::class,
             FacilityPrice::class,
             FacilityAmenity::class,
             Amenity::class,

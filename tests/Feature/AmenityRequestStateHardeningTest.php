@@ -2,18 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Services\AmenityRequestWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class AmenityRequestStateHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_only_cashier_can_create_billable_amenity_request(): void
+    public function test_only_cashier_or_maintenance_can_create_billable_amenity_request(): void
     {
         $facilityId = $this->createFacility();
         $bookingId = $this->createBooking('Checked-in', 0.00);
@@ -23,7 +25,7 @@ class AmenityRequestStateHardeningTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
-            'Only a Cashier can create amenity requests.',
+            'Only Cashier or Maintenance Staff users can create amenity requests.',
         );
 
         app(AmenityRequestWorkflowService::class)
@@ -143,6 +145,7 @@ class AmenityRequestStateHardeningTest extends TestCase
             status: 'Pending',
             totalPrice: 100.00,
         );
+        $cashierId = $this->createUser('Cashier');
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
@@ -150,7 +153,224 @@ class AmenityRequestStateHardeningTest extends TestCase
         );
 
         app(AmenityRequestWorkflowService::class)
-            ->cancelUnpaidRequest($requestId);
+            ->cancelUnpaidRequest($requestId, $cashierId);
+    }
+
+    public function test_maintenance_create_route_renders_the_dedicated_component_without_cashier_actions(): void
+    {
+        $maintenance = User::query()->findOrFail(
+            $this->createUser('Maintenance Staff'),
+        );
+
+        $routes = file_get_contents(base_path('routes/web.php'));
+        $component = file_get_contents(resource_path(
+            'views/livewire/maintenance/amenity-requests/index.blade.php',
+        ));
+
+        $this->assertIsString($routes);
+        $this->assertIsString($component);
+        $this->assertStringContainsString(
+            "Volt::route('/maintenance/create-amenity-request', 'maintenance.amenity-requests.index')",
+            $routes,
+        );
+        $this->assertStringNotContainsString(
+            "Volt::route('/maintenance/create-amenity-request', 'cashier.amenity-requests.index')",
+            $routes,
+        );
+
+        foreach (['saveEdit', 'cancelRequest', 'reassign', 'verifyPayment'] as $cashierAction) {
+            $this->assertStringNotContainsString(
+                $cashierAction,
+                $component,
+            );
+        }
+
+        $this->actingAs($maintenance)
+            ->get(route('maintenance.create-amenity-request.index'))
+            ->assertOk()
+            ->assertSee('Amenity Delivery Queue')
+            ->assertSee('Create Amenity Request')
+            ->assertDontSee('Modify Pending Amenity Request')
+            ->assertDontSee('Payment Verification');
+    }
+
+    public function test_maintenance_can_create_and_deliver_its_own_unpaid_amenity_request(): void
+    {
+        $facilityId = $this->createFacility();
+        $bookingId = $this->createBooking('Checked-in', 500.00);
+        $bookingDetailId = $this->createBookingDetail(
+            $bookingId,
+            $facilityId,
+            'Checked-in',
+        );
+        $amenityId = $this->createAmenity(100.00);
+        $maintenance = User::query()->findOrFail(
+            $this->createUser('Maintenance Staff'),
+        );
+        $otherMaintenance = User::query()->findOrFail(
+            $this->createUser('Maintenance Staff'),
+        );
+
+        Livewire::actingAs($maintenance)
+            ->test('maintenance.amenity-requests.index')
+            ->set('form.booking_id', (string) $bookingId)
+            ->set(
+                'form.booking_detail_id',
+                (string) $bookingDetailId,
+            )
+            ->set('items', [[
+                'amenity_id' => (string) $amenityId,
+                'quantity' => 2,
+            ]])
+            ->call('createRequest')
+            ->assertHasNoErrors();
+
+        $requestId = (int) DB::table('tbl_amenity_request')
+            ->where('booking_id', $bookingId)
+            ->value('amenity_request_id');
+
+        $this->assertDatabaseHas('tbl_amenity_request', [
+            'amenity_request_id' => $requestId,
+            'user_id' => $maintenance->user_id,
+            'assigned_to_user_id' => $maintenance->user_id,
+            'amenity_request_status' => 'Delivering',
+        ]);
+        $this->assertDatabaseHas('tbl_booking', [
+            'booking_id' => $bookingId,
+            'amount_due' => 700.00,
+        ]);
+
+        Livewire::actingAs($otherMaintenance)
+            ->test('maintenance.amenity-requests.index')
+            ->call('markDelivered', $requestId)
+            ->assertHasErrors('request');
+
+        $this->assertDatabaseHas('tbl_amenity_request', [
+            'amenity_request_id' => $requestId,
+            'amenity_request_status' => 'Delivering',
+        ]);
+
+        Livewire::actingAs($maintenance)
+            ->test('maintenance.amenity-requests.index')
+            ->call('markDelivered', $requestId)
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('tbl_amenity_request', [
+            'amenity_request_id' => $requestId,
+            'amenity_request_status' => 'Delivered',
+            'assigned_to_user_id' => $maintenance->user_id,
+        ]);
+    }
+
+    public function test_maintenance_creation_rejects_tampered_association_ids(): void
+    {
+        $facilityId = $this->createFacility();
+        $otherFacilityId = $this->createFacility();
+        $bookingId = $this->createBooking('Checked-in', 0.00);
+        $otherBookingId = $this->createBooking('Checked-in', 0.00);
+        $bookingDetailId = $this->createBookingDetail(
+            $bookingId,
+            $facilityId,
+            'Checked-in',
+        );
+        $otherBookingDetailId = $this->createBookingDetail(
+            $otherBookingId,
+            $otherFacilityId,
+            'Checked-in',
+        );
+        $amenityId = $this->createAmenity(100.00);
+        $maintenanceId = $this->createUser('Maintenance Staff');
+        $workflow = app(AmenityRequestWorkflowService::class);
+
+        $valid = [
+            'booking_id' => $bookingId,
+            'booking_detail_id' => $bookingDetailId,
+            'facility_id' => $facilityId,
+            'user_id' => $maintenanceId,
+            'items' => [[
+                'amenity_id' => $amenityId,
+                'quantity' => 1,
+            ]],
+        ];
+
+        $tamperedPayloads = [
+            'booking' => [
+                ...$valid,
+                'booking_id' => 999999,
+            ],
+            'booking detail' => [
+                ...$valid,
+                'booking_detail_id' => $otherBookingDetailId,
+            ],
+            'facility' => [
+                ...$valid,
+                'facility_id' => $otherFacilityId,
+            ],
+            'amenity' => [
+                ...$valid,
+                'items' => [[
+                    'amenity_id' => 999999,
+                    'quantity' => 1,
+                ]],
+            ],
+        ];
+
+        foreach ($tamperedPayloads as $name => $payload) {
+            try {
+                $workflow->createBillableRequest($payload);
+                $this->fail("Tampered {$name} ID was accepted.");
+            } catch (\Throwable) {
+                $this->assertDatabaseCount('tbl_amenity_request', 0);
+            }
+        }
+    }
+
+    public function test_cashier_update_and_cancel_actions_reauthorize_the_actor(): void
+    {
+        $facilityId = $this->createFacility();
+        $bookingId = $this->createBooking('Checked-in', 100.00);
+        $this->createBookingDetail($bookingId, $facilityId, 'Checked-in');
+        $amenityId = $this->createAmenity(100.00);
+        $requestId = $this->createAmenityRequest(
+            bookingId: $bookingId,
+            status: 'Pending',
+            totalPrice: 100.00,
+        );
+        $this->createAmenityRequestDetailFor(
+            $requestId,
+            $facilityId,
+            $amenityId,
+        );
+        $maintenanceId = $this->createUser('Maintenance Staff');
+        $workflow = app(AmenityRequestWorkflowService::class);
+
+        foreach ([
+            fn () => $workflow->updateBillableRequest(
+                $requestId,
+                $facilityId,
+                [['amenity_id' => $amenityId, 'quantity' => 1]],
+                $maintenanceId,
+            ),
+            fn () => $workflow->cancelUnpaidRequest(
+                $requestId,
+                $maintenanceId,
+            ),
+        ] as $cashierOnlyAction) {
+            try {
+                $cashierOnlyAction();
+                $this->fail('Maintenance invoked a Cashier-only action.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString(
+                    'Only a Cashier',
+                    $exception->getMessage(),
+                );
+            }
+        }
+
+        $this->assertDatabaseHas('tbl_amenity_request', [
+            'amenity_request_id' => $requestId,
+            'amenity_request_status' => 'Pending',
+        ]);
     }
 
     private function createFacility(): int
@@ -274,6 +494,22 @@ class AmenityRequestStateHardeningTest extends TestCase
         $facilityId = $this->createFacility();
         $amenityId = $this->createAmenity(100.00);
 
+        DB::table('tbl_amenity_request_details')
+            ->insert([
+                'amenity_request_id' => $requestId,
+                'facility_id' => $facilityId,
+                'amenity_id' => $amenityId,
+                'amenity_quantity' => 1,
+                'unit_price' => 100.00,
+                'line_total' => 100.00,
+            ]);
+    }
+
+    private function createAmenityRequestDetailFor(
+        int $requestId,
+        int $facilityId,
+        int $amenityId,
+    ): void {
         DB::table('tbl_amenity_request_details')
             ->insert([
                 'amenity_request_id' => $requestId,

@@ -85,14 +85,12 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
 
     public function updatedFacilityId(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
         $this->setExactPaymentAmountFromQuote();
     }
 
     public function updatedTotalGuestCount(): void
     {
-        $this->clampTotalGuests();
         $this->syncPaidExtraGuestRows();
         $this->setExactPaymentAmountFromQuote();
     }
@@ -102,9 +100,12 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
     ): void
     {
         $this->error_message = null;
-        $this->clampTotalGuests();
-        $this->syncPaidExtraGuestRows();
-        $maxTotalGuests = $this->maxTotalGuests();
+        $guestCountRules = ['required', 'integer', 'min:1'];
+        $strictMaximum = $this->strictMaximum();
+
+        if ($strictMaximum !== null) {
+            $guestCountRules[] = 'max:'.$strictMaximum;
+        }
 
         $validated = $this->validate([
             'facility_type_id' => ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'],
@@ -113,7 +114,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'check_in_time' => ['required', 'date_format:H:i'],
             'facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'total_guest_count' => ['required', 'integer', 'min:1', 'max:' . $maxTotalGuests],
+            'total_guest_count' => $guestCountRules,
             'extra_guests' => ['array'],
             'extra_guests.*.first_name' => ['required', 'string', 'max:50'],
             'extra_guests.*.middle_name' => ['nullable', 'string', 'max:50'],
@@ -131,6 +132,8 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             'reference_number' => ['required', 'string', 'max:50'],
             'proof_of_payment' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
         ]);
+
+        $this->syncPaidExtraGuestRows();
 
         $quote = $this->quotePreview();
 
@@ -196,32 +199,44 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
         }
 
         return Facility::query()
-            ->with(['facilityType', 'prices'])
+            ->with(['facilityType', 'facilityProduct', 'prices'])
             ->find($this->facility_id);
     }
 
-    public function maxTotalGuests(): int
+    public function strictMaximum(): ?int
     {
-        return app(PublicBookingSearchService::class)
-            ->maxTotalGuests($this->facility_id);
+        try {
+            return app(PublicBookingSearchService::class)
+                ->strictMaximum($this->facility_id);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function occupancyPreview(): ?array
     {
-        return app(PublicBookingSearchService::class)
-            ->occupancyPreview(
-                $this->facility_id,
-                $this->total_guest_count,
-            );
+        try {
+            return app(PublicBookingSearchService::class)
+                ->occupancyPreview(
+                    $this->facility_id,
+                    $this->total_guest_count,
+                );
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function quotePreview(): ?array
     {
-        return app(PublicBookingSearchService::class)->quotePreview(
-            facilityId: $this->facility_id,
-            rateType: $this->rate_type,
-            totalGuestCount: $this->total_guest_count,
-        );
+        try {
+            return app(PublicBookingSearchService::class)->quotePreview(
+                facilityId: $this->facility_id,
+                rateType: $this->rate_type,
+                totalGuestCount: $this->total_guest_count,
+            );
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function with(): array
@@ -238,25 +253,22 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                 $this->check_out_date,
             ),
             'selectedFacility' => $this->selectedFacility(),
-            'maxTotalGuests' => $this->maxTotalGuests(),
+            'strictMaximum' => $this->strictMaximum(),
             'occupancy' => $this->occupancyPreview(),
             'quote' => $this->quotePreview(),
         ];
     }
 
-    private function clampTotalGuests(): void
-    {
-        $max = $this->maxTotalGuests();
-        $this->total_guest_count = max(
-            1,
-            min($max, (int) $this->total_guest_count),
-        );
-    }
-
     private function syncPaidExtraGuestRows(): void
     {
+        $occupancy = $this->occupancyPreview();
+
+        if ($this->facility_id !== null && $occupancy === null) {
+            return;
+        }
+
         $count = (int) (
-            $this->occupancyPreview()['paid_extra_guest_count']
+            $occupancy['paid_extra_guest_count']
             ?? 0
         );
         $current = $this->extra_guests;
@@ -340,7 +352,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                                 <option value="">Select facility</option>
                                 @foreach ($availableFacilities as $facility)
                                     <option value="{{ $facility->facility_id }}">
-                                        {{ $facility->facility_name }} — {{ $facility->facility_size }} — capacity {{ $facility->capacity }}
+                                        {{ $facility->facility_name }} — {{ $facility->facility_size }} — {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
                                     </option>
                                 @endforeach
                             </select>
@@ -353,19 +365,22 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                 </div>
 
                 <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                    <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">2. Extra guests</h2>
+                    <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">2. Guest allocation</h2>
                     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-                        Paid extra guests are only supported for rooms. Cottages and function halls use their selected facility capacity.
+                        Rooms have a strict maximum and require names for paid extra occupants. Cottage and function-hall capacities are recommendations only.
                     </p>
 
                     <div class="mt-5 max-w-sm">
-                        <flux:input wire:model.live="total_guest_count" type="number" min="1" max="{{ $maxTotalGuests }}" label="Total guests, including primary guest" />
-                        <p class="mt-1 text-xs text-zinc-500">Selected facility capacity: {{ $maxTotalGuests }}</p>
+                        <flux:input wire:model.live="total_guest_count" type="number" min="1" max="{{ $strictMaximum }}" label="Total guests, including primary guest" />
                         @error('total_guest_count') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
 
                         @if ($occupancy)
                             <p class="mt-2 text-xs text-zinc-500">
-                                Included guests: {{ $occupancy['included_guest_count'] }} · Paid room extras: {{ $occupancy['paid_extra_guest_count'] }}
+                                @if ($occupancy['strict_maximum'])
+                                    Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
+                                @else
+                                    Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
+                                @endif
                             </p>
                         @endif
                     </div>
@@ -438,8 +453,8 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                             <span class="font-medium text-zinc-950 dark:text-white">{{ optional($selectedFacility->facilityType)->facility_type }}</span>
                         </div>
                         <div class="flex justify-between gap-4">
-                            <span class="text-zinc-500">Capacity</span>
-                            <span class="font-medium text-zinc-950 dark:text-white">{{ $selectedFacility->capacity }}</span>
+                            <span class="text-zinc-500">{{ $selectedFacility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended capacity' }}</span>
+                            <span class="font-medium text-zinc-950 dark:text-white">{{ $selectedFacility->facilityProduct?->strict_maximum ?? $selectedFacility->facilityProduct?->suggested_maximum ?? $selectedFacility->capacity }} guests</span>
                         </div>
                         <div class="flex justify-between gap-4">
                             <span class="text-zinc-500">Schedule</span>

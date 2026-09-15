@@ -305,8 +305,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
         app(ReservationToBookingWorkflowService::class)
             ->convert($reservation['reservation_id'], [
                 'payment_amount' => 100.00,
-                'mode_of_payment_id' =>
-                    $this->createModeOfPayment('Cash'),
+                'mode_of_payment_id' => $this->createModeOfPayment('Cash'),
                 'reference_number' => '',
                 'user_id' => $cashierId,
             ]);
@@ -371,10 +370,8 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
                     'app_to_cottage' => false,
                     'app_to_room' => true,
                     'app_to_function_hall' => false,
-                    'discount_start' =>
-                        now()->subDay()->toDateString(),
-                    'discount_end' =>
-                        now()->addMonth()->toDateString(),
+                    'discount_start' => now()->subDay()->toDateString(),
+                    'discount_end' => now()->addMonth()->toDateString(),
                     'status' => 'Active',
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -410,18 +407,37 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
         $reservationId = DB::table('tbl_reservation')
             ->insertGetId($payload);
 
-        DB::table('tbl_reservation_details')->insert([
+        $productId = DB::table('tbl_facility')
+            ->where('facility_id', $facilityId)
+            ->value('facility_product_id');
+        $detailId = DB::table('tbl_reservation_details')->insertGetId([
             'reservation_id' => $reservationId,
             'facility_id' => $facilityId,
+            'facility_product_id' => $productId,
+            'guest_count' => $totalGuestCount,
+            'capacity_policy' => 'strict',
+            'included_guest_count_snapshot' => 4,
+            'strict_maximum_snapshot' => 10,
+            'suggested_minimum_snapshot' => null,
+            'suggested_maximum_snapshot' => null,
+            'schedule_policy' => 'overnight',
+            'rate_code' => 'OVERNIGHT',
+            'unit_rate' => 1000.00,
             'rate_type' => 'Overnight',
             'check_in_date' => $checkInDate,
             'check_out_date' => $checkOutDate,
             'discount_id' => $discountId,
+            'base_price' => 1000.00,
+            'discount_rate' => $withDiscount ? 0.10 : 0,
+            'discount_amount' => $withDiscount ? 100.00 : 0,
+            'extra_guest_fee' => $extraGuestCount * 100,
+            'line_total' => $totalPrice,
         ]);
 
         if ($withExtraGuest) {
             DB::table('tbl_reservation_extra_guests')->insert([
                 'reservation_id' => $reservationId,
+                'reservation_details_id' => $detailId,
                 'first_name' => 'Extra',
                 'middle_name' => null,
                 'last_name' => 'Guest',
@@ -485,13 +501,10 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
                 'booking_id' => $bookingId,
                 'facility_id' => $facilityId,
                 'rate_type' => 'Overnight',
-                'check_in_date' =>
-                    $checkInDate ?? now()->toDateString(),
-                'check_out_date' =>
-                    $checkOutDate
+                'check_in_date' => $checkInDate ?? now()->toDateString(),
+                'check_out_date' => $checkOutDate
                     ?? now()->addDay()->toDateString(),
-                'check_in_time' =>
-                    $status === 'Checked-in'
+                'check_in_time' => $status === 'Checked-in'
                         ? now()->format('H:i:s')
                         : null,
                 'status' => $status,
@@ -513,10 +526,43 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
                 ]);
         }
 
+        $productId = DB::table('tbl_facility_product')
+            ->where('product_code', 'ROOM_STANDARD')
+            ->value('facility_product_id');
+
+        if ($productId === null) {
+            $productId = DB::table('tbl_facility_product')->insertGetId([
+                'product_code' => 'ROOM_STANDARD',
+                'facility_type_id' => $facilityTypeId,
+                'display_name' => 'Standard Room',
+                'size_label' => 'Standard',
+                'schedule_policy' => 'overnight',
+                'capacity_policy' => 'strict',
+                'suggested_minimum' => null,
+                'suggested_maximum' => null,
+                'included_guest_count' => 4,
+                'strict_maximum' => 10,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('tbl_facility_product_rate')->insert([
+                'facility_product_id' => $productId,
+                'rate_code' => 'OVERNIGHT',
+                'display_name' => 'Overnight',
+                'amount' => 1000.00,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         return DB::table('tbl_facility')
             ->insertGetId([
                 'facility_name' => 'Room '.uniqid(),
                 'facility_type_id' => $facilityTypeId,
+                'facility_product_id' => $productId,
                 'facility_size' => 'Standard',
                 'facility_status' => $status,
                 'capacity' => '10',

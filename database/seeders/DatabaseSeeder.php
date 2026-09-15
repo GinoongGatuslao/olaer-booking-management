@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             PaymentModeSeeder::class,
             EntranceFeeSeeder::class,
             FacilityTypeSeeder::class,
+            FacilityProductSeeder::class,
             AmenitySeeder::class,
             FineSeeder::class,
             FacilitySeeder::class,

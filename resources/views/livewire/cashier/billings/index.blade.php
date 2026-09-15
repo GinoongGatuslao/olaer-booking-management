@@ -433,7 +433,14 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
             <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <h2 class="font-semibold text-zinc-900 dark:text-zinc-50">Printable Billing Statement</h2>
                 @if ($statement)
-                    <flux:button type="button" variant="primary" onclick="window.print()">Print</flux:button>
+                    <flux:button
+                        href="{{ route('print.billing', $statement['booking']) }}"
+                        target="_blank"
+                        rel="noopener"
+                        variant="primary"
+                    >
+                        Print
+                    </flux:button>
                 @endif
             </div>
 

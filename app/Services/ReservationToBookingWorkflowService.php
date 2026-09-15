@@ -4,13 +4,14 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingDetail;
-use App\Models\BookingExtraGuest;
-use App\Models\FacilityPrice;
+use App\Models\FacilityType;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
+use App\Models\ReservationExtraGuest;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,11 +20,12 @@ use InvalidArgumentException;
 class ReservationToBookingWorkflowService
 {
     public function __construct(
-        private readonly ReservationQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly BookingAvailabilityService $availability,
         private readonly GcashReferenceIntegrityService $gcashReferences,
+        private readonly DetailExtraGuestService $detailGuests,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function convert(
@@ -40,41 +42,44 @@ class ReservationToBookingWorkflowService
             $reservation = Reservation::query()
                 ->with([
                     'guest',
-                    'details.facility.facilityType',
-                    'details.discount',
-                    'extraGuests',
                     'payments',
                 ])
                 ->lockForUpdate()
                 ->findOrFail($reservationId);
 
-            $this->guardConvertible($reservation);
+            $reservationDetails = ReservationDetail::query()
+                ->with(['facility.facilityType', 'facilityProduct', 'discount'])
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->get();
+            $reservationExtraGuests = ReservationExtraGuest::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->get();
+
+            $this->guardConvertible($reservation, $reservationDetails);
 
             $this->scheduleLock->lockMany(
-                $reservation->details
+                $reservationDetails
                     ->pluck('facility_id')
                     ->map(fn ($facilityId): int => (int) $facilityId)
                     ->all(),
             );
 
-            foreach ($reservation->details as $detail) {
+            foreach ($reservationDetails as $detail) {
                 $this->availability->assertFacilityAvailable(
                     (int) $detail->facility_id,
-                    $detail->check_in_date->toDateString(),
-                    $detail->check_out_date->toDateString(),
+                    Carbon::parse($detail->check_in_date)->toDateString(),
+                    Carbon::parse($detail->check_out_date)->toDateString(),
                     null,
                     (int) $detail->reservation_details_id,
                 );
             }
 
-            $amountDue = round(
-                (float) $reservation->amount_due,
-                2,
-            );
+            $amountDue = $this->money->normalize($reservation->amount_due);
 
-            $paymentAmount = round(
-                (float) ($data['payment_amount'] ?? 0),
-                2,
+            $paymentAmount = $this->money->normalize(
+                (string) ($data['payment_amount'] ?? '0.00'),
             );
 
             $modeOfPaymentId =
@@ -85,21 +90,21 @@ class ReservationToBookingWorkflowService
             );
 
             if (
-                $amountDue > 0
-                && abs($paymentAmount - $amountDue) > 0.009
+                bccomp($amountDue, '0.00', 2) === 1
+                && ! $this->money->equals($paymentAmount, $amountDue)
             ) {
                 throw new InvalidArgumentException(
                     'Reservation conversion requires exact full payment of the remaining balance.',
                 );
             }
 
-            if ($amountDue <= 0) {
-                $paymentAmount = 0.00;
+            if (bccomp($amountDue, '0.00', 2) !== 1) {
+                $paymentAmount = '0.00';
             }
 
             $mode = null;
 
-            if ($paymentAmount > 0) {
+            if (bccomp($paymentAmount, '0.00', 2) === 1) {
                 if (! $modeOfPaymentId) {
                     throw new InvalidArgumentException(
                         'Mode of payment is required.',
@@ -118,7 +123,7 @@ class ReservationToBookingWorkflowService
                 }
             }
 
-            $firstDetail = $reservation->details->first();
+            $firstDetail = $reservationDetails->first();
 
             $totalGuestCount = (int) (
                 $reservation->total_guest_count
@@ -139,8 +144,7 @@ class ReservationToBookingWorkflowService
                 'b_ref_no' => $this->newReference('B'),
                 'guest_id' => $reservation->guest_id,
                 'booking_date' => Carbon::today()->toDateString(),
-                'no_of_extra_guests' =>
-                    (int) $reservation->no_of_extra_guests,
+                'no_of_extra_guests' => (int) $reservation->no_of_extra_guests,
                 'total_guest_count' => $totalGuestCount,
                 'total_price' => $reservation->total_price,
                 'amount_due' => 0.00,
@@ -150,56 +154,74 @@ class ReservationToBookingWorkflowService
                 'status' => 'Booked',
             ]);
 
-            foreach ($reservation->details as $detail) {
-                $quote = $this->quoteForReservationDetail(
-                    $detail,
-                    $totalGuestCount,
-                );
+            $bookingDetailsByReservationDetailId = [];
 
-                BookingDetail::query()->create([
+            foreach ($reservationDetails as $detail) {
+                $bookingDetail = BookingDetail::query()->create([
                     'booking_id' => $booking->booking_id,
                     'facility_id' => $detail->facility_id,
                     'rate_type' => $detail->rate_type,
-                    'check_in_date' =>
-                        $detail->check_in_date->toDateString(),
-                    'check_out_date' =>
-                        $detail->check_out_date->toDateString(),
-                    'check_in_time' =>
-                        $this->defaultCheckInTime($detail),
+                    'check_in_date' => Carbon::parse($detail->check_in_date)->toDateString(),
+                    'check_out_date' => Carbon::parse($detail->check_out_date)->toDateString(),
+                    'check_in_time' => $this->defaultCheckInTime($detail),
                     'status' => 'Booked',
                     'discount_id' => $detail->discount_id,
                     'user_id' => $userId,
-                    'base_price' =>
-                        $quote['base_price'] ?? null,
-                    'discount_amount' =>
-                        $quote['discount_amount'] ?? null,
-                    'extra_guest_fee' =>
-                        $quote['extra_guest_charge'] ?? null,
-                    'line_total' =>
-                        $quote['total_price'] ?? null,
+                    ...$this->snapshotValues($detail),
                 ]);
+
+                $bookingDetailsByReservationDetailId[
+                    (int) $detail->reservation_details_id
+                ] = $bookingDetail;
             }
 
-            foreach ($reservation->extraGuests as $extraGuest) {
-                BookingExtraGuest::query()->create([
-                    'booking_id' => $booking->booking_id,
+            $extraGuestsByReservationDetailId = [];
+
+            foreach ($reservationExtraGuests as $extraGuest) {
+                $reservationDetailsId = $extraGuest->reservation_details_id;
+
+                if (
+                    $reservationDetailsId === null
+                    && count($bookingDetailsByReservationDetailId) === 1
+                ) {
+                    $reservationDetailsId = array_key_first(
+                        $bookingDetailsByReservationDetailId,
+                    );
+                }
+
+                $bookingDetail = $bookingDetailsByReservationDetailId[
+                    (int) $reservationDetailsId
+                ] ?? null;
+
+                if (! $bookingDetail instanceof BookingDetail) {
+                    throw new InvalidArgumentException(
+                        'A reservation extra guest is not assigned to a valid room detail.',
+                    );
+                }
+
+                $extraGuestsByReservationDetailId[(int) $reservationDetailsId][] = [
                     'first_name' => $extraGuest->first_name,
                     'middle_name' => $extraGuest->middle_name,
                     'last_name' => $extraGuest->last_name,
-                ]);
+                ];
             }
 
-            if ($paymentAmount > 0 && $mode !== null) {
+            foreach ($bookingDetailsByReservationDetailId as $reservationDetailsId => $bookingDetail) {
+                $this->detailGuests->createForBooking(
+                    $booking,
+                    $bookingDetail,
+                    $extraGuestsByReservationDetailId[$reservationDetailsId] ?? [],
+                );
+            }
+
+            if (bccomp($paymentAmount, '0.00', 2) === 1) {
                 Payment::query()->create([
                     'p_ref_no' => $this->newReference('P'),
                     'booking_id' => $booking->booking_id,
-                    'reservation_id' =>
-                        $reservation->reservation_id,
+                    'reservation_id' => $reservation->reservation_id,
                     'entrance_slip_id' => null,
-                    'mode_of_payment_id' =>
-                        $mode->mode_of_payment_id,
-                    'reference_number' =>
-                        $referenceNumber !== ''
+                    'mode_of_payment_id' => $mode->mode_of_payment_id,
+                    'reference_number' => $referenceNumber !== ''
                             ? $referenceNumber
                             : null,
                     'proof_of_payment_path' => null,
@@ -247,8 +269,10 @@ class ReservationToBookingWorkflowService
         }
     }
 
+    /** @param Collection<int, ReservationDetail> $details */
     private function guardConvertible(
         Reservation $reservation,
+        Collection $details,
     ): void {
         if (
             ! in_array(
@@ -264,7 +288,7 @@ class ReservationToBookingWorkflowService
 
         if (
             (string) $reservation->status === 'Paid'
-            && round((float) $reservation->amount_due, 2) > 0.009
+            && bccomp((string) $reservation->amount_due, '0.00', 2) === 1
         ) {
             throw new InvalidArgumentException(
                 'This paid reservation has an inconsistent remaining balance and must be reviewed before conversion.',
@@ -277,16 +301,21 @@ class ReservationToBookingWorkflowService
             );
         }
 
-        if ($reservation->details->isEmpty()) {
+        if ($details->isEmpty()) {
             throw new InvalidArgumentException(
                 'Reservation has no facility details.',
             );
         }
 
-        foreach ($reservation->details as $detail) {
+        foreach ($details as $detail) {
+            if ((int) $detail->reservation_id !== (int) $reservation->reservation_id) {
+                throw new InvalidArgumentException(
+                    'Reservation contains a facility detail owned by another transaction.',
+                );
+            }
+
             if (
-                $detail->facility_id === null
-                || $detail->facility === null
+                $detail->facility === null
             ) {
                 throw new InvalidArgumentException(
                     'Reservation has a missing facility assignment.',
@@ -304,49 +333,34 @@ class ReservationToBookingWorkflowService
         }
     }
 
-    private function quoteForReservationDetail(
-        ReservationDetail $detail,
-        int $totalGuestCount,
-    ): array {
-        try {
-            return $this->quoteService->quote(
-                facilityId: (int) $detail->facility_id,
-                rateType: (string) $detail->rate_type,
-                checkInDate:
-                    $detail->check_in_date->toDateString(),
-                checkOutDate:
-                    $detail->check_out_date->toDateString(),
-                discountId:
-                    $detail->discount_id
-                        ? (int) $detail->discount_id
-                        : null,
-                totalGuestCount: $totalGuestCount,
-            );
-        } catch (\Throwable) {
-            $price = FacilityPrice::query()
-                ->where('facility_id', $detail->facility_id)
-                ->where('rate_type', $detail->rate_type)
-                ->value('facility_price');
-
-            return [
-                'base_price' =>
-                    $price !== null ? (float) $price : null,
-                'discount_amount' => null,
-                'extra_guest_charge' => null,
-                'total_price' => null,
-            ];
-        }
+    /** @return array<string, mixed> */
+    private function snapshotValues(ReservationDetail $detail): array
+    {
+        return [
+            'facility_product_id' => $detail->facility_product_id,
+            'guest_count' => $detail->guest_count,
+            'capacity_policy' => $detail->getRawOriginal('capacity_policy'),
+            'included_guest_count_snapshot' => $detail->included_guest_count_snapshot,
+            'strict_maximum_snapshot' => $detail->strict_maximum_snapshot,
+            'suggested_minimum_snapshot' => $detail->suggested_minimum_snapshot,
+            'suggested_maximum_snapshot' => $detail->suggested_maximum_snapshot,
+            'schedule_policy' => $detail->getRawOriginal('schedule_policy'),
+            'rate_code' => $detail->getRawOriginal('rate_code'),
+            'unit_rate' => $detail->unit_rate,
+            'base_price' => $detail->base_price,
+            'discount_rate' => $detail->discount_rate,
+            'discount_amount' => $detail->discount_amount,
+            'extra_guest_fee' => $detail->extra_guest_fee,
+            'line_total' => $detail->line_total,
+        ];
     }
 
     private function defaultCheckInTime(
         ReservationDetail $detail,
     ): string {
-        $facilityType = strtolower(
-            (string) $detail
-                ->facility
-                ?->facilityType
-                ?->facility_type,
-        );
+        $facilityType = strtolower((string) FacilityType::query()
+            ->whereKey($detail->facility?->facility_type_id)
+            ->value('facility_type'));
 
         return match ($facilityType) {
             'cottage' => '06:00:00',

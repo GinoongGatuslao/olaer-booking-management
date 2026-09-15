@@ -29,6 +29,22 @@ This application is a Laravel application and its main Laravel ecosystems packag
 
 This project has domain-specific skills available in `**/skills/**`. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
 
+## Response Style
+
+Keep all user-facing responses extremely concise.
+
+- Do not narrate what you are currently doing.
+- Do not provide progress updates unless explicitly asked.
+- Do not explain routine tool calls, searches, file reads, or edits.
+- Do not repeat the task back to me.
+- Do not give long summaries of changes.
+- Work silently as much as possible.
+- When finished, reply only with:
+  1. What was completed.
+  2. Any errors, blockers, or decisions I need to make.
+  3. Test results, if relevant.
+- If there are no blockers, keep the final response to roughly 3–6 lines.
+
 ## Conventions
 
 - You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.

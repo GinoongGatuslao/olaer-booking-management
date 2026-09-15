@@ -1,7 +1,11 @@
 <?php
 
+use App\Models\Amenity;
 use App\Models\AmenityRequest;
+use App\Models\Booking;
+use App\Models\BookingDetail;
 use App\Services\AmenityRequestWorkflowService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -31,10 +35,33 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
+    public bool $showCreateForm = false;
+
+    public array $form = [
+        'booking_id' => '',
+        'booking_detail_id' => '',
+    ];
+
+    public array $items = [
+        ['amenity_id' => '', 'quantity' => 1],
+    ];
+
+    public function mount(): void
+    {
+        $this->showCreateForm = request()->routeIs(
+            'maintenance.create-amenity-request.index',
+        );
+    }
+
     public function with(): array
     {
         return [
             'requests' => $this->requests(),
+            'checkedInBookings' => $this->checkedInBookings(),
+            'selectedBookingDetails' =>
+                $this->selectedBookingDetails(),
+            'rentableAmenities' => $this->rentableAmenities(),
+            'currentTotal' => $this->calculateTotal($this->items),
         ];
     }
 
@@ -51,6 +78,11 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     public function updatedAssignmentFilter(): void
     {
         $this->resetPage();
+    }
+
+    public function updatedFormBookingId(): void
+    {
+        $this->form['booking_detail_id'] = '';
     }
 
     public function updatedPerPage(): void
@@ -72,6 +104,79 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         $this->perPage = 10;
 
         $this->resetPage();
+    }
+
+    public function toggleCreateForm(): void
+    {
+        $this->showCreateForm = ! $this->showCreateForm;
+    }
+
+    public function addItem(): void
+    {
+        $this->items[] = [
+            'amenity_id' => '',
+            'quantity' => 1,
+        ];
+    }
+
+    public function removeItem(int $index): void
+    {
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
+
+        if ($this->items === []) {
+            $this->addItem();
+        }
+    }
+
+    public function createRequest(
+        AmenityRequestWorkflowService $workflow,
+    ): void {
+        $validated = $this->validate([
+            'form.booking_id' => [
+                'required',
+                'integer',
+                'exists:tbl_booking,booking_id',
+            ],
+            'form.booking_detail_id' => [
+                'required',
+                'integer',
+                'exists:tbl_booking_details,booking_details_id',
+            ],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.amenity_id' => [
+                'required',
+                'integer',
+                'exists:tbl_amenity,amenity_id',
+            ],
+            'items.*.quantity' => [
+                'required',
+                'integer',
+                'min:1',
+            ],
+        ]);
+
+        try {
+            $workflow->createBillableRequest([
+                'booking_id' =>
+                    (int) $validated['form']['booking_id'],
+                'booking_detail_id' =>
+                    (int) $validated['form']['booking_detail_id'],
+                'user_id' => (int) Auth::id(),
+                'items' => $validated['items'],
+            ]);
+
+            $this->resetCreateForm();
+            $this->showCreateForm = false;
+            $this->resetPage();
+
+            session()->flash(
+                'success',
+                'Amenity request created and assigned to you for delivery. The charge remains payable during final billing.',
+            );
+        } catch (\Throwable $exception) {
+            $this->addError('request', $exception->getMessage());
+        }
     }
 
     public function sortBy(string $field): void
@@ -174,6 +279,83 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                 $staff->last_name,
             ])))
             ?: ($staff->username ?? $fallback);
+    }
+
+    private function resetCreateForm(): void
+    {
+        $this->form = [
+            'booking_id' => '',
+            'booking_detail_id' => '',
+        ];
+
+        $this->items = [
+            ['amenity_id' => '', 'quantity' => 1],
+        ];
+
+        $this->resetErrorBag();
+    }
+
+    private function checkedInBookings(): Collection
+    {
+        return Booking::query()
+            ->with('guest')
+            ->whereIn(
+                'status',
+                ['Checked-in', 'Partially Checked-in'],
+            )
+            ->whereHas(
+                'details',
+                fn ($query) => $query->where('status', 'Checked-in'),
+            )
+            ->latest('booking_id')
+            ->get();
+    }
+
+    private function selectedBookingDetails(): Collection
+    {
+        if ($this->form['booking_id'] === '') {
+            return collect();
+        }
+
+        return BookingDetail::query()
+            ->with('facility')
+            ->where(
+                'booking_id',
+                (int) $this->form['booking_id'],
+            )
+            ->where('status', 'Checked-in')
+            ->whereNotNull('facility_id')
+            ->orderBy('booking_details_id')
+            ->get();
+    }
+
+    private function rentableAmenities(): Collection
+    {
+        return Amenity::query()
+            ->with('amenityName')
+            ->where('amenity_type', 'Rentable')
+            ->orderBy('amenity_name_id')
+            ->get();
+    }
+
+    private function calculateTotal(array $items): float
+    {
+        $total = 0.00;
+
+        foreach ($items as $item) {
+            $amenityId = (int) ($item['amenity_id'] ?? 0);
+            $quantity = (int) ($item['quantity'] ?? 0);
+
+            if ($amenityId > 0 && $quantity > 0) {
+                $price = (float) Amenity::query()
+                    ->whereKey($amenityId)
+                    ->value('amenity_price');
+
+                $total += $price * $quantity;
+            }
+        }
+
+        return round($total, 2);
     }
 
     private function requests()
@@ -375,6 +557,13 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         description="Accept amenity requests, track assignment ownership, and confirm delivery after every requested item reaches the guest."
     >
         <x-slot:actions>
+            <flux:button
+                wire:click="toggleCreateForm"
+                variant="primary"
+            >
+                {{ $showCreateForm ? 'Close Request Form' : 'Create Amenity Request' }}
+            </flux:button>
+
             @if (Route::has('maintenance.dashboard'))
                 <flux:button
                     href="{{ route('maintenance.dashboard') }}"
@@ -398,6 +587,112 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             {{ $message }}
         </div>
     @enderror
+
+    @if ($showCreateForm)
+        <flux:card>
+            <flux:heading size="lg">Create Amenity Request</flux:heading>
+            <flux:text class="mt-1">
+                Select the guest's checked-in booking detail. The request is assigned to you immediately and remains payable during checkout.
+            </flux:text>
+
+            <form wire:submit="createRequest" class="mt-5 space-y-5">
+                <div class="grid gap-4 md:grid-cols-2">
+                    <flux:select
+                        wire:model.live="form.booking_id"
+                        label="Checked-in Booking"
+                    >
+                        <option value="">Select booking</option>
+
+                        @foreach ($checkedInBookings as $booking)
+                            <option value="{{ $booking->booking_id }}">
+                                {{ $booking->b_ref_no }} — {{ $booking->guest?->full_name ?? trim(($booking->guest?->first_name ?? '').' '.($booking->guest?->last_name ?? '')) }}
+                            </option>
+                        @endforeach
+                    </flux:select>
+
+                    <flux:select
+                        wire:model="form.booking_detail_id"
+                        label="Checked-in Facility"
+                    >
+                        <option value="">Select facility</option>
+
+                        @foreach ($selectedBookingDetails as $detail)
+                            <option value="{{ $detail->booking_details_id }}">
+                                {{ $detail->facility?->facility_name ?? 'Unknown facility' }}
+                            </option>
+                        @endforeach
+                    </flux:select>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <flux:heading>Requested Amenities</flux:heading>
+
+                        <flux:button
+                            type="button"
+                            wire:click="addItem"
+                            size="sm"
+                        >
+                            Add Item
+                        </flux:button>
+                    </div>
+
+                    @foreach ($items as $index => $item)
+                        <div
+                            wire:key="maintenance-create-amenity-item-{{ $index }}"
+                            class="grid gap-3 rounded-lg border border-brand-border p-3 dark:border-zinc-800 md:grid-cols-[1fr_7.5rem_auto]"
+                        >
+                            <flux:select
+                                wire:model.live="items.{{ $index }}.amenity_id"
+                                label="Amenity"
+                            >
+                                <option value="">Select amenity</option>
+
+                                @foreach ($rentableAmenities as $amenity)
+                                    <option value="{{ $amenity->amenity_id }}">
+                                        {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }}
+                                    </option>
+                                @endforeach
+                            </flux:select>
+
+                            <flux:input
+                                wire:model.live="items.{{ $index }}.quantity"
+                                label="Quantity"
+                                type="number"
+                                min="1"
+                            />
+
+                            <div class="flex items-end">
+                                <flux:button
+                                    type="button"
+                                    wire:click="removeItem({{ $index }})"
+                                    variant="danger"
+                                >
+                                    Remove
+                                </flux:button>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="flex flex-col gap-3 rounded-lg bg-brand-surface-muted p-4 dark:bg-zinc-800 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <flux:text>Request total</flux:text>
+                        <p class="text-2xl font-semibold">₱{{ number_format($currentTotal, 2) }}</p>
+                    </div>
+
+                    <flux:button
+                        type="submit"
+                        variant="primary"
+                        wire:loading.attr="disabled"
+                        wire:target="createRequest"
+                    >
+                        Create and Start Delivery
+                    </flux:button>
+                </div>
+            </form>
+        </flux:card>
+    @endif
 
     <x-staff-table-shell
         :first-item="$requests->firstItem()"

@@ -144,10 +144,6 @@ new class extends Component {
 
     public function updatedFormTotalGuestCount(): void
     {
-        $this->form['total_guest_count'] = max(
-            1,
-            (int) $this->form['total_guest_count'],
-        );
         $this->form['payment_amount'] = '';
         $this->syncPaidExtraGuestRows();
     }
@@ -209,6 +205,11 @@ new class extends Component {
     private function syncPaidExtraGuestRows(): void
     {
         $occupancy = $this->selectedOccupancy();
+
+        if ($this->form['facility_id'] !== '' && $occupancy === null) {
+            return;
+        }
+
         $required = (int) (
             $occupancy['paid_extra_guest_count'] ?? 0
         );
@@ -352,6 +353,13 @@ new class extends Component {
 
     private function createRules(): array
     {
+        $guestCountRules = ['required', 'integer', 'min:1'];
+        $strictMaximum = $this->strictMaximum();
+
+        if ($strictMaximum !== null) {
+            $guestCountRules[] = 'max:'.$strictMaximum;
+        }
+
         return [
             'form.first_name' => ['required', 'string', 'max:50'],
             'form.middle_name' => ['nullable', 'string', 'max:50'],
@@ -365,7 +373,7 @@ new class extends Component {
             'form.facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
             'form.rate_type' => ['required', 'string', 'max:50'],
             'form.discount_id' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
-            'form.total_guest_count' => ['required', 'integer', 'min:1'],
+            'form.total_guest_count' => $guestCountRules,
             'form.check_in_date' => ['required', 'date', 'after_or_equal:today'],
             'form.check_out_date' => ['required', 'date', 'after:form.check_in_date'],
             'form.check_in_time' => ['required', 'date_format:H:i'],
@@ -493,7 +501,7 @@ new class extends Component {
     private function facilities()
     {
         return Facility::query()
-            ->with('facilityType')
+            ->with(['facilityType', 'facilityProduct'])
             ->whereIn('facility_status', ['Available', 'available'])
             ->orderBy('facility_name')
             ->get();
@@ -551,6 +559,20 @@ new class extends Component {
                     (int) $this->form['facility_id'],
                     max(1, (int) $this->form['total_guest_count']),
                 );
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function strictMaximum(): ?int
+    {
+        if ($this->form['facility_id'] === '') {
+            return null;
+        }
+
+        try {
+            return app(FacilityOccupancyService::class)
+                ->strictMaximum((int) $this->form['facility_id']);
         } catch (Throwable) {
             return null;
         }
@@ -641,7 +663,7 @@ new class extends Component {
                             <option value="">Select facility</option>
                             @foreach ($facilities as $facility)
                                 <option value="{{ $facility->facility_id }}">
-                                    {{ $facility->facility_name }} - {{ optional($facility->facilityType)->facility_type }} / {{ $facility->capacity }} pax
+                                    {{ $facility->facility_name }} - {{ optional($facility->facilityType)->facility_type }} / {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
                                 </option>
                             @endforeach
                         </select>
@@ -692,7 +714,7 @@ new class extends Component {
                 <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
                     <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Guest capacity</h3>
                     <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                        Total guests includes the primary guest. Rooms include 4 guests; room guests above 4 cost ₱100 each. Cottages and function halls have no extra-guest charge but remain capacity-limited.
+                        Total guests includes the primary guest. Rooms include 4 guests and enforce their strict maximum; room guests above 4 cost ₱100 each. Cottage and function-hall capacities are recommendations only.
                     </p>
 
                     <div class="mt-4 max-w-xs">
@@ -706,7 +728,11 @@ new class extends Component {
 
                     @if ($selectedOccupancy)
                         <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-950">
-                            Capacity: {{ $selectedOccupancy['capacity'] }} · Included: {{ $selectedOccupancy['included_guest_count'] }} · Paid room extras: {{ $selectedOccupancy['paid_extra_guest_count'] }}
+                            @if ($selectedOccupancy['strict_maximum'])
+                                Maximum {{ $selectedOccupancy['strict_maximum'] }} guests · Included {{ $selectedOccupancy['included_guest_count'] }} · Paid room extras {{ $selectedOccupancy['paid_extra_guest_count'] }}
+                            @else
+                                Recommended capacity: {{ $selectedOccupancy['suggested_minimum'] ? $selectedOccupancy['suggested_minimum'].'–' : '' }}{{ $selectedOccupancy['suggested_maximum'] }} guests (informational)
+                            @endif
                         </div>
                     @endif
 
