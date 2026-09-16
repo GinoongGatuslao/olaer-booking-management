@@ -102,7 +102,7 @@ class BookingModificationStatusHardeningTest extends TestCase
                 'check_in_time' => '12:00',
                 'mode_of_payment_id' => $modeOfPaymentId,
                 'reference_number' => '',
-                'payment_amount' => 1500.00,
+                'payment_amount' => '1500.00',
                 'user_id' => $userId,
             ]);
 

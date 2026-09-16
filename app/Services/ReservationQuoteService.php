@@ -110,7 +110,7 @@ class ReservationQuoteService
             'facility_id' => $facility->facility_id,
             'facility_name' => $facility->facility_name,
             'facility_type' => $facility->facilityType?->facility_type,
-            'rate_type' => $rateType,
+            'rate_type' => $this->products->canonicalRateType($productRate),
             'capacity' => $occupancy['capacity'],
             'total_guest_count' => $occupancy['total_guest_count'],
             'included_guest_count' => $occupancy['included_guest_count'],

@@ -10,8 +10,6 @@ class BookingQuoteService
 {
     public const ROOM_EXTRA_GUEST_FEE = '100.00';
 
-    public const COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE = '100.00';
-
     public function __construct(
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityProductConfigurationService $products,
@@ -89,7 +87,7 @@ class BookingQuoteService
             'facility_id' => $facility->facility_id,
             'facility_name' => $facility->facility_name,
             'facility_type' => $facility->facilityType?->facility_type,
-            'rate_type' => $rateType,
+            'rate_type' => $this->products->canonicalRateType($productRate),
             'capacity' => $occupancy['capacity'],
             'total_guest_count' => $occupancy['total_guest_count'],
             'included_guest_count' => $occupancy['included_guest_count'],

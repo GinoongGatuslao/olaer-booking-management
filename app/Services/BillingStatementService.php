@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class BillingStatementService
 {
+    public function __construct(private readonly DecimalMoneyService $money) {}
+
     public function records(array $filters = []): Collection
     {
         $transactionType = strtolower((string) ($filters['transaction_type'] ?? 'all'));
@@ -94,16 +96,8 @@ class BillingStatementService
 
         $summary = [
             'count' => (clone $query)->count(),
-            'total_amount' => round(
-                (float) (clone $bookingSummary)
-                    ->sum('booking_total'),
-                2,
-            ),
-            'total_due' => round(
-                (float) (clone $bookingSummary)
-                    ->sum('booking_amount_due'),
-                2,
-            ),
+            'total_amount' => $this->money->normalize((string) (clone $bookingSummary)->sum('booking_total')),
+            'total_due' => $this->money->normalize((string) (clone $bookingSummary)->sum('booking_amount_due')),
             'paid_count' => (clone $bookingSummary)
                 ->where(
                     'booking_amount_due',
@@ -189,7 +183,7 @@ class BillingStatementService
         $facilityLines = $booking->details->map(function ($detail): array {
             $storedUnitRate = $detail->getAttribute('unit_rate');
             $legacyRate = $storedUnitRate !== null
-                ? (float) $storedUnitRate
+                ? (string) $storedUnitRate
                 : $this->currentFacilityRate(
                     (int) $detail->facility_id,
                     (string) $detail->rate_type,
@@ -203,8 +197,8 @@ class BillingStatementService
                 'check_out_date' => optional($detail->check_out_date)->toDateString(),
                 'status' => (string) $detail->status,
                 'base_price' => $this->moneyOrFallback($detail->base_price, $legacyRate),
-                'discount_amount' => round((float) ($detail->discount_amount ?? 0), 2),
-                'extra_guest_fee' => round((float) ($detail->extra_guest_fee ?? 0), 2),
+                'discount_amount' => $this->money->normalize((string) ($detail->discount_amount ?? '0.00')),
+                'extra_guest_fee' => $this->money->normalize((string) ($detail->extra_guest_fee ?? '0.00')),
                 'line_total' => $this->moneyOrFallback($detail->line_total, null),
                 'has_snapshot' => $detail->line_total !== null,
             ];
@@ -216,7 +210,7 @@ class BillingStatementService
             })
             ->flatMap(function ($request) {
                 return $request->details->map(function ($detail) use ($request): array {
-                    $unitPrice = $this->moneyOrFallback($detail->unit_price, (float) ($detail->amenity?->amenity_price ?? 0));
+                    $unitPrice = $this->moneyOrFallback($detail->unit_price, (string) ($detail->amenity?->amenity_price ?? '0.00'));
                     $quantity = (int) $detail->amenity_quantity;
 
                     return [
@@ -227,7 +221,7 @@ class BillingStatementService
                         'facility' => $detail->facility?->facility_name ?? 'Facility unavailable',
                         'quantity' => $quantity,
                         'unit_price' => $unitPrice,
-                        'line_total' => $this->moneyOrFallback($detail->line_total, round($unitPrice * $quantity, 2)),
+                        'line_total' => $this->moneyOrFallback($detail->line_total, $this->money->multiply($unitPrice, $quantity)),
                         'has_snapshot' => $detail->line_total !== null,
                     ];
                 });
@@ -245,7 +239,7 @@ class BillingStatementService
                 'description' => $description,
                 'facility' => $guestFine->facility?->facility_name ?? 'N/A',
                 'quantity' => (int) $guestFine->quantity,
-                'total_charge' => round((float) $guestFine->total_charge, 2),
+                'total_charge' => $this->money->normalize((string) $guestFine->total_charge),
                 'date_checked' => optional($guestFine->date_checked)->toDateString(),
                 'reported_by' => $guestFine->reportedBy?->full_name ?? $guestFine->reportedBy?->username ?? 'N/A',
             ];
@@ -256,7 +250,7 @@ class BillingStatementService
                 'payment_ref_no' => (string) $payment->p_ref_no,
                 'mode' => $payment->modeOfPayment?->mode_of_payment ?? 'N/A',
                 'reference_number' => $payment->reference_number,
-                'amount_paid' => round((float) $payment->amount_paid, 2),
+                'amount_paid' => $this->money->normalize((string) $payment->amount_paid),
                 'date_paid' => optional($payment->date_paid)->toDateString(),
                 'received_by' => $payment->user?->full_name ?? $payment->user?->username ?? 'N/A',
             ];
@@ -271,10 +265,13 @@ class BillingStatementService
             'amenity_lines' => $amenityLines,
             'fine_lines' => $fineLines,
             'payment_lines' => $paymentLines,
-            'total_price' => round((float) $booking->total_price, 2),
-            'total_paid' => round((float) $verifiedPayments->sum('amount_paid'), 2),
-            'amount_due' => round((float) $booking->amount_due, 2),
-            'payment_status' => round((float) $booking->amount_due, 2) <= 0 ? 'Paid' : 'Unpaid',
+            'total_price' => $this->money->normalize((string) $booking->total_price),
+            'total_paid' => $this->money->add(...$verifiedPayments
+                ->pluck('amount_paid')
+                ->map(fn (mixed $amount): string => (string) $amount)
+                ->all()),
+            'amount_due' => $this->money->normalize((string) $booking->amount_due),
+            'payment_status' => bccomp((string) $booking->amount_due, '0.00', 2) !== 1 ? 'Paid' : 'Unpaid',
             'generated_at' => Carbon::now()->format('Y-m-d h:i A'),
         ];
     }
@@ -291,6 +288,8 @@ class BillingStatementService
             })
             ->get()
             ->map(function (Booking $booking): array {
+                $amountDue = $this->money->normalize((string) $booking->amount_due);
+
                 return [
                     'transaction_type' => 'Booking',
                     'reference_no' => (string) $booking->b_ref_no,
@@ -299,9 +298,9 @@ class BillingStatementService
                     'guest_name' => $booking->guest?->full_name ?? 'Guest unavailable',
                     'date' => optional($booking->booking_date)->toDateString(),
                     'description' => 'Facility booking',
-                    'amount' => round((float) $booking->total_price, 2),
-                    'amount_due' => round((float) $booking->amount_due, 2),
-                    'payment_status' => round((float) $booking->amount_due, 2) <= 0 ? 'Paid' : 'Unpaid',
+                    'amount' => $this->money->normalize((string) $booking->total_price),
+                    'amount_due' => $amountDue,
+                    'payment_status' => $this->money->compare($amountDue, '0.00') !== 1 ? 'Paid' : 'Unpaid',
                 ];
             });
     }
@@ -322,6 +321,7 @@ class BillingStatementService
                 $names = $request->details->map(function ($detail): string {
                     return $detail->amenity?->amenityName?->amenity_name ?? 'Amenity';
                 })->unique()->implode(', ');
+                $amountDue = $this->money->normalize((string) ($request->booking?->amount_due ?? '0.00'));
 
                 return [
                     'transaction_type' => 'Amenity Request',
@@ -331,21 +331,9 @@ class BillingStatementService
                     'guest_name' => $request->booking?->guest?->full_name ?? 'Guest unavailable',
                     'date' => optional($request->date_created)->toDateString(),
                     'description' => $names !== '' ? $names : 'Amenity request',
-                    'amount' => round((float) $request->total_price, 2),
-                    'amount_due' => round(
-                        (float) (
-                            $request->booking?->amount_due
-                            ?? 0
-                        ),
-                        2,
-                    ),
-                    'payment_status' => round(
-                        (float) (
-                            $request->booking?->amount_due
-                            ?? 0
-                        ),
-                        2,
-                    ) <= 0
+                    'amount' => $this->money->normalize((string) $request->total_price),
+                    'amount_due' => $amountDue,
+                    'payment_status' => $this->money->compare($amountDue, '0.00') !== 1
                         ? 'Paid'
                         : 'Unpaid',
                 ];
@@ -365,6 +353,7 @@ class BillingStatementService
             ->get()
             ->map(function (GuestFine $guestFine): array {
                 $fine = $guestFine->fine;
+                $amountDue = $this->money->normalize((string) ($guestFine->booking?->amount_due ?? '0.00'));
                 $description = $fine?->fine_type === 'Amenity'
                     ? trim(($fine?->amenity?->amenityName?->amenity_name ?? 'Amenity').' - '.($fine?->damageType?->damage_type ?? 'Damage'))
                     : ($fine?->situational_fine ?? 'Fine');
@@ -377,21 +366,9 @@ class BillingStatementService
                     'guest_name' => $guestFine->booking?->guest?->full_name ?? 'Guest unavailable',
                     'date' => optional($guestFine->date_checked)->toDateString(),
                     'description' => $description,
-                    'amount' => round((float) $guestFine->total_charge, 2),
-                    'amount_due' => round(
-                        (float) (
-                            $guestFine->booking?->amount_due
-                            ?? 0
-                        ),
-                        2,
-                    ),
-                    'payment_status' => round(
-                        (float) (
-                            $guestFine->booking?->amount_due
-                            ?? 0
-                        ),
-                        2,
-                    ) <= 0
+                    'amount' => $this->money->normalize((string) $guestFine->total_charge),
+                    'amount_due' => $amountDue,
+                    'payment_status' => $this->money->compare($amountDue, '0.00') !== 1
                         ? 'Paid'
                         : 'Unpaid',
                 ];
@@ -829,16 +806,16 @@ class BillingStatementService
         return $value !== '' ? $value : null;
     }
 
-    private function moneyOrFallback(mixed $value, ?float $fallback): float
+    private function moneyOrFallback(mixed $value, ?string $fallback): string
     {
         if ($value !== null) {
-            return round((float) $value, 2);
+            return $this->money->normalize((string) $value);
         }
 
-        return round((float) ($fallback ?? 0), 2);
+        return $this->money->normalize($fallback ?? '0.00');
     }
 
-    private function currentFacilityRate(int $facilityId, string $rateType): ?float
+    private function currentFacilityRate(int $facilityId, string $rateType): ?string
     {
         if ($facilityId < 1 || $rateType === '') {
             return null;
@@ -849,6 +826,6 @@ class BillingStatementService
             ->where('rate_type', $rateType)
             ->value('facility_price');
 
-        return $price !== null ? (float) $price : null;
+        return $price !== null ? (string) $price : null;
     }
 }

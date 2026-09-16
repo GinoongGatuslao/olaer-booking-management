@@ -4,6 +4,7 @@ use App\Models\Facility;
 use App\Services\PublicBookingSearchService;
 use App\Services\PublicBookingWorkflowService;
 use App\Services\GcashProofStorageService;
+use App\Services\DecimalMoneyService;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -143,7 +144,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             ]);
         }
 
-        if (round((float) $this->payment_amount, 2) !== round((float) $quote['total'], 2)) {
+        if (! app(DecimalMoneyService::class)->equals($this->payment_amount, $quote['total'])) {
             throw ValidationException::withMessages([
                 'payment_amount' => 'Online booking requires exact full GCash payment of ₱' . number_format((float) $quote['total'], 2) . '.',
             ]);
@@ -290,7 +291,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
         $quote = $this->quotePreview();
 
         if ($quote) {
-            $this->payment_amount = number_format((float) $quote['total'], 2, '.', '');
+            $this->payment_amount = $quote['total'];
         }
     }
 };

@@ -2,9 +2,10 @@
 
 namespace App\Services;
 
+use App\FacilityRateCode;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use App\Models\FacilityType;
+use App\Models\ProductRate;
 use Illuminate\Support\Collection;
 
 class PublicBookingSearchService
@@ -13,6 +14,7 @@ class PublicBookingSearchService
         private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
+        private readonly FacilityProductConfigurationService $products,
     ) {}
 
     public function facilityTypes(): Collection
@@ -29,13 +31,20 @@ class PublicBookingSearchService
             return collect();
         }
 
-        return FacilityPrice::query()
-            ->select('tbl_facility_price.rate_type')
-            ->join('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_facility_price.facility_id')
-            ->where('tbl_facility.facility_type_id', $facilityTypeId)
+        return ProductRate::query()
+            ->select('tbl_facility_product_rate.rate_code')
+            ->join('tbl_facility_product', 'tbl_facility_product.facility_product_id', '=', 'tbl_facility_product_rate.facility_product_id')
+            ->where('tbl_facility_product.facility_type_id', $facilityTypeId)
+            ->where('tbl_facility_product.is_active', true)
+            ->where('tbl_facility_product_rate.is_active', true)
             ->distinct()
-            ->orderBy('tbl_facility_price.rate_type')
-            ->pluck('tbl_facility_price.rate_type');
+            ->pluck('tbl_facility_product_rate.rate_code')
+            ->map(fn (\App\FacilityRateCode|string $rateCode): string => $this->products->canonicalRateType(
+                $rateCode instanceof FacilityRateCode ? $rateCode : FacilityRateCode::from($rateCode),
+            ))
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     public function availableFacilities(?int $facilityTypeId, ?string $rateType, ?string $checkInDate, ?string $checkOutDate): Collection
@@ -44,12 +53,18 @@ class PublicBookingSearchService
             return collect();
         }
 
+        try {
+            $rateCode = $this->products->canonicalRateCode($rateType);
+        } catch (\InvalidArgumentException) {
+            return collect();
+        }
+
         $facilities = Facility::query()
             ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
-            ->whereHas('prices', function ($query) use ($rateType): void {
-                $query->where('rate_type', $rateType);
+            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
+                $query->where('rate_code', $rateCode->value)->where('is_active', true);
             })
             ->orderBy('facility_name')
             ->get();

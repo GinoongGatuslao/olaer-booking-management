@@ -67,26 +67,20 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_facility_inspection_request',
             [
-                'facility_inspection_request_id' =>
-                    $inspectionRequest
-                        ->facility_inspection_request_id,
+                'facility_inspection_request_id' => $inspectionRequest
+                    ->facility_inspection_request_id,
                 'status' => 'Completed',
-                'assigned_to_user_id' =>
-                    $maintenanceId,
+                'assigned_to_user_id' => $maintenanceId,
             ],
         );
 
         $this->assertDatabaseHas(
             'tbl_facility_inspection',
             [
-                'booking_details_id' =>
-                    $scenario['booking_details_id'],
-                'booking_id' =>
-                    $scenario['booking_id'],
-                'facility_id' =>
-                    $scenario['facility_id'],
-                'inspected_by_user_id' =>
-                    $maintenanceId,
+                'booking_details_id' => $scenario['booking_details_id'],
+                'booking_id' => $scenario['booking_id'],
+                'facility_id' => $scenario['facility_id'],
+                'inspected_by_user_id' => $maintenanceId,
                 'inspection_status' => 'Cleared',
             ],
         );
@@ -118,10 +112,8 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $amenityRequest = app(
             AmenityRequestWorkflowService::class,
         )->createBillableRequest([
-            'booking_id' =>
-                $scenario['booking_id'],
-            'facility_id' =>
-                $scenario['facility_id'],
+            'booking_id' => $scenario['booking_id'],
+            'facility_id' => $scenario['facility_id'],
             'user_id' => $cashierId,
             'items' => [
                 [
@@ -140,8 +132,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_booking',
             [
-                'booking_id' =>
-                    $scenario['booking_id'],
+                'booking_id' => $scenario['booking_id'],
                 'total_price' => 1300.00,
                 'amount_due' => 300.00,
                 'status' => 'Checked-in',
@@ -184,8 +175,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
 
         $requestedItem = collect($checklist)
             ->first(
-                fn (array $item): bool =>
-                    $item['source']
+                fn (array $item): bool => $item['source']
                         === 'amenity_request'
                     && (int) $item['amenity_id']
                         === $amenityId,
@@ -244,11 +234,9 @@ class OperationalCheckoutEndToEndTest extends TestCase
             PaymentWorkflowService::class,
         )->recordCashierPayment([
             'target_type' => 'booking',
-            'target_id' =>
-                $scenario['booking_id'],
-            'amount_paid' => 300.00,
-            'mode_of_payment_id' =>
-                $this->createPaymentMode('Cash'),
+            'target_id' => $scenario['booking_id'],
+            'amount_paid' => '300.00',
+            'mode_of_payment_id' => $this->createPaymentMode('Cash'),
             'reference_number' => '',
             'user_id' => $cashierId,
         ]);
@@ -261,8 +249,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_booking',
             [
-                'booking_id' =>
-                    $scenario['booking_id'],
+                'booking_id' => $scenario['booking_id'],
                 'total_price' => 1300.00,
                 'amount_due' => 0.00,
                 'status' => 'Checked-in',
@@ -278,27 +265,21 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_amenity_request',
             [
-                'amenity_request_id' =>
-                    $amenityRequest
-                        ->amenity_request_id,
-                'amenity_request_status' =>
-                    'Delivered',
-                'assigned_to_user_id' =>
-                    $maintenanceId,
+                'amenity_request_id' => $amenityRequest
+                    ->amenity_request_id,
+                'amenity_request_status' => 'Delivered',
+                'assigned_to_user_id' => $maintenanceId,
             ],
         );
 
         $this->assertDatabaseHas(
             'tbl_facility_inspection_items',
             [
-                'item_source' =>
-                    'amenity_request',
-                'source_id' =>
-                    $requestedItem['source_id'],
+                'item_source' => 'amenity_request',
+                'source_id' => $requestedItem['source_id'],
                 'amenity_id' => $amenityId,
                 'expected_quantity' => 2,
-                'condition_status' =>
-                    'Complete',
+                'condition_status' => 'Complete',
                 'fine_quantity' => 0,
                 'total_charge' => 0.00,
             ],
@@ -377,8 +358,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_booking',
             [
-                'booking_id' =>
-                    $scenario['booking_id'],
+                'booking_id' => $scenario['booking_id'],
                 'total_price' => 1200.00,
                 'amount_due' => 200.00,
                 'status' => 'Checked-in',
@@ -388,24 +368,19 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_facility_inspection_request',
             [
-                'facility_inspection_request_id' =>
-                    $inspectionRequest
-                        ->facility_inspection_request_id,
+                'facility_inspection_request_id' => $inspectionRequest
+                    ->facility_inspection_request_id,
                 'status' => 'Completed',
-                'assigned_to_user_id' =>
-                    $maintenanceId,
+                'assigned_to_user_id' => $maintenanceId,
             ],
         );
 
         $this->assertDatabaseHas(
             'tbl_facility_inspection',
             [
-                'booking_details_id' =>
-                    $scenario['booking_details_id'],
-                'inspection_status' =>
-                    'Damage Found',
-                'inspected_by_user_id' =>
-                    $maintenanceId,
+                'booking_details_id' => $scenario['booking_details_id'],
+                'inspection_status' => 'Damage Found',
+                'inspected_by_user_id' => $maintenanceId,
             ],
         );
 
@@ -429,11 +404,9 @@ class OperationalCheckoutEndToEndTest extends TestCase
         app(PaymentWorkflowService::class)
             ->recordCashierPayment([
                 'target_type' => 'booking',
-                'target_id' =>
-                    $scenario['booking_id'],
-                'amount_paid' => 200.00,
-                'mode_of_payment_id' =>
-                    $this->createPaymentMode('Cash'),
+                'target_id' => $scenario['booking_id'],
+                'amount_paid' => '200.00',
+                'mode_of_payment_id' => $this->createPaymentMode('Cash'),
                 'reference_number' => '',
                 'user_id' => $cashierId,
             ]);
@@ -447,19 +420,13 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_guest_fine',
             [
-                'guest_fine_id' =>
-                    $guestFine->guest_fine_id,
-                'booking_id' =>
-                    $scenario['booking_id'],
-                'booking_details_id' =>
-                    $scenario['booking_details_id'],
-                'facility_id' =>
-                    $scenario['facility_id'],
+                'guest_fine_id' => $guestFine->guest_fine_id,
+                'booking_id' => $scenario['booking_id'],
+                'booking_details_id' => $scenario['booking_details_id'],
+                'facility_id' => $scenario['facility_id'],
                 'fine_id' => $fineId,
-                'item_source' =>
-                    'facility_amenity',
-                'source_id' =>
-                    $facilityAmenityId,
+                'item_source' => 'facility_amenity',
+                'source_id' => $facilityAmenityId,
                 'quantity' => 1,
                 'total_charge' => 200.00,
             ],
@@ -481,8 +448,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_booking_details',
             [
-                'booking_details_id' =>
-                    $scenario['booking_details_id'],
+                'booking_details_id' => $scenario['booking_details_id'],
                 'status' => 'Checked-out',
             ],
         );
@@ -490,8 +456,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_booking',
             [
-                'booking_id' =>
-                    $scenario['booking_id'],
+                'booking_id' => $scenario['booking_id'],
                 'status' => 'Checked-out',
                 'amount_due' => 0.00,
             ],
@@ -500,10 +465,8 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_facility',
             [
-                'facility_id' =>
-                    $scenario['facility_id'],
-                'facility_status' =>
-                    'Available',
+                'facility_id' => $scenario['facility_id'],
+                'facility_status' => 'Available',
             ],
         );
     }
@@ -530,8 +493,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
                 ),
             ),
             'guest_id' => $guestId,
-            'booking_date' =>
-                now()->toDateString(),
+            'booking_date' => now()->toDateString(),
             'no_of_extra_guests' => 0,
             'total_price' => 1000.00,
             'amount_due' => 0.00,
@@ -563,14 +525,11 @@ class OperationalCheckoutEndToEndTest extends TestCase
             'booking_id' => $bookingId,
             'facility_id' => $facilityId,
             'rate_type' => 'Overnight',
-            'check_in_date' =>
-                now()->toDateString(),
-            'check_out_date' =>
-                now()
-                    ->addDay()
-                    ->toDateString(),
-            'check_in_time' =>
-                now()->format('H:i:s'),
+            'check_in_date' => now()->toDateString(),
+            'check_out_date' => now()
+                ->addDay()
+                ->toDateString(),
+            'check_in_time' => now()->format('H:i:s'),
             'status' => 'Checked-in',
             'discount_id' => null,
             'user_id' => $cashierId,
@@ -578,8 +537,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
 
         return [
             'booking_id' => $bookingId,
-            'booking_details_id' =>
-                $detailId,
+            'booking_details_id' => $detailId,
             'facility_id' => $facilityId,
         ];
     }
@@ -592,16 +550,13 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $amenityNameId = DB::table(
             'tbl_amenity_name',
         )->insertGetId([
-            'amenity_name' =>
-                $name.' '.uniqid(),
+            'amenity_name' => $name.' '.uniqid(),
         ]);
 
         return DB::table('tbl_amenity')
             ->insertGetId([
-                'amenity_name_id' =>
-                    $amenityNameId,
-                'amenity_description' =>
-                    'Operational checkout test amenity',
+                'amenity_name_id' => $amenityNameId,
+                'amenity_description' => 'Operational checkout test amenity',
                 'amenity_type' => $type,
                 'amenity_price' => $price,
                 'created_at' => now(),
@@ -630,20 +585,16 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $damageTypeId = DB::table(
             'tbl_damage_type',
         )->insertGetId([
-            'damage_type' =>
-                'Damaged '.uniqid(),
+            'damage_type' => 'Damaged '.uniqid(),
         ]);
 
         return DB::table('tbl_fine')
             ->insertGetId([
                 'fine_type' => 'Amenity Fine',
                 'amenity_id' => $amenityId,
-                'damage_type_id' =>
-                    $damageTypeId,
-                'situational_fine' =>
-                    'Damaged item',
-                'situational_fine_description' =>
-                    'Item was damaged by the guest.',
+                'damage_type_id' => $damageTypeId,
+                'situational_fine' => 'Damaged item',
+                'situational_fine_description' => 'Item was damaged by the guest.',
                 'fine_charge' => $charge,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -698,13 +649,10 @@ class OperationalCheckoutEndToEndTest extends TestCase
 
         return DB::table('tbl_facility')
             ->insertGetId([
-                'facility_name' =>
-                    'Room '.uniqid(),
-                'facility_type_id' =>
-                    $facilityTypeId,
+                'facility_name' => 'Room '.uniqid(),
+                'facility_type_id' => $facilityTypeId,
                 'facility_size' => 'Standard',
-                'facility_status' =>
-                    'Occupied',
+                'facility_status' => 'Occupied',
                 'capacity' => '10',
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -715,17 +663,12 @@ class OperationalCheckoutEndToEndTest extends TestCase
     {
         return DB::table('tbl_guest')
             ->insertGetId([
-                'first_name' =>
-                    'Operational',
+                'first_name' => 'Operational',
                 'middle_name' => null,
-                'last_name' =>
-                    'Checkout Guest',
-                'contact_no' =>
-                    '09123456789',
-                'address_id' =>
-                    $this->createAddress(),
-                'email' =>
-                    uniqid().'@example.test',
+                'last_name' => 'Checkout Guest',
+                'contact_no' => '09123456789',
+                'address_id' => $this->createAddress(),
+                'email' => uniqid().'@example.test',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -754,23 +697,18 @@ class OperationalCheckoutEndToEndTest extends TestCase
             ->insertGetId([
                 'first_name' => 'Test',
                 'middle_name' => null,
-                'last_name' =>
-                    str_replace(
-                        ' ',
-                        '',
-                        $roleName,
-                    ),
+                'last_name' => str_replace(
+                    ' ',
+                    '',
+                    $roleName,
+                ),
                 'username' => $username,
-                'password' =>
-                    Hash::make('password'),
-                'email' =>
-                    $username
+                'password' => Hash::make('password'),
+                'email' => $username
                     .'@example.test',
-                'contact_no' =>
-                    '09999999999',
+                'contact_no' => '09999999999',
                 'status' => 'Active',
-                'address_id' =>
-                    $this->createAddress(),
+                'address_id' => $this->createAddress(),
                 'role_id' => $roleId,
                 'email_verified_at' => now(),
                 'remember_token' => null,
@@ -784,12 +722,9 @@ class OperationalCheckoutEndToEndTest extends TestCase
         return DB::table('tbl_address')
             ->insertGetId([
                 'purok' => 'Purok 1',
-                'province' =>
-                    'Sultan Kudarat',
-                'city' =>
-                    'Tacurong City',
-                'barangay' =>
-                    'Test Barangay',
+                'province' => 'Sultan Kudarat',
+                'city' => 'Tacurong City',
+                'barangay' => 'Test Barangay',
             ]);
     }
 }

@@ -238,6 +238,10 @@ class ActivityLogService
     private function normalizeValue(
         mixed $value,
     ): mixed {
+        if ($value instanceof \BackedEnum) {
+            return $value->value;
+        }
+
         if ($value instanceof Carbon) {
             return $value->toDateTimeString();
         }

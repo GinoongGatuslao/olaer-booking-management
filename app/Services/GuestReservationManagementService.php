@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
+use App\Models\ProductRate;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
@@ -137,13 +137,15 @@ class GuestReservationManagementService
             return collect();
         }
 
-        return FacilityPrice::query()
-            ->select('tbl_facility_price.rate_type')
-            ->join('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_facility_price.facility_id')
-            ->where('tbl_facility.facility_type_id', $facilityTypeId)
+        return ProductRate::query()
+            ->select('tbl_facility_product_rate.display_name')
+            ->join('tbl_facility_product', 'tbl_facility_product.facility_product_id', '=', 'tbl_facility_product_rate.facility_product_id')
+            ->where('tbl_facility_product.facility_type_id', $facilityTypeId)
+            ->where('tbl_facility_product.is_active', true)
+            ->where('tbl_facility_product_rate.is_active', true)
             ->distinct()
-            ->orderBy('tbl_facility_price.rate_type')
-            ->pluck('tbl_facility_price.rate_type');
+            ->orderBy('tbl_facility_product_rate.display_name')
+            ->pluck('tbl_facility_product_rate.display_name');
     }
 
     public function availableFacilities(
@@ -165,8 +167,8 @@ class GuestReservationManagementService
             ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
-            ->whereHas('prices', function ($query) use ($rateType): void {
-                $query->where('rate_type', $rateType);
+            ->whereHas('facilityProduct.productRates', function ($query) use ($rateType): void {
+                $query->where('display_name', $rateType)->where('is_active', true);
             })
             ->orderBy('facility_name')
             ->get();
@@ -284,7 +286,7 @@ class GuestReservationManagementService
 
             $detail->update([
                 'facility_id' => $facilityId,
-                'rate_type' => $rateType,
+                'rate_type' => $quote['rate_type'],
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'discount_id' => $discount?->discount_id,

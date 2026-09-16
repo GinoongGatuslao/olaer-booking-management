@@ -137,7 +137,7 @@ class PublicBookingJourneyTest extends TestCase
             'check_in_time' => '14:00',
             'total_guest_count' => 2,
             'extra_guests' => [],
-            'payment_amount' => 1500.00,
+            'payment_amount' => '1500.00',
             'reference_number' => 'GCASH-HIDDEN-001',
             'proof_of_payment_path' => 'gcash-proofs/hidden.pdf',
         ]);
@@ -197,7 +197,7 @@ class PublicBookingJourneyTest extends TestCase
             'check_in_time' => '14:00',
             'total_guest_count' => 2,
             'extra_guests' => [],
-            'payment_amount' => 1500.00,
+            'payment_amount' => '1500.00',
             'reference_number' => '9876543210001',
             'proof_of_payment_path' => 'gcash-proofs/existing.pdf',
         ]);

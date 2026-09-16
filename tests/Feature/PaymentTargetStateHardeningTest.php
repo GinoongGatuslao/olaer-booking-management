@@ -31,7 +31,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'booking',
                 'target_id' => $bookingId,
-                'amount_paid' => 500.00,
+                'amount_paid' => '500.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -56,7 +56,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'booking',
                 'target_id' => $bookingId,
-                'amount_paid' => 1000.00,
+                'amount_paid' => '1000.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -82,7 +82,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'booking',
                 'target_id' => $bookingId,
-                'amount_paid' => 300.00,
+                'amount_paid' => '300.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -120,7 +120,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'booking',
                 'target_id' => $bookingId,
-                'amount_paid' => 100.00,
+                'amount_paid' => '100.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -145,7 +145,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'reservation',
                 'target_id' => $reservationId,
-                'amount_paid' => 100.00,
+                'amount_paid' => '100.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -165,7 +165,7 @@ class PaymentTargetStateHardeningTest extends TestCase
             ->recordCashierPayment([
                 'target_type' => 'reservation',
                 'target_id' => $reservationId,
-                'amount_paid' => 100.00,
+                'amount_paid' => '100.00',
                 'mode_of_payment_id' => $modeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,

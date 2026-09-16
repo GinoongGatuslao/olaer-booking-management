@@ -73,18 +73,28 @@ class DecimalMoneyService
 
     public function equals(float|int|string $first, float|int|string $second): bool
     {
-        return bccomp($this->numeric($first), $this->numeric($second), 2) === 0;
+        return $this->compare($first, $second) === 0;
+    }
+
+    public function compare(float|int|string $first, float|int|string $second): int
+    {
+        return bccomp($this->numeric($first), $this->numeric($second), 2);
     }
 
     /** @return numeric-string */
     private function numeric(float|int|string $amount): string
     {
-        $numeric = is_float($amount)
-            ? rtrim(rtrim(number_format($amount, 8, '.', ''), '0'), '.')
-            : (string) $amount;
+        if (is_float($amount)) {
+            throw new InvalidArgumentException('Money values must be decimal strings or integers, not floats.');
+        }
 
-        if (! is_numeric($numeric)) {
-            throw new InvalidArgumentException('Money values must be numeric.');
+        $numeric = (string) $amount;
+
+        if (
+            ! is_numeric($numeric)
+            || preg_match('/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/', $numeric) !== 1
+        ) {
+            throw new InvalidArgumentException('Money values must be valid decimal strings or integers.');
         }
 
         return $numeric;

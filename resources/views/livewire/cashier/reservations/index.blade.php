@@ -1,23 +1,22 @@
 <?php
 
-use App\Models\Address;
+use App\FacilityRateCode;
 use App\Models\Discount;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
+use App\Models\ProductRate;
 use App\Models\FacilityType;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Services\FacilityAvailabilityService;
 use App\Services\FacilityOccupancyService;
+use App\Services\FacilityProductConfigurationService;
+use App\Services\CashierReservationWorkflowService;
 use App\Services\DecimalMoneyService;
-use App\Services\DetailExtraGuestService;
 use App\Services\ReservationQuoteService;
 use App\Services\StaffReservationCancellationService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -158,13 +157,19 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             return collect();
         }
 
-        return FacilityPrice::query()
-            ->select('tbl_facility_price.rate_type')
-            ->join('tbl_facility', 'tbl_facility_price.facility_id', '=', 'tbl_facility.facility_id')
-            ->where('tbl_facility.facility_type_id', (int) $this->facilityTypeId)
+        return ProductRate::query()
+            ->select('tbl_facility_product_rate.rate_code')
+            ->join('tbl_facility_product', 'tbl_facility_product.facility_product_id', '=', 'tbl_facility_product_rate.facility_product_id')
+            ->where('tbl_facility_product.facility_type_id', (int) $this->facilityTypeId)
+            ->where('tbl_facility_product.is_active', true)
+            ->where('tbl_facility_product_rate.is_active', true)
             ->distinct()
-            ->orderBy('tbl_facility_price.rate_type')
-            ->pluck('tbl_facility_price.rate_type');
+            ->pluck('tbl_facility_product_rate.rate_code')
+            ->map(fn (FacilityRateCode|string $rateCode): string => app(FacilityProductConfigurationService::class)
+                ->canonicalRateType($rateCode instanceof FacilityRateCode ? $rateCode : FacilityRateCode::from($rateCode)))
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     public function availableFacilities(): Collection
@@ -175,12 +180,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         $availability = app(FacilityAvailabilityService::class);
 
+        try {
+            $rateCode = app(FacilityProductConfigurationService::class)->canonicalRateCode($this->rateType);
+        } catch (InvalidArgumentException) {
+            return collect();
+        }
+
         $facilities = Facility::query()
             ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', (int) $this->facilityTypeId)
             ->where('facility_status', 'Available')
-            ->whereHas('prices', function ($query): void {
-                $query->where('rate_type', $this->rateType);
+            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
+                $query->where('rate_code', $rateCode->value)->where('is_active', true);
             })
             ->orderBy('facility_name')
             ->get();
@@ -197,7 +208,16 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             }
         }
 
-        return $available;
+        return $available->each(function (Facility $facility): void {
+            $maximum = $facility->facilityProduct?->strict_maximum;
+            $recommended = $facility->facilityProduct?->suggested_maximum;
+            $facility->setAttribute(
+                'capacity_label',
+                $maximum
+                    ? "Maximum {$maximum} guests"
+                    : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
+            );
+        });
     }
 
     public function discounts(): Collection
@@ -289,12 +309,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         $availability = app(FacilityAvailabilityService::class);
 
+        try {
+            $rateCode = app(FacilityProductConfigurationService::class)->canonicalRateCode($this->rescheduleRateType);
+        } catch (InvalidArgumentException) {
+            return collect();
+        }
+
         $facilities = Facility::query()
             ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $currentDetail->facility->facility_type_id)
             ->where('facility_status', 'Available')
-            ->whereHas('prices', function ($query): void {
-                $query->where('rate_type', $this->rescheduleRateType);
+            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
+                $query->where('rate_code', $rateCode->value)->where('is_active', true);
             })
             ->orderBy('facility_name')
             ->get();
@@ -316,7 +342,16 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             }
         }
 
-        return $available;
+        return $available->each(function (Facility $facility): void {
+            $maximum = $facility->facilityProduct?->strict_maximum;
+            $recommended = $facility->facilityProduct?->suggested_maximum;
+            $facility->setAttribute(
+                'capacity_label',
+                $maximum
+                    ? "Maximum {$maximum} guests"
+                    : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
+            );
+        });
     }
 
     public function updatedSearch(): void
@@ -443,7 +478,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->extraGuests = $rows;
     }
 
-    public function createReservation(): void
+    public function createReservation(CashierReservationWorkflowService $workflow): void
     {
         $guestCountRules = ['required', 'integer', 'min:1'];
         $strictMaximum = $this->strictMaximum();
@@ -477,71 +512,32 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'guestContactNo.regex' => 'Contact number must be an 11-digit Philippine mobile number starting with 09.',
         ]);
 
-        $this->syncPaidExtraGuestRows();
-
-        if (! app(FacilityAvailabilityService::class)->isAvailable((int) $validated['facilityId'], $validated['checkInDate'], $validated['checkOutDate'])) {
-            $this->addError('facilityId', 'Selected facility is no longer available for the chosen date range.');
-            return;
-        }
-
         try {
-            $quote = app(ReservationQuoteService::class)->quote(
-                facilityId: (int) $validated['facilityId'],
-                rateType: $validated['rateType'],
-                checkInDate: $validated['checkInDate'],
-                checkOutDate: $validated['checkOutDate'],
-                discountId: $this->discountId !== '' ? (int) $this->discountId : null,
-                totalGuestCount: $this->totalGuestCount,
-            );
-        } catch (Throwable $exception) {
-            $this->addError('facilityId', $exception->getMessage());
-            return;
-        }
-
-        DB::transaction(function () use ($validated, $quote): void {
-            $address = Address::query()->firstOrCreate([
-                'purok' => filled($validated['addressPurok']) ? trim($validated['addressPurok']) : null,
-                'barangay' => filled($validated['addressBarangay']) ? trim($validated['addressBarangay']) : null,
-                'city' => trim($validated['addressCity']),
-                'province' => trim($validated['addressProvince']),
-            ]);
-
-            $guest = Guest::query()->create([
-                'first_name' => trim($validated['guestFirstName']),
-                'middle_name' => filled($validated['guestMiddleName']) ? trim($validated['guestMiddleName']) : null,
-                'last_name' => trim($validated['guestLastName']),
-                'contact_no' => trim($validated['guestContactNo']),
-                'email' => filled($validated['guestEmail']) ? trim($validated['guestEmail']) : null,
-                'address_id' => $address->address_id,
-            ]);
-
-            $reservation = Reservation::query()->create([
-                'r_ref_no' => $this->generateReservationReference(),
-                'guest_id' => $guest->guest_id,
-                'reservation_date' => now()->toDateString(),
-                'total_price' => $quote['total_price'],
-                'amount_due' => $quote['amount_due'],
-                'no_of_extra_guests' => $quote['extra_guest_count'],
-                'total_guest_count' => $quote['total_guest_count'],
-                'user_id' => auth()->id(),
-                'status' => 'Active',
-            ]);
-
-            $detail = $reservation->details()->create([
+            $workflow->create([
+                'user_id' => (int) Auth::id(),
+                'first_name' => $validated['guestFirstName'],
+                'middle_name' => $validated['guestMiddleName'],
+                'last_name' => $validated['guestLastName'],
+                'contact_no' => $validated['guestContactNo'],
+                'email' => $validated['guestEmail'],
+                'purok' => $validated['addressPurok'],
+                'barangay' => $validated['addressBarangay'],
+                'city' => $validated['addressCity'],
+                'province' => $validated['addressProvince'],
+                'facility_type_id' => (int) $validated['facilityTypeId'],
                 'facility_id' => (int) $validated['facilityId'],
                 'rate_type' => $validated['rateType'],
                 'check_in_date' => $validated['checkInDate'],
                 'check_out_date' => $validated['checkOutDate'],
-                'discount_id' => $this->discountId !== '' ? (int) $this->discountId : null,
-                ...$quote['detail_snapshot'],
+                'discount_id' => $validated['discountId'] !== '' ? (int) $validated['discountId'] : null,
+                'total_guest_count' => (int) $validated['totalGuestCount'],
+                'extra_guests' => $validated['extraGuests'],
             ]);
+        } catch (Throwable $exception) {
+            $this->addError('facilityId', $exception->getMessage());
 
-            app(DetailExtraGuestService::class)->createForReservation(
-                $reservation,
-                $detail,
-                $this->extraGuests,
-            );
-        });
+            return;
+        }
 
         $this->resetCreateForm();
         session()->flash('success', 'Reservation created successfully. The guest can use the reservation reference during check-in or payment.');
@@ -576,7 +572,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->resetValidation();
     }
 
-    public function saveReschedule(): void
+    public function saveReschedule(CashierReservationWorkflowService $workflow): void
     {
         $validated = $this->validate([
             'rescheduleReservationId' => ['required', 'exists:tbl_reservation,reservation_id'],
@@ -587,89 +583,20 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'rescheduleDiscountId' => ['nullable', 'exists:tbl_discount,discount_id'],
         ]);
 
-        $reservation = Reservation::query()
-            ->with([
-                'details.facility.facilityType',
-                'payments',
-            ])
-            ->findOrFail((int) $validated['rescheduleReservationId']);
-
-        if ($reservation->status !== 'Active') {
-            session()->flash('error', 'Only active reservations can be rescheduled.');
-            return;
-        }
-
-        if (! app(FacilityAvailabilityService::class)->isAvailable(
-            (int) $validated['rescheduleFacilityId'],
-            $validated['rescheduleCheckInDate'],
-            $validated['rescheduleCheckOutDate'],
-            $reservation->reservation_id,
-        )) {
-            $this->addError('rescheduleFacilityId', 'Selected facility is not available for the new date range.');
-            return;
-        }
-
-        $currentDetail = $reservation->details->first();
-        $totalGuestCount = (int) (
-            $reservation->total_guest_count
-            ?: (
-                $currentDetail?->facility
-                    ? app(FacilityOccupancyService::class)
-                        ->legacyTotalGuestCount(
-                            $currentDetail->facility,
-                            (int) $reservation->no_of_extra_guests,
-                        )
-                    : max(
-                        1,
-                        (int) $reservation->no_of_extra_guests + 1,
-                    )
-            )
-        );
-
         try {
-            $quote = app(ReservationQuoteService::class)->quote(
-                facilityId: (int) $validated['rescheduleFacilityId'],
-                rateType: $validated['rescheduleRateType'],
-                checkInDate: $validated['rescheduleCheckInDate'],
-                checkOutDate: $validated['rescheduleCheckOutDate'],
-                discountId: $this->rescheduleDiscountId !== '' ? (int) $this->rescheduleDiscountId : null,
-                totalGuestCount: $totalGuestCount,
-            );
+            $workflow->reschedule((int) $validated['rescheduleReservationId'], [
+                'user_id' => (int) Auth::id(),
+                'facility_id' => (int) $validated['rescheduleFacilityId'],
+                'rate_type' => $validated['rescheduleRateType'],
+                'check_in_date' => $validated['rescheduleCheckInDate'],
+                'check_out_date' => $validated['rescheduleCheckOutDate'],
+                'discount_id' => $validated['rescheduleDiscountId'] !== '' ? (int) $validated['rescheduleDiscountId'] : null,
+            ]);
         } catch (Throwable $exception) {
             $this->addError('rescheduleFacilityId', $exception->getMessage());
+
             return;
         }
-
-        DB::transaction(function () use ($reservation, $validated, $quote): void {
-            $paidAmount = (string) $reservation->payments
-                ->where('payment_status', 'Verified')
-                ->sum('amount_paid');
-
-            $amountDue = app(DecimalMoneyService::class)->maxZero(
-                app(DecimalMoneyService::class)->subtract(
-                    $quote['total_price'],
-                    $paidAmount,
-                ),
-            );
-
-            $reservation->update([
-                'total_price' => $quote['total_price'],
-                'amount_due' => $amountDue,
-            ]);
-
-            $detail = $reservation->details->first();
-
-            if ($detail) {
-                $detail->update([
-                    'facility_id' => (int) $validated['rescheduleFacilityId'],
-                    'rate_type' => $validated['rescheduleRateType'],
-                    'check_in_date' => $validated['rescheduleCheckInDate'],
-                    'check_out_date' => $validated['rescheduleCheckOutDate'],
-                    'discount_id' => $this->rescheduleDiscountId !== '' ? (int) $this->rescheduleDiscountId : null,
-                    ...$quote['detail_snapshot'],
-                ]);
-            }
-        });
 
         $this->cancelReschedule();
         session()->flash('success', 'Reservation rescheduled successfully.');
@@ -771,20 +698,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         ])));
     }
 
-    public function amountPaid(Reservation $reservation): float
+    public function amountPaid(Reservation $reservation): string
     {
-        return (float) $reservation->payments
+        return app(DecimalMoneyService::class)->add(...$reservation->payments
             ->where('payment_status', 'Verified')
-            ->sum('amount_paid');
-    }
-
-    private function generateReservationReference(): string
-    {
-        do {
-            $reference = 'R' . now()->format('ymd') . strtoupper(Str::random(5));
-        } while (Reservation::query()->where('r_ref_no', $reference)->exists());
-
-        return $reference;
+            ->pluck('amount_paid')
+            ->map(fn (mixed $amount): string => (string) $amount)
+            ->all());
     }
 
     private function strictMaximum(): ?int
@@ -914,7 +834,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             <select wire:model.live="facilityId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
                                 <option value="">Select available facility</option>
                                 @foreach ($this->availableFacilities() as $facility)
-                                    <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</option>
+                                    <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity_label }}</option>
                                 @endforeach
                             </select>
                             @error('facilityId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
@@ -1020,7 +940,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     <select wire:model.live="rescheduleFacilityId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
                         <option value="">Select available facility</option>
                         @foreach ($this->rescheduleAvailableFacilities() as $facility)
-                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity }} pax</option>
+                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity_label }}</option>
                         @endforeach
                     </select>
                     @error('rescheduleFacilityId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror

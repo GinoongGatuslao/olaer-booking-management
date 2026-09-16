@@ -4,10 +4,12 @@ namespace Tests\Unit;
 
 use App\FacilityCapacityPolicy;
 use App\FacilityProductCode;
+use App\FacilityRateCode;
 use App\FacilitySchedulePolicy;
 use App\Models\Facility;
 use App\Models\FacilityProduct;
 use App\Models\FacilityType;
+use App\Models\ProductRate;
 use App\Services\FacilityOccupancyService;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
@@ -130,7 +132,20 @@ class FacilityOccupancyServiceTest extends TestCase
             'is_active' => true,
         ]);
         $product->facility_product_id = 1;
-        $product->setRelation('productRates', collect());
+        $rateCodes = match ($type) {
+            'Room' => [FacilityRateCode::Overnight],
+            'Cottage' => [FacilityRateCode::Day, FacilityRateCode::Night, FacilityRateCode::Both],
+            default => [FacilityRateCode::WholeDay],
+        };
+        $product->setRelation('productRates', collect($rateCodes)->map(
+            fn (FacilityRateCode $rateCode): ProductRate => new ProductRate([
+                'facility_product_id' => 1,
+                'rate_code' => $rateCode,
+                'display_name' => $rateCode->value,
+                'amount' => '100.00',
+                'is_active' => true,
+            ]),
+        ));
         $facility->facility_product_id = 1;
         $facility->setRelation('facilityProduct', $product);
 
