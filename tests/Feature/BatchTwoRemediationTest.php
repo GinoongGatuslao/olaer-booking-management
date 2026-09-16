@@ -26,10 +26,13 @@ use App\Services\BookingWorkflowService;
 use App\Services\CashierReservationWorkflowService;
 use App\Services\DecimalMoneyService;
 use App\Services\FacilityProductConfigurationService;
+use App\Services\GuestReservationManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class BatchTwoRemediationTest extends TestCase
@@ -218,6 +221,133 @@ class BatchTwoRemediationTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('selected rate is not configured');
         app(CashierReservationWorkflowService::class)->create($payload);
+    }
+
+    public function test_cashier_cottage_component_uses_canonical_rate_values(): void
+    {
+        [$product, $dayFacility] = $this->productAndFacility(FacilityProductCode::CottageSmall, 'Cottage', [
+            FacilityRateCode::Day->value => '300.00',
+            FacilityRateCode::Night->value => '200.00',
+            FacilityRateCode::Both->value => '500.00',
+        ], suffix: 'CashierCanonical');
+        $nightFacility = $this->facility($product, 'Cottage', 'Cashier Night');
+        $bothFacility = $this->facility($product, 'Cottage', 'Cashier Both');
+        $invalidFacility = $this->facility($product, 'Cottage', 'Cashier Invalid');
+        $cashier = $this->cashier();
+        $cashModeId = DB::table('tbl_mode_of_payment')->insertGetId(['mode_of_payment' => 'Cash']);
+        $this->actingAs($cashier);
+
+        FacilityPrice::query()
+            ->whereIn('facility_id', [$dayFacility->facility_id, $nightFacility->facility_id, $bothFacility->facility_id, $invalidFacility->facility_id])
+            ->delete();
+
+        foreach ([$dayFacility, $nightFacility, $bothFacility, $invalidFacility] as $facility) {
+            FacilityPrice::query()->create([
+                'facility_id' => $facility->facility_id,
+                'rate_type' => 'Day Rate',
+                'facility_price' => '300.00',
+            ]);
+            FacilityPrice::query()->create([
+                'facility_id' => $facility->facility_id,
+                'rate_type' => 'Night Rate',
+                'facility_price' => '200.00',
+            ]);
+        }
+
+        foreach ([
+            [FacilityRateCode::Day, $dayFacility, '300.00'],
+            [FacilityRateCode::Night, $nightFacility, '200.00'],
+            [FacilityRateCode::Both, $bothFacility, '500.00'],
+        ] as $index => [$rateCode, $facility, $amount]) {
+            Volt::test('cashier.bookings.index')
+                ->set('showCreateForm', true)
+                ->set('form', $this->cashierBookingForm($facility, $rateCode, $amount, $cashModeId, $index))
+                ->assertSeeHtml('value="Day"')
+                ->assertSeeHtml('value="Night"')
+                ->assertSeeHtml('value="Both"')
+                ->assertDontSeeHtml('value="Day Rate"')
+                ->call('createBooking')
+                ->assertHasNoErrors();
+
+            $detail = BookingDetail::query()->where('facility_id', $facility->facility_id)->sole();
+
+            $this->assertSame($rateCode, $detail->rate_code);
+            $this->assertSame(app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode), $detail->rate_type);
+        }
+
+        $bookingCount = Booking::query()->count();
+
+        Volt::test('cashier.bookings.index')
+            ->set('form', $this->cashierBookingForm($invalidFacility, FacilityRateCode::Day, '300.00', $cashModeId, 9))
+            ->set('form.rate_type', 'DayFoo')
+            ->set('form.payment_amount', '300.00')
+            ->call('createBooking')
+            ->assertHasErrors('booking');
+
+        $this->assertSame($bookingCount, Booking::query()->count());
+    }
+
+    public function test_guest_cottage_management_uses_rate_code_when_display_name_changes(): void
+    {
+        Mail::fake();
+        [$product, $currentFacility] = $this->productAndFacility(FacilityProductCode::CottageSmall, 'Cottage', [
+            FacilityRateCode::Day->value => '300.00',
+            FacilityRateCode::Night->value => '200.00',
+            FacilityRateCode::Both->value => '500.00',
+        ], suffix: 'GuestCanonical');
+        $destinationFacility = $this->facility($product, 'Cottage', 'Guest Canonical Destination');
+        $cashier = $this->cashier();
+        $reservation = app(CashierReservationWorkflowService::class)->create(
+            $this->reservationPayload($cashier, $currentFacility, $product),
+        );
+        $detail = ReservationDetail::query()->where('reservation_id', $reservation->reservation_id)->sole();
+        $product->productRates()->where('rate_code', FacilityRateCode::Day)->update(['display_name' => 'DayFoo']);
+        $service = app(GuestReservationManagementService::class);
+
+        $this->assertContains('Day', $service->rateTypesForFacilityType($product->facility_type_id));
+        $this->assertNotContains('DayFoo', $service->rateTypesForFacilityType($product->facility_type_id));
+        $this->assertTrue($service->availableFacilities(
+            $product->facility_type_id,
+            'Day',
+            '2027-06-01',
+            '2027-06-02',
+            $detail->reservation_details_id,
+        )->contains('facility_id', $destinationFacility->facility_id));
+        $this->assertSame('300.00', $service->quotePreview(
+            $destinationFacility->facility_id,
+            'Day',
+            '2027-06-01',
+            '2027-06-02',
+            totalGuestCount: 4,
+        )['total_price']);
+        $this->assertTrue($service->availableFacilities(
+            $product->facility_type_id,
+            'DayFoo',
+            '2027-06-01',
+            '2027-06-02',
+        )->isEmpty());
+
+        $updated = $service->updateReservation($reservation->reservation_id, [
+            'facility_id' => $destinationFacility->facility_id,
+            'rate_type' => 'Day',
+            'check_in_date' => '2027-06-01',
+            'check_out_date' => '2027-06-02',
+            'total_guest_count' => 4,
+            'extra_guests' => [],
+        ]);
+
+        $updatedDetail = ReservationDetail::query()->where('reservation_id', $updated->reservation_id)->sole();
+        $this->assertSame('Day', $updatedDetail->rate_type);
+        $this->assertSame(FacilityRateCode::Day, $updatedDetail->rate_code);
+
+        $this->expectException(InvalidArgumentException::class);
+        $service->quotePreview(
+            $destinationFacility->facility_id,
+            'DayFoo',
+            '2027-07-01',
+            '2027-07-02',
+            totalGuestCount: 4,
+        );
     }
 
     public function test_malformed_normalized_product_configuration_is_not_bookable(): void
@@ -507,28 +637,43 @@ class BatchTwoRemediationTest extends TestCase
         $this->assertSame('0.00', $statement['amount_due']);
     }
 
-    public function test_transfer_uses_historical_source_rate_and_rewrites_destination_snapshots(): void
+    public function test_current_canonical_cottage_transfers_use_historical_source_rate_and_current_destination_snapshots(): void
     {
-        [$oldProduct, $oldFacility] = $this->productAndFacility(FacilityProductCode::CottageSmall, 'Cottage', [
-            FacilityRateCode::Day->value => '100.00',
-        ]);
-        [$newProduct, $newFacility] = $this->productAndFacility(FacilityProductCode::CottageMedium, 'Cottage', [
-            FacilityRateCode::Day->value => '150.00',
-        ]);
-        $booking = $this->booking($oldFacility, $oldProduct, FacilityRateCode::Day, '100.00');
-        $detail = $booking->details()->sole();
-        $oldProduct->productRates()->update(['amount' => '900.00']);
+        $cashier = $this->cashier();
+        $cashModeId = DB::table('tbl_mode_of_payment')->insertGetId(['mode_of_payment' => 'Cash']);
 
-        app(BookingWorkflowService::class)->transferBookingDetail($detail->booking_details_id, $newFacility->facility_id);
+        foreach ([
+            [FacilityProductCode::CottageSmall, FacilityProductCode::CottageMedium, FacilityRateCode::Day, '100.00', '150.00'],
+            [FacilityProductCode::CottageLarge, FacilityProductCode::CottageExtraLarge, FacilityRateCode::Night, '80.00', '120.00'],
+        ] as $index => [$sourceCode, $destinationCode, $rateCode, $sourceAmount, $destinationAmount]) {
+            [$oldProduct, $oldFacility] = $this->productAndFacility($sourceCode, 'Cottage', [
+                $rateCode->value => $sourceAmount,
+            ], suffix: 'CurrentTransfer'.$index);
+            [$newProduct, $newFacility] = $this->productAndFacility($destinationCode, 'Cottage', [
+                $rateCode->value => $destinationAmount,
+            ], suffix: 'CurrentTransfer'.$index);
+            $booking = app(BookingWorkflowService::class)->createBooking(
+                $this->bookingPayload($cashier, $oldFacility, $rateCode, $sourceAmount, $cashModeId, $index),
+            );
+            $detail = BookingDetail::query()->where('booking_id', $booking->booking_id)->sole();
 
-        $detail->refresh();
-        $booking->refresh();
-        $this->assertSame($newProduct->facility_product_id, $detail->facility_product_id);
-        $this->assertSame('150.00', $detail->unit_rate);
-        $this->assertSame('150.00', $detail->base_price);
-        $this->assertSame('150.00', $detail->line_total);
-        $this->assertSame('150.00', $booking->total_price);
-        $this->assertSame('50.00', $booking->amount_due);
+            $this->assertSame(app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode), $detail->rate_type);
+            $this->assertSame($rateCode, $detail->rate_code);
+            $this->assertSame($sourceAmount, $detail->unit_rate);
+
+            $oldProduct->productRates()->where('rate_code', $rateCode)->update(['amount' => '900.00']);
+
+            app(BookingWorkflowService::class)->transferBookingDetail($detail->booking_details_id, $newFacility->facility_id);
+
+            $detail->refresh();
+            $booking->refresh();
+            $this->assertSame($newProduct->facility_product_id, $detail->facility_product_id);
+            $this->assertSame($destinationAmount, $detail->unit_rate);
+            $this->assertSame($destinationAmount, $detail->base_price);
+            $this->assertSame($destinationAmount, $detail->line_total);
+            $this->assertSame($destinationAmount, $booking->total_price);
+            $this->assertSame(bcsub($destinationAmount, $sourceAmount, 2), $booking->amount_due);
+        }
     }
 
     public function test_transfer_preserves_complete_historical_discount_after_discount_expiry(): void
@@ -1145,6 +1290,66 @@ class BatchTwoRemediationTest extends TestCase
             'discount_id' => null,
             'total_guest_count' => $guests,
             'extra_guests' => $extraGuests,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function cashierBookingForm(
+        Facility $facility,
+        FacilityRateCode $rateCode,
+        string $amount,
+        int $cashModeId,
+        int $dayOffset,
+    ): array {
+        return [
+            'first_name' => 'Cashier',
+            'middle_name' => '',
+            'last_name' => 'Cottage Guest',
+            'contact_no' => '09171234567',
+            'email' => "cashier-cottage-{$dayOffset}@example.test",
+            'province' => 'Sultan Kudarat',
+            'city' => 'Tacurong City',
+            'barangay' => '',
+            'purok' => '',
+            'facility_id' => (string) $facility->facility_id,
+            'rate_type' => app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode),
+            'discount_id' => '',
+            'total_guest_count' => 4,
+            'check_in_date' => now()->addDays($dayOffset + 10)->toDateString(),
+            'check_out_date' => now()->addDays($dayOffset + 11)->toDateString(),
+            'check_in_time' => '12:00',
+            'mode_of_payment_id' => (string) $cashModeId,
+            'reference_number' => '',
+            'payment_amount' => $amount,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function bookingPayload(
+        User $cashier,
+        Facility $facility,
+        FacilityRateCode $rateCode,
+        string $amount,
+        int $cashModeId,
+        int $dayOffset,
+    ): array {
+        return [
+            'facility_id' => $facility->facility_id,
+            'rate_type' => app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode),
+            'check_in_date' => now()->addDays($dayOffset + 30)->toDateString(),
+            'check_out_date' => now()->addDays($dayOffset + 31)->toDateString(),
+            'total_guest_count' => 4,
+            'extra_guests' => [],
+            'payment_amount' => $amount,
+            'mode_of_payment_id' => $cashModeId,
+            'reference_number' => '',
+            'first_name' => 'Current',
+            'last_name' => 'Transfer Guest',
+            'contact_no' => '09171234567',
+            'email' => "current-transfer-{$dayOffset}@example.test",
+            'province' => 'Sultan Kudarat',
+            'city' => 'Tacurong City',
+            'user_id' => $cashier->user_id,
         ];
     }
 

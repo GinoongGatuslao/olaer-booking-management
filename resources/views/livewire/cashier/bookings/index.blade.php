@@ -3,11 +3,12 @@
 use App\Models\BookingDetail;
 use App\Models\Discount;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use App\Models\ModeOfPayment;
+use App\Models\ProductRate;
 use App\Services\BookingQuoteService;
 use App\Services\BookingWorkflowService;
 use App\Services\FacilityOccupancyService;
+use App\Services\FacilityProductConfigurationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -544,10 +545,23 @@ new class extends Component {
             return collect();
         }
 
-        return FacilityPrice::query()
-            ->where('facility_id', (int) $this->form['facility_id'])
-            ->orderBy('rate_type')
-            ->get();
+        $products = app(FacilityProductConfigurationService::class);
+
+        try {
+            $facility = $products->configuredFacility((int) $this->form['facility_id']);
+        } catch (Throwable) {
+            return collect();
+        }
+
+        return $facility->facilityProduct->productRates
+            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
+            ->map(fn (ProductRate $rate): array => [
+                'rate_type' => $products->canonicalRateType($rate),
+                'display_name' => $rate->display_name,
+                'amount' => $rate->amount,
+            ])
+            ->sortBy('rate_type')
+            ->values();
     }
 
     private function discounts()
@@ -686,7 +700,7 @@ new class extends Component {
                         <select wire:model.live="form.rate_type" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
                             <option value="">Select rate</option>
                             @foreach ($rateTypes as $rate)
-                                <option value="{{ $rate->rate_type }}">{{ $rate->rate_type }} - ₱{{ number_format((float) $rate->facility_price, 2) }}</option>
+                                <option value="{{ $rate['rate_type'] }}">{{ $rate['display_name'] }} - ₱{{ number_format((float) $rate['amount'], 2) }}</option>
                             @endforeach
                         </select>
                         @error('form.rate_type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\FacilityRateCode;
 use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
@@ -31,6 +32,7 @@ class GuestReservationManagementService
         private readonly BookingAvailabilityService $availability,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
         private readonly DetailExtraGuestService $detailGuests,
+        private readonly FacilityProductConfigurationService $products,
     ) {}
 
     /** @return array{reservation_id:int, debug_otp:?string} */
@@ -138,14 +140,19 @@ class GuestReservationManagementService
         }
 
         return ProductRate::query()
-            ->select('tbl_facility_product_rate.display_name')
+            ->select('tbl_facility_product_rate.rate_code')
             ->join('tbl_facility_product', 'tbl_facility_product.facility_product_id', '=', 'tbl_facility_product_rate.facility_product_id')
             ->where('tbl_facility_product.facility_type_id', $facilityTypeId)
             ->where('tbl_facility_product.is_active', true)
             ->where('tbl_facility_product_rate.is_active', true)
             ->distinct()
-            ->orderBy('tbl_facility_product_rate.display_name')
-            ->pluck('tbl_facility_product_rate.display_name');
+            ->pluck('tbl_facility_product_rate.rate_code')
+            ->map(fn (FacilityRateCode|string $rateCode): string => $this->products->canonicalRateType(
+                $rateCode instanceof FacilityRateCode ? $rateCode : FacilityRateCode::from($rateCode),
+            ))
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     public function availableFacilities(
@@ -163,12 +170,18 @@ class GuestReservationManagementService
             return collect();
         }
 
+        try {
+            $rateCode = $this->products->canonicalRateCode($rateType);
+        } catch (InvalidArgumentException) {
+            return collect();
+        }
+
         $facilities = Facility::query()
             ->with(['facilityType', 'facilityProduct', 'prices'])
             ->where('facility_type_id', $facilityTypeId)
             ->where('facility_status', 'Available')
-            ->whereHas('facilityProduct.productRates', function ($query) use ($rateType): void {
-                $query->where('display_name', $rateType)->where('is_active', true);
+            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
+                $query->where('rate_code', $rateCode->value)->where('is_active', true);
             })
             ->orderBy('facility_name')
             ->get();
