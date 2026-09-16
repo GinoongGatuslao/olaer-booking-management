@@ -66,7 +66,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
         $reservation = Reservation::query()->findOrFail($reservationId);
 
         $this->selectedReservationId = (int) $reservation->reservation_id;
-        $this->paymentAmount = number_format((float) $reservation->amount_due, 2, '.', '');
+        $this->paymentAmount = (string) $reservation->amount_due;
         $this->modeOfPaymentId = null;
         $this->referenceNumber = '';
     }
@@ -82,7 +82,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             return;
         }
 
-        $amountDue = round((float) $reservation->amount_due, 2);
+        $hasAmountDue = bccomp((string) $reservation->amount_due, '0.00', 2) === 1;
 
         $rules = [
             'selectedReservationId' => ['required', 'integer', 'exists:tbl_reservation,reservation_id'],
@@ -90,7 +90,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             'referenceNumber' => ['nullable', 'string', 'max:50'],
         ];
 
-        if ($amountDue > 0) {
+        if ($hasAmountDue) {
             $rules['modeOfPaymentId'] = ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'];
         } else {
             $rules['modeOfPaymentId'] = ['nullable', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'];
@@ -100,7 +100,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 
         try {
             $booking = $service->convert((int) $this->selectedReservationId, [
-                'payment_amount' => (float) $this->paymentAmount,
+                'payment_amount' => $this->paymentAmount,
                 'mode_of_payment_id' => $this->modeOfPaymentId,
                 'reference_number' => $this->referenceNumber,
                 'user_id' => Auth::id(),

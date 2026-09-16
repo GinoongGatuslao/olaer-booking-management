@@ -363,7 +363,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
             $payment = $paymentWorkflow->recordCashierPayment([
                 'target_type' => 'entrance_slip',
                 'target_id' => (int) $slip->entrance_slip_id,
-                'amount_paid' => round((float) $slip->amount_due, 2),
+                'amount_paid' => (string) $slip->amount_due,
                 'mode_of_payment_id' => (int) $validated['modeOfPaymentId'],
                 'reference_number' => trim(
                     (string) ($validated['referenceNumber'] ?? ''),

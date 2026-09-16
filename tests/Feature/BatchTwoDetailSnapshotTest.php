@@ -215,12 +215,12 @@ class BatchTwoDetailSnapshotTest extends TestCase
 
         $cottageQuote = $bookingQuotes->quote(
             $cottage->facility_id,
-            'Day Rate',
+            'Day',
             totalGuestCount: 20,
         );
         $hallQuote = $reservationQuotes->quote(
             $hall->facility_id,
-            'Day Rate',
+            'Whole Day',
             now()->addDay()->toDateString(),
             now()->addDay()->toDateString(),
             totalGuestCount: 30,
@@ -306,7 +306,7 @@ class BatchTwoDetailSnapshotTest extends TestCase
 
         $statement = app(BillingStatementService::class)
             ->statementForBooking($booking->booking_id);
-        $this->assertSame(2500.0, $statement['facility_lines']->sole()['base_price']);
+        $this->assertSame('2500.00', $statement['facility_lines']->sole()['base_price']);
     }
 
     public function test_extra_guest_ownership_rejects_cross_parent_and_non_room_tampering(): void
@@ -388,6 +388,21 @@ class BatchTwoDetailSnapshotTest extends TestCase
                 ],
             ]);
         $reservationDetail = $reservation->details->sole();
+        $discountId = DB::table('tbl_discount')->insertGetId([
+            'discount_name' => 'Historical conversion discount',
+            'discount_amount' => '0.20',
+            'app_to_room' => true,
+            'status' => 'Active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $reservationDetail->update([
+            'discount_id' => $discountId,
+            'discount_rate' => '0.200000',
+            'discount_amount' => '500.00',
+            'line_total' => '2200.00',
+        ]);
+        $reservation->update(['total_price' => '2200.00', 'amount_due' => '2200.00']);
         $product->productRates()->update(['amount' => '9000.00']);
         $product->update(['included_guest_count' => 1, 'strict_maximum' => 6]);
         $cashier = $this->createCashier();
@@ -405,18 +420,18 @@ class BatchTwoDetailSnapshotTest extends TestCase
         $bookingDetail = $booking->details->sole();
 
         foreach ([
+            'facility_id',
             'facility_product_id',
             'guest_count',
+            'capacity_policy',
             'included_guest_count_snapshot',
             'strict_maximum_snapshot',
             'suggested_minimum_snapshot',
             'suggested_maximum_snapshot',
-            'unit_rate',
-            'base_price',
-            'discount_rate',
-            'discount_amount',
-            'extra_guest_fee',
-            'line_total',
+            'schedule_policy',
+            'rate_type',
+            'rate_code',
+            'discount_id',
         ] as $attribute) {
             $this->assertSame(
                 $reservationDetail->getRawOriginal($attribute),
@@ -425,11 +440,26 @@ class BatchTwoDetailSnapshotTest extends TestCase
             );
         }
 
+        foreach ([
+            'unit_rate',
+            'base_price',
+            'discount_rate',
+            'discount_amount',
+            'extra_guest_fee',
+            'line_total',
+        ] as $moneyAttribute) {
+            $this->assertSame(
+                $reservationDetail->getAttribute($moneyAttribute),
+                $bookingDetail->getAttribute($moneyAttribute),
+                "Conversion changed {$moneyAttribute}.",
+            );
+        }
+
         $this->assertSame(
             [$bookingDetail->booking_details_id],
             $booking->extraGuests->pluck('booking_details_id')->unique()->values()->all(),
         );
-        $this->assertSame('2700.00', $bookingDetail->line_total);
+        $this->assertSame('2200.00', $bookingDetail->line_total);
     }
 
     public function test_livewire_room_validation_preserves_the_visible_form_and_entered_count(): void
@@ -501,6 +531,7 @@ class BatchTwoDetailSnapshotTest extends TestCase
     }
 
     /**
+     * @param  numeric-string  $amount
      * @return array{FacilityProduct, Facility}
      */
     private function createFacilityProduct(
@@ -537,13 +568,28 @@ class BatchTwoDetailSnapshotTest extends TestCase
             'strict_maximum' => $strictMaximum,
             'is_active' => true,
         ]);
-        ProductRate::query()->create([
-            'facility_product_id' => $product->facility_product_id,
-            'rate_code' => $rateCode,
-            'display_name' => $legacyRateType,
-            'amount' => $amount,
-            'is_active' => true,
-        ]);
+        $rates = $facilityTypeName === 'Cottage'
+            ? [
+                FacilityRateCode::Day->value => $amount,
+                FacilityRateCode::Night->value => $amount,
+                FacilityRateCode::Both->value => bcmul($amount, '2', 2),
+            ]
+            : [$rateCode->value => $amount];
+        $rates[$rateCode->value] = $amount;
+
+        foreach ($rates as $configuredRateCode => $configuredAmount) {
+            $configuredRate = FacilityRateCode::from($configuredRateCode);
+            ProductRate::query()->create([
+                'facility_product_id' => $product->facility_product_id,
+                'rate_code' => $configuredRate,
+                'display_name' => match ($configuredRate) {
+                    FacilityRateCode::WholeDay => 'Whole Day',
+                    default => ucfirst(strtolower($configuredRate->value)),
+                },
+                'amount' => $configuredAmount,
+                'is_active' => true,
+            ]);
+        }
         $facility = Facility::query()->create([
             'facility_name' => Str::headline($productCode->value).' '.Str::random(5),
             'facility_type_id' => $facilityType->facility_type_id,

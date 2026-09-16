@@ -58,7 +58,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public ?int $selectedTargetId = null;
     public string $selectedTargetLabel = '';
-    public float $selectedAmountDue = 0.00;
+    public string $selectedAmountDue = '0.00';
 
     public string $amountPaid = '';
     public string $modeOfPaymentId = '';
@@ -197,9 +197,9 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
         $this->targetType = $type;
         $this->selectedTargetId = $id;
-        $this->selectedAmountDue = round((float) $record->amount_due, 2);
+        $this->selectedAmountDue = (string) $record->amount_due;
         $this->selectedTargetLabel = $this->payableLabel($type, $record);
-        $this->amountPaid = number_format($this->selectedAmountDue, 2, '.', '');
+        $this->amountPaid = $this->selectedAmountDue;
         $this->referenceNumber = '';
 
         $this->resetValidation();
@@ -209,7 +209,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     {
         $this->selectedTargetId = null;
         $this->selectedTargetLabel = '';
-        $this->selectedAmountDue = 0.00;
+        $this->selectedAmountDue = '0.00';
         $this->amountPaid = '';
         $this->referenceNumber = '';
 
@@ -237,7 +237,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             $payment = $paymentWorkflow->recordCashierPayment([
                 'target_type' => $validated['targetType'],
                 'target_id' => (int) $validated['selectedTargetId'],
-                'amount_paid' => (float) $validated['amountPaid'],
+                'amount_paid' => $validated['amountPaid'],
                 'mode_of_payment_id' => (int) $validated['modeOfPaymentId'],
                 'reference_number' => $validated['referenceNumber'] ?? null,
                 'user_id' => (int) Auth::id(),

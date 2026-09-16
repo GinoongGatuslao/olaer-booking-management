@@ -2,17 +2,19 @@
 
 namespace App\Services;
 
+use App\FacilityCapacityPolicy;
 use App\FacilityProductCode;
 use App\FacilityRateCode;
 use App\FacilitySchedulePolicy;
 use App\Models\Facility;
 use App\Models\FacilityProduct;
 use App\Models\ProductRate;
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class FacilityProductConfigurationService
 {
+    public function __construct(private readonly DecimalMoneyService $money) {}
+
     public function configuredFacility(int $facilityId): Facility
     {
         $facility = Facility::query()
@@ -29,19 +31,10 @@ class FacilityProductConfigurationService
         $facility->loadMissing(['facilityType', 'facilityProduct.productRates']);
         $product = $facility->facilityProduct;
 
-        if (
-            ! $product instanceof FacilityProduct
+        if (! $product instanceof FacilityProduct
             || ! $product->is_active
             || (int) $product->facility_type_id !== (int) $facility->facility_type_id
-            || (
-                $this->isRoomProduct($product)
-                && (
-                    $product->included_guest_count === null
-                    || $product->strict_maximum === null
-                    || $product->included_guest_count < 1
-                    || $product->strict_maximum < $product->included_guest_count
-                )
-            )
+            || ! $this->hasValidConfiguration($product)
         ) {
             throw new InvalidArgumentException(
                 'The selected facility is not configured for new transactions. Please choose another facility or contact resort staff.',
@@ -69,6 +62,33 @@ class FacilityProductConfigurationService
         return $rate;
     }
 
+    public function canonicalRateType(ProductRate|FacilityRateCode $rate): string
+    {
+        $rateCode = $rate instanceof ProductRate ? $rate->rate_code : $rate;
+
+        return match ($rateCode) {
+            FacilityRateCode::Day => 'Day',
+            FacilityRateCode::Night => 'Night',
+            FacilityRateCode::Both => 'Both',
+            FacilityRateCode::Overnight => 'Overnight',
+            FacilityRateCode::WholeDay => 'Whole Day',
+        };
+    }
+
+    public function canonicalRateCode(string $rateType): FacilityRateCode
+    {
+        return match ($rateType) {
+            'Day' => FacilityRateCode::Day,
+            'Night' => FacilityRateCode::Night,
+            'Both' => FacilityRateCode::Both,
+            'Overnight' => FacilityRateCode::Overnight,
+            'Whole Day' => FacilityRateCode::WholeDay,
+            default => throw new InvalidArgumentException(
+                'The selected rate is not configured for this facility. Please choose another rate or contact resort staff.',
+            ),
+        };
+    }
+
     public function strictMaximum(?int $facilityId): ?int
     {
         if (! $facilityId) {
@@ -94,7 +114,7 @@ class FacilityProductConfigurationService
         ProductRate $rate,
         int $guestCount,
         string $basePrice,
-        string $discountRate,
+        ?string $discountRate,
         string $discountAmount,
         string $extraGuestFee,
         string $lineTotal,
@@ -133,32 +153,84 @@ class FacilityProductConfigurationService
 
     private function datedSlotRateCode(string $legacyRateType): FacilityRateCode
     {
-        $normalized = Str::of($legacyRateType)
-            ->replace(['_', '-'], ' ')
-            ->lower()
-            ->squish()
-            ->toString();
+        $rateCode = $this->canonicalRateCode($legacyRateType);
 
-        if (
-            Str::contains($normalized, 'both')
-            || (
-                Str::contains($normalized, 'day')
-                && Str::contains($normalized, 'night')
-            )
+        if (! in_array($rateCode, [FacilityRateCode::Day, FacilityRateCode::Night, FacilityRateCode::Both], true)) {
+            throw new InvalidArgumentException(
+                'The selected rate is not configured for this facility. Please choose another rate or contact resort staff.',
+            );
+        }
+
+        return $rateCode;
+    }
+
+    private function hasValidConfiguration(FacilityProduct $product): bool
+    {
+        $requiredRates = match ($product->product_code) {
+            FacilityProductCode::RoomStandard => [FacilityRateCode::Overnight],
+            FacilityProductCode::CottageSmall,
+            FacilityProductCode::CottageMedium,
+            FacilityProductCode::CottageLarge,
+            FacilityProductCode::CottageExtraLarge => [
+                FacilityRateCode::Day,
+                FacilityRateCode::Night,
+                FacilityRateCode::Both,
+            ],
+            FacilityProductCode::FunctionHall1,
+            FacilityProductCode::FunctionHall2 => [FacilityRateCode::WholeDay],
+        };
+
+        if ($this->isRoomProduct($product)) {
+            if ($product->capacity_policy !== FacilityCapacityPolicy::Strict
+                || $product->schedule_policy !== FacilitySchedulePolicy::Overnight
+                || $product->included_guest_count === null
+                || $product->strict_maximum === null
+                || $product->included_guest_count < 1
+                || $product->strict_maximum < $product->included_guest_count
+            ) {
+                return false;
+            }
+        } elseif ($product->capacity_policy !== FacilityCapacityPolicy::RecommendedInformational
+            || $product->suggested_maximum === null
+            || $product->suggested_maximum < 1
+            || ($product->suggested_minimum !== null
+                && ($product->suggested_minimum < 1 || $product->suggested_minimum > $product->suggested_maximum))
+            || ($product->schedule_policy === FacilitySchedulePolicy::DatedSlots) !== $this->isCottageProduct($product)
+            || ($product->schedule_policy === FacilitySchedulePolicy::WholeCalendarDay) !== $this->isFunctionHallProduct($product)
         ) {
-            return FacilityRateCode::Both;
+            return false;
         }
 
-        if (Str::startsWith($normalized, 'day')) {
-            return FacilityRateCode::Day;
+        $activeRates = $product->productRates
+            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
+            ->keyBy(fn (ProductRate $rate): string => $rate->rate_code->value);
+
+        foreach ($requiredRates as $requiredRate) {
+            $rate = $activeRates->get($requiredRate->value);
+
+            if (! $rate instanceof ProductRate || $this->money->compare($rate->amount, '0.00') !== 1) {
+                return false;
+            }
         }
 
-        if (Str::startsWith($normalized, 'night')) {
-            return FacilityRateCode::Night;
-        }
+        return $activeRates->count() === count($requiredRates);
+    }
 
-        throw new InvalidArgumentException(
-            'The selected rate is not configured for this facility. Please choose another rate or contact resort staff.',
-        );
+    private function isCottageProduct(FacilityProduct $product): bool
+    {
+        return in_array($product->product_code, [
+            FacilityProductCode::CottageSmall,
+            FacilityProductCode::CottageMedium,
+            FacilityProductCode::CottageLarge,
+            FacilityProductCode::CottageExtraLarge,
+        ], true);
+    }
+
+    private function isFunctionHallProduct(FacilityProduct $product): bool
+    {
+        return in_array($product->product_code, [
+            FacilityProductCode::FunctionHall1,
+            FacilityProductCode::FunctionHall2,
+        ], true);
     }
 }

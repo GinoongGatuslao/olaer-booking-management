@@ -95,7 +95,7 @@ class PublicReservationWorkflowService
             $detail = ReservationDetail::query()->create([
                 'reservation_id' => $reservation->reservation_id,
                 'facility_id' => $facilityId,
-                'rate_type' => $rateType,
+                'rate_type' => $quote['rate_type'],
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'discount_id' => $discountId,

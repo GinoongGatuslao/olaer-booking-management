@@ -57,8 +57,7 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         );
 
         $this->assertDatabaseHas('tbl_entrance_slip', [
-            'entrance_slip_id' =>
-                $slip->entrance_slip_id,
+            'entrance_slip_id' => $slip->entrance_slip_id,
             'no_of_adult' => 2,
             'no_of_children' => 1,
             'no_of_PWD_SC' => 1,
@@ -110,10 +109,8 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         $payment = app(PaymentWorkflowService::class)
             ->recordCashierPayment([
                 'target_type' => 'entrance_slip',
-                'target_id' =>
-                    $slip->entrance_slip_id,
-                'amount_paid' =>
-                    (float) $slip->amount_due,
+                'target_id' => $slip->entrance_slip_id,
+                'amount_paid' => (string) $slip->amount_due,
                 'mode_of_payment_id' => $cashModeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -125,8 +122,7 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         );
 
         $this->assertDatabaseHas('tbl_entrance_slip', [
-            'entrance_slip_id' =>
-                $slip->entrance_slip_id,
+            'entrance_slip_id' => $slip->entrance_slip_id,
             'amount_due' => 0.00,
             'handled_by_user_id' => $cashierId,
             'status' => 'Paid',
@@ -134,10 +130,8 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
 
         $this->assertDatabaseHas('tbl_payment', [
             'payment_id' => $payment->payment_id,
-            'entrance_slip_id' =>
-                $slip->entrance_slip_id,
-            'amount_paid' =>
-                (float) $slip->total_price,
+            'entrance_slip_id' => $slip->entrance_slip_id,
+            'amount_paid' => (float) $slip->total_price,
             'payment_status' => 'Verified',
             'verified_by_user_id' => $cashierId,
         ]);
@@ -160,11 +154,9 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         app(PaymentWorkflowService::class)
             ->recordCashierPayment([
                 'target_type' => 'entrance_slip',
-                'target_id' =>
-                    $slip->entrance_slip_id,
-                'amount_paid' => 50.00,
-                'mode_of_payment_id' =>
-                    $this->createPaymentMode('Cash'),
+                'target_id' => $slip->entrance_slip_id,
+                'amount_paid' => '50.00',
+                'mode_of_payment_id' => $this->createPaymentMode('Cash'),
                 'reference_number' => '',
                 'user_id' => $cashierId,
             ]);
@@ -185,7 +177,7 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         $payload = [
             'target_type' => 'entrance_slip',
             'target_id' => $slip->entrance_slip_id,
-            'amount_paid' => (float) $slip->amount_due,
+            'amount_paid' => (string) $slip->amount_due,
             'mode_of_payment_id' => $cashModeId,
             'reference_number' => '',
             'user_id' => $cashierId,
@@ -223,10 +215,8 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         app(PaymentWorkflowService::class)
             ->recordCashierPayment([
                 'target_type' => 'entrance_slip',
-                'target_id' =>
-                    $slip->entrance_slip_id,
-                'amount_paid' =>
-                    (float) $slip->amount_due,
+                'target_id' => $slip->entrance_slip_id,
+                'amount_paid' => (string) $slip->amount_due,
                 'mode_of_payment_id' => $cashModeId,
                 'reference_number' => '',
                 'user_id' => $cashierId,
@@ -310,8 +300,7 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         return DB::table('tbl_user')->insertGetId([
             'first_name' => 'Test',
             'middle_name' => null,
-            'last_name' =>
-                str_replace(' ', '', $roleName),
+            'last_name' => str_replace(' ', '', $roleName),
             'username' => $username,
             'password' => Hash::make('password'),
             'email' => $username.'@example.test',

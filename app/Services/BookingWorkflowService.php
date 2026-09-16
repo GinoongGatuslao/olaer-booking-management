@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Address;
 use App\Models\Booking;
 use App\Models\BookingDetail;
+use App\Models\BookingExtraGuest;
 use App\Models\Guest;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
@@ -23,8 +24,10 @@ class BookingWorkflowService
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
+        private readonly FacilityProductConfigurationService $products,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function createBooking(array $data): Booking
     {
         return DB::transaction(function () use ($data): Booking {
@@ -64,7 +67,7 @@ class BookingWorkflowService
                 totalGuestCount: $totalGuestCount,
             );
             $paymentAmount = $this->money->normalize(
-                (string) $data['payment_amount'],
+                $data['payment_amount'],
             );
 
             if (! $this->money->equals($paymentAmount, $quote['total'])) {
@@ -112,7 +115,7 @@ class BookingWorkflowService
             $detail = BookingDetail::query()->create([
                 'booking_id' => $booking->booking_id,
                 'facility_id' => $facilityId,
-                'rate_type' => $rateType,
+                'rate_type' => $quote['rate_type'],
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'check_in_time' => $this->normalizeTime($data['check_in_time'] ?? '12:00'),
@@ -196,7 +199,7 @@ class BookingWorkflowService
                     (int) $detail->facility_id,
                     $newFacilityId,
                 ])
-                ->load('facilityType')
+                ->load(['facilityType', 'facilityProduct.productRates'])
                 ->keyBy('facility_id');
 
             $oldFacility = $facilities->get(
@@ -235,34 +238,101 @@ class BookingWorkflowService
                 (int) $detail->booking_details_id
             );
 
-            $oldPrice = $this->quoteService->priceForFacilityRate((int) $detail->facility_id, (string) $detail->rate_type);
-            $newPrice = $this->quoteService->priceForFacilityRate($newFacilityId, (string) $detail->rate_type);
-            $upgradeCharge = $this->money->maxZero(
-                $this->money->subtract($newPrice, $oldPrice),
+            $totalGuestCount = (int) ($detail->guest_count ?? $booking->total_guest_count);
+            $destinationQuote = $this->quoteService->quote(
+                facilityId: $newFacilityId,
+                rateType: (string) $detail->rate_type,
+                discountId: null,
+                totalGuestCount: $totalGuestCount,
+            );
+            $destinationProduct = $this->products->productFor($newFacility);
+            $oldPrice = $detail->unit_rate
+                ?? $this->quoteService->priceForFacilityRate((int) $detail->facility_id, (string) $detail->rate_type);
+            $newPrice = $this->money->normalize((string) $destinationQuote['detail_snapshot']['unit_rate']);
+
+            if ($this->money->compare($newPrice, $oldPrice) === -1) {
+                throw new InvalidArgumentException('Transfers to a lower-priced facility require the refund workflow.');
+            }
+
+            if ($detail->base_price === null
+                || $detail->discount_amount === null
+                || $detail->extra_guest_fee === null
+            ) {
+                throw new InvalidArgumentException('The historical booking price is incomplete and must be reviewed before transfer.');
+            }
+
+            $basePrice = $this->money->normalize($detail->base_price);
+            $discountAmount = $this->money->normalize($detail->discount_amount);
+            $extraGuestFee = $this->money->normalize($detail->extra_guest_fee);
+            $discountId = $detail->discount_id ? (int) $detail->discount_id : null;
+            $discountRate = $detail->discount_rate;
+
+            if (($discountId === null && (! $this->money->equals($discountAmount, '0.00')
+                    || ($discountRate !== null && bccomp((string) $discountRate, '0.000000', 6) !== 0)))
+                || ($discountId !== null && ($this->money->compare($discountAmount, '0.00') !== 1
+                    || ($discountRate !== null && bccomp((string) $discountRate, '0.000000', 6) !== 1)))
+            ) {
+                throw new InvalidArgumentException('The historical booking discount is incomplete and must be reviewed before transfer.');
+            }
+
+            if (! $this->products->isRoomProduct($destinationProduct)
+                && ! $this->money->equals($extraGuestFee, '0.00')
+            ) {
+                throw new InvalidArgumentException('Non-room transfers cannot contain room extra-guest charges.');
+            }
+
+            $reconstructedLineTotal = $this->money->maxZero(
+                $this->money->subtract(
+                    $this->money->add($basePrice, $extraGuestFee),
+                    $discountAmount,
+                ),
+            );
+            $oldLineTotal = $detail->line_total === null
+                ? $reconstructedLineTotal
+                : $this->money->normalize($detail->line_total);
+
+            if (! $this->money->equals($oldLineTotal, $reconstructedLineTotal)) {
+                throw new InvalidArgumentException('The historical booking price is internally inconsistent and must be reviewed before transfer.');
+            }
+
+            $transferSurcharge = $this->money->subtract($newPrice, $oldPrice);
+            $newBasePrice = $this->money->add($basePrice, $transferSurcharge);
+            $newLineTotal = $this->money->add($oldLineTotal, $transferSurcharge);
+            $reconciledNewLineTotal = $this->money->maxZero(
+                $this->money->subtract(
+                    $this->money->add($newBasePrice, $extraGuestFee),
+                    $discountAmount,
+                ),
             );
 
-            $newLineTotal = $detail->line_total !== null
-                ? $this->money->add($detail->line_total, $upgradeCharge)
-                : null;
+            if (! $this->money->equals($newLineTotal, $reconciledNewLineTotal)) {
+                throw new InvalidArgumentException('The historical booking discount cannot be represented truthfully after transfer.');
+            }
 
             $detail->update([
                 'facility_id' => $newFacilityId,
+                'rate_type' => $destinationQuote['rate_type'],
                 'status' => 'Transferred',
-                'base_price' => $detail->base_price !== null
-                    ? $this->money->add($detail->base_price, $upgradeCharge)
-                    : null,
+                ...$destinationQuote['detail_snapshot'],
+                'discount_id' => $discountId,
+                'base_price' => $newBasePrice,
+                'discount_rate' => $discountId === null
+                    ? ($discountRate ?? '0.000000')
+                    : $discountRate,
+                'discount_amount' => $discountAmount,
+                'extra_guest_fee' => $extraGuestFee,
                 'line_total' => $newLineTotal,
             ]);
 
-            if (bccomp($upgradeCharge, '0.00', 2) === 1) {
+            if ($this->money->compare($transferSurcharge, '0.00') === 1) {
                 $booking->update([
                     'total_price' => $this->money->add(
                         $booking->total_price,
-                        $upgradeCharge,
+                        $transferSurcharge,
                     ),
                     'amount_due' => $this->money->add(
                         $booking->amount_due,
-                        $upgradeCharge,
+                        $transferSurcharge,
                     ),
                 ]);
             }
@@ -287,40 +357,85 @@ class BookingWorkflowService
                 (int) $detail->facility_id,
             );
 
-            $facilityType = strtolower((string) optional($detail->facility->facilityType)->facility_type);
-
             $this->guardEditableBookingDetail($detail);
 
-            if ($facilityType !== 'cottage') {
+            $product = $this->products->productFor($detail->facility);
+
+            if (! str_starts_with($product->product_code->value, 'COTTAGE_')) {
                 throw new InvalidArgumentException('Only cottage bookings can use the day-rate extension rule.');
             }
 
-            if (strtolower((string) $detail->rate_type) !== 'day rate') {
+            if ($detail->getRawOriginal('rate_code') !== 'DAY') {
                 throw new InvalidArgumentException('Only Day Rate cottage bookings can be extended using this rule.');
             }
 
-            $charge = BookingQuoteService::COTTAGE_DAY_TO_NIGHT_EXTENSION_FEE;
+            $extraGuests = BookingExtraGuest::query()
+                ->where('booking_details_id', $detail->booking_details_id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($extraGuests->isNotEmpty() || ! $this->money->equals($detail->extra_guest_fee ?? '0.00', '0.00')) {
+                throw new InvalidArgumentException('Cottage details cannot contain room extra-guest charges or records.');
+            }
+
+            if (
+                $detail->base_price === null
+                || $detail->discount_amount === null
+                || $detail->extra_guest_fee === null
+            ) {
+                throw new InvalidArgumentException('The existing cottage pricing snapshot is incomplete and cannot be extended safely.');
+            }
+
+            $discountAmount = $this->money->normalize($detail->discount_amount);
+            $existingLineTotal = $this->money->subtract(
+                $this->money->add($detail->base_price, $detail->extra_guest_fee),
+                $discountAmount,
+            );
+
+            if (
+                $this->money->compare($existingLineTotal, '0.00') === -1
+                || ($detail->line_total !== null && ! $this->money->equals($detail->line_total, $existingLineTotal))
+            ) {
+                throw new InvalidArgumentException('The existing cottage pricing snapshot does not reconcile and cannot be extended safely.');
+            }
+
+            $nightRate = $this->products->rateFor($detail->facility, 'Night');
+            $bothRate = $this->products->rateFor($detail->facility, 'Both');
+            $newBasePrice = $this->money->add($detail->base_price, $nightRate->amount);
+
+            if (! $this->money->equals($newBasePrice, $bothRate->amount)) {
+                throw new InvalidArgumentException('The approved Both rate must equal the booked Day base plus the current Night rate.');
+            }
+
+            $newLineTotal = $this->money->add($existingLineTotal, $nightRate->amount);
+            $discountRate = $this->money->equals($discountAmount, '0.00')
+                ? '0.000000'
+                : null;
+            $snapshot = $this->products->detailSnapshot(
+                facility: $detail->facility,
+                rate: $bothRate,
+                guestCount: (int) ($detail->guest_count ?? $booking->total_guest_count),
+                basePrice: $newBasePrice,
+                discountRate: $discountRate,
+                discountAmount: $discountAmount,
+                extraGuestFee: '0.00',
+                lineTotal: $newLineTotal,
+            );
 
             $detail->update([
-                'rate_type' => 'Day + Night Extension',
+                'rate_type' => $this->products->canonicalRateType($bothRate),
                 'status' => 'Extended',
-                'extra_guest_fee' => $this->money->add(
-                    $detail->extra_guest_fee ?? '0.00',
-                    $charge,
-                ),
-                'line_total' => $detail->line_total !== null
-                    ? $this->money->add($detail->line_total, $charge)
-                    : null,
+                ...$snapshot,
             ]);
 
             $booking->update([
                 'total_price' => $this->money->add(
                     $booking->total_price,
-                    $charge,
+                    $nightRate->amount,
                 ),
                 'amount_due' => $this->money->add(
                     $booking->amount_due,
-                    $charge,
+                    $nightRate->amount,
                 ),
             ]);
         });
@@ -370,6 +485,10 @@ class BookingWorkflowService
         return $time;
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $extraGuests
+     * @return array<int, array{first_name: string, middle_name: ?string, last_name: string}>
+     */
     private function cleanExtraGuests(array $extraGuests): array
     {
         $clean = [];

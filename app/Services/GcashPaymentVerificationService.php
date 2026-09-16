@@ -13,6 +13,7 @@ class GcashPaymentVerificationService
 {
     public function __construct(
         private readonly GcashReferenceIntegrityService $references,
+        private readonly DecimalMoneyService $money,
     ) {}
 
     public function verify(
@@ -65,22 +66,16 @@ class GcashPaymentVerificationService
                 );
             }
 
-            $amountPaid = round(
-                (float) $payment->amount_paid,
-                2,
-            );
-            $amountDue = round(
-                (float) $booking->amount_due,
-                2,
-            );
+            $amountPaid = $this->money->normalize((string) $payment->amount_paid);
+            $amountDue = $this->money->normalize((string) $booking->amount_due);
 
-            if ($amountPaid <= 0) {
+            if ($this->money->compare($amountPaid, '0.00') !== 1) {
                 throw new InvalidArgumentException(
                     'The submitted GCash payment amount is invalid.',
                 );
             }
 
-            if (abs($amountPaid - $amountDue) > 0.009) {
+            if (! $this->money->equals($amountPaid, $amountDue)) {
                 throw new InvalidArgumentException(
                     'The submitted GCash amount must exactly match the booking balance.',
                 );
@@ -220,7 +215,7 @@ class GcashPaymentVerificationService
             ->with('role')
             ->findOrFail($userId);
 
-        if ($user->role?->role_name !== 'Cashier') {
+        if (! $user->role()->where('role_name', 'Cashier')->exists()) {
             throw new InvalidArgumentException(
                 'Only a Cashier may verify or reject GCash payments.',
             );
@@ -234,7 +229,7 @@ class GcashPaymentVerificationService
             trim(
                 (string) $payment
                     ->modeOfPayment
-                    ?->mode_of_payment,
+                    ?->getAttribute('mode_of_payment'),
             ),
         );
 
@@ -280,8 +275,8 @@ class GcashPaymentVerificationService
 
         if (
             ! $booking
-            || round((float) $booking->amount_due, 2) > 0
-            || strtolower(trim((string) $booking->status))
+            || $this->money->compare((string) $booking->getAttribute('amount_due'), '0.00') === 1
+            || strtolower(trim((string) $booking->getAttribute('status')))
                 !== 'booked'
         ) {
             throw new InvalidArgumentException(

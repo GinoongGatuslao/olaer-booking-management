@@ -26,6 +26,7 @@ class PublicBookingWorkflowService
         private readonly DecimalMoneyService $money,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function createGuestBookingWithPendingGcash(array $data): Booking
     {
         $booking = DB::transaction(function () use ($data): Booking {
@@ -65,7 +66,7 @@ class PublicBookingWorkflowService
             );
 
             $paymentAmount = $this->money->normalize(
-                (string) $data['payment_amount'],
+                $data['payment_amount'],
             );
             $total = $this->money->normalize($quote['total']);
 
@@ -126,7 +127,7 @@ class PublicBookingWorkflowService
             $detail = BookingDetail::query()->create([
                 'booking_id' => $booking->booking_id,
                 'facility_id' => $facilityId,
-                'rate_type' => $rateType,
+                'rate_type' => $quote['rate_type'],
                 'check_in_date' => $checkInDate,
                 'check_out_date' => $checkOutDate,
                 'check_in_time' => $this->normalizeTime($data['check_in_time'] ?? '12:00'),
@@ -171,6 +172,10 @@ class PublicBookingWorkflowService
         return $booking;
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $extraGuests
+     * @return array<int, array{first_name: string, middle_name: ?string, last_name: string}>
+     */
     private function cleanExtraGuests(array $extraGuests): array
     {
         $clean = [];

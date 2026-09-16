@@ -19,16 +19,15 @@ class PaymentWorkflowService
 {
     public function __construct(
         private readonly GcashReferenceIntegrityService $gcashReferences,
+        private readonly DecimalMoneyService $money,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function recordCashierPayment(array $data): Payment
     {
         $targetType = (string) ($data['target_type'] ?? '');
         $targetId = (int) ($data['target_id'] ?? 0);
-        $amountPaid = round(
-            (float) ($data['amount_paid'] ?? 0),
-            2,
-        );
+        $amountPaid = $this->money->normalize($data['amount_paid'] ?? '');
         $modeOfPaymentId = (int) (
             $data['mode_of_payment_id'] ?? 0
         );
@@ -55,7 +54,7 @@ class PaymentWorkflowService
             );
         }
 
-        if ($amountPaid <= 0) {
+        if ($this->money->compare($amountPaid, '0.00') !== 1) {
             throw new InvalidArgumentException(
                 'Payment amount must be greater than zero.',
             );
@@ -92,10 +91,7 @@ class PaymentWorkflowService
                 $targetId,
             );
 
-            $amountDue = round(
-                (float) $target->amount_due,
-                2,
-            );
+            $amountDue = $this->money->normalize((string) $target->getAttribute('amount_due'));
 
             $this->guardTargetIsPayable(
                 $targetType,
@@ -104,39 +100,29 @@ class PaymentWorkflowService
                 $amountPaid,
             );
 
-            $newAmountDue = round(
-                $amountDue - $amountPaid,
-                2,
-            );
+            $newAmountDue = $this->money->subtract($amountDue, $amountPaid);
 
             $paymentPayload = [
                 'p_ref_no' => $this->newReference(),
-                'booking_id' =>
-                    $targetType === 'booking'
+                'booking_id' => $targetType === 'booking'
                         ? $targetId
                         : null,
-                'reservation_id' =>
-                    $targetType === 'reservation'
+                'reservation_id' => $targetType === 'reservation'
                         ? $targetId
                         : null,
-                'entrance_slip_id' =>
-                    $targetType === 'entrance_slip'
+                'entrance_slip_id' => $targetType === 'entrance_slip'
                         ? $targetId
                         : null,
-                'mode_of_payment_id' =>
-                    $mode->mode_of_payment_id,
-                'reference_number' =>
-                    $referenceNumber !== ''
+                'mode_of_payment_id' => $mode->mode_of_payment_id,
+                'reference_number' => $referenceNumber !== ''
                         ? $referenceNumber
                         : null,
                 'proof_of_payment_path' => null,
                 'amount_paid' => $amountPaid,
-                'date_paid' =>
-                    Carbon::today()->toDateString(),
+                'date_paid' => Carbon::today()->toDateString(),
                 'user_id' => $cashierUserId,
                 'payment_status' => 'Verified',
-                'verified_by_user_id' =>
-                    $cashierUserId,
+                'verified_by_user_id' => $cashierUserId,
                 'verified_at' => Carbon::now(),
             ];
 
@@ -178,7 +164,7 @@ class PaymentWorkflowService
             ->with('role')
             ->findOrFail($userId);
 
-        if ($user->role?->role_name !== 'Cashier') {
+        if (! $user->role()->where('role_name', 'Cashier')->exists()) {
             throw new InvalidArgumentException(
                 'Only a Cashier may record payments.',
             );
@@ -208,16 +194,16 @@ class PaymentWorkflowService
     private function guardTargetIsPayable(
         string $targetType,
         Model $target,
-        float $amountDue,
-        float $amountPaid,
+        string $amountDue,
+        string $amountPaid,
     ): void {
-        if ($amountDue <= 0) {
+        if ($this->money->compare($amountDue, '0.00') !== 1) {
             throw new InvalidArgumentException(
                 'This record has no unpaid balance.',
             );
         }
 
-        if ($amountPaid > $amountDue) {
+        if ($this->money->compare($amountPaid, $amountDue) === 1) {
             throw new InvalidArgumentException(
                 'Payment amount cannot be greater than the unpaid balance.',
             );
@@ -256,7 +242,7 @@ class PaymentWorkflowService
 
         if (
             ! in_array(
-                (string) $booking->status,
+                (string) $booking->getAttribute('status'),
                 $payableStatuses,
                 true,
             )
@@ -270,7 +256,7 @@ class PaymentWorkflowService
     private function guardReservationIsPayable(
         Model $reservation,
     ): void {
-        if ((string) $reservation->status !== 'Active') {
+        if ((string) $reservation->getAttribute('status') !== 'Active') {
             throw new InvalidArgumentException(
                 'This reservation can no longer accept payments.',
             );
@@ -279,8 +265,8 @@ class PaymentWorkflowService
 
     private function guardEntranceSlipIsPayable(
         Model $target,
-        float $amountDue,
-        float $amountPaid,
+        string $amountDue,
+        string $amountPaid,
     ): void {
         if (! $target instanceof EntranceSlip) {
             throw new InvalidArgumentException(
@@ -288,26 +274,23 @@ class PaymentWorkflowService
             );
         }
 
-        if ((string) $target->status === 'Paid') {
+        if ((string) $target->getAttribute('status') === 'Paid') {
             throw new InvalidArgumentException(
                 'This entrance slip is already paid.',
             );
         }
 
-        if ((string) $target->status !== 'Unpaid') {
+        if ((string) $target->getAttribute('status') !== 'Unpaid') {
             throw new InvalidArgumentException(
                 'This entrance slip cannot accept payment in its current status.',
             );
         }
 
-        $totalPrice = round(
-            (float) $target->total_price,
-            2,
-        );
+        $totalPrice = $this->money->normalize((string) $target->getAttribute('total_price'));
 
         if (
-            $totalPrice <= 0
-            || abs($amountDue - $totalPrice) > 0.009
+            $this->money->compare($totalPrice, '0.00') !== 1
+            || ! $this->money->equals($amountDue, $totalPrice)
         ) {
             throw new InvalidArgumentException(
                 'This entrance slip has an inconsistent balance and must be reviewed before payment.',
@@ -327,7 +310,7 @@ class PaymentWorkflowService
             );
         }
 
-        if (abs($amountPaid - $amountDue) > 0.009) {
+        if (! $this->money->equals($amountPaid, $amountDue)) {
             throw new InvalidArgumentException(
                 'Entrance slips must be paid in full.',
             );
@@ -337,7 +320,7 @@ class PaymentWorkflowService
     private function applyPaymentToTarget(
         string $targetType,
         Model $target,
-        float $newAmountDue,
+        string $newAmountDue,
         int $cashierUserId,
     ): void {
         if ($targetType === 'booking') {
@@ -351,10 +334,9 @@ class PaymentWorkflowService
         if ($targetType === 'reservation') {
             $target->update([
                 'amount_due' => $newAmountDue,
-                'status' =>
-                    $newAmountDue <= 0
+                'status' => $this->money->compare($newAmountDue, '0.00') !== 1
                         ? 'Paid'
-                        : $target->status,
+                        : $target->getAttribute('status'),
             ]);
 
             return;
@@ -363,8 +345,7 @@ class PaymentWorkflowService
         if ($targetType === 'entrance_slip') {
             $target->update([
                 'amount_due' => 0.00,
-                'handled_by_user_id' =>
-                    $cashierUserId,
+                'handled_by_user_id' => $cashierUserId,
                 'status' => 'Paid',
             ]);
         }

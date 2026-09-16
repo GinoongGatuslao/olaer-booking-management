@@ -232,7 +232,7 @@ new class extends Component {
         $quote = $this->currentQuote();
 
         if ($quote !== null) {
-            $this->form['payment_amount'] = number_format((float) $quote['total'], 2, '.', '');
+            $this->form['payment_amount'] = $quote['total'];
         }
     }
 
@@ -520,11 +520,22 @@ new class extends Component {
         }
 
         return Facility::query()
+            ->with('facilityProduct')
             ->where('facility_type_id', $detail->facility->facility_type_id)
             ->where('facility_id', '!=', $detail->facility_id)
             ->whereIn('facility_status', ['Available', 'available'])
             ->orderBy('facility_name')
-            ->get();
+            ->get()
+            ->each(function (Facility $facility): void {
+                $maximum = $facility->facilityProduct?->strict_maximum;
+                $recommended = $facility->facilityProduct?->suggested_maximum;
+                $facility->setAttribute(
+                    'capacity_label',
+                    $maximum
+                        ? "Maximum {$maximum} guests"
+                        : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
+                );
+            });
     }
 
     private function rateTypes()
@@ -797,7 +808,7 @@ new class extends Component {
                     <select wire:model="transferForm.new_facility_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
                         <option value="">Select matching facility</option>
                         @foreach ($transferFacilities as $facility)
-                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} - {{ $facility->capacity }} pax</option>
+                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} - {{ $facility->capacity_label }}</option>
                         @endforeach
                     </select>
                 </div>

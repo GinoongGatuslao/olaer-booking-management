@@ -86,12 +86,12 @@ class BillingAndPrintIntegrityTest extends TestCase
         );
 
         $this->assertSame(
-            1300.00,
+            '1300.00',
             $billing['total_amount'],
         );
 
         $this->assertSame(
-            300.00,
+            '300.00',
             $billing['total_due'],
         );
 
