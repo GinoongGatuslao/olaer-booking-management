@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\BookingDetail;
+use App\Models\ReservationDetail;
 use App\Services\CheckInWorkflowService;
+use App\Services\FacilityScheduleBlockService;
 use App\Services\ReservationToBookingWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -151,7 +154,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             ]);
     }
 
-    public function test_conversion_is_blocked_by_overlapping_booking(): void
+    public function test_canonical_reservation_block_rejects_an_overlapping_booking_before_conversion(): void
     {
         $cashierId = $this->createUser('Cashier');
         $reservation = $this->createReservationScenario(
@@ -165,7 +168,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             0.00,
         );
 
-        $this->createBookingDetail(
+        $conflictDetailId = $this->createBookingDetail(
             $conflictBookingId,
             $reservation['facility_id'],
             'Booked',
@@ -173,18 +176,26 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             $reservation['check_out_date'],
         );
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage(
-            'Selected facility is not available for the selected date range.',
-        );
+        try {
+            DB::transaction(fn () => app(FacilityScheduleBlockService::class)
+                ->acquireForBookingDetail(BookingDetail::query()->findOrFail($conflictDetailId)));
+            $this->fail('An overlapping booking schedule was accepted.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertStringContainsString('no longer available', $exception->getMessage());
+        }
 
-        app(ReservationToBookingWorkflowService::class)
+        $booking = app(ReservationToBookingWorkflowService::class)
             ->convert($reservation['reservation_id'], [
                 'payment_amount' => 0,
                 'mode_of_payment_id' => null,
                 'reference_number' => '',
                 'user_id' => $cashierId,
             ]);
+
+        $this->assertDatabaseHas('tbl_facility_schedule_blocks', [
+            'reservation_detail_id' => null,
+            'booking_detail_id' => $booking->details()->sole()->booking_details_id,
+        ]);
     }
 
     public function test_conversion_preserves_data_and_records_exact_payment(): void
@@ -434,6 +445,10 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             'line_total' => $totalPrice,
         ]);
 
+        app(FacilityScheduleBlockService::class)->acquireForReservationDetail(
+            ReservationDetail::query()->findOrFail($detailId),
+        );
+
         if ($withExtraGuest) {
             DB::table('tbl_reservation_extra_guests')->insert([
                 'reservation_id' => $reservationId,
@@ -496,10 +511,22 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
         ?string $checkInDate = null,
         ?string $checkOutDate = null,
     ): int {
+        $productId = DB::table('tbl_facility')
+            ->where('facility_id', $facilityId)
+            ->value('facility_product_id');
+
         return DB::table('tbl_booking_details')
             ->insertGetId([
                 'booking_id' => $bookingId,
                 'facility_id' => $facilityId,
+                'facility_product_id' => $productId,
+                'guest_count' => 4,
+                'capacity_policy' => 'strict',
+                'included_guest_count_snapshot' => 4,
+                'strict_maximum_snapshot' => 10,
+                'schedule_policy' => 'overnight',
+                'rate_code' => 'OVERNIGHT',
+                'unit_rate' => 1000.00,
                 'rate_type' => 'Overnight',
                 'check_in_date' => $checkInDate ?? now()->toDateString(),
                 'check_out_date' => $checkOutDate
@@ -509,6 +536,11 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
                         : null,
                 'status' => $status,
                 'discount_id' => null,
+                'base_price' => 1000.00,
+                'discount_rate' => 0,
+                'discount_amount' => 0,
+                'extra_guest_fee' => 0,
+                'line_total' => 1000.00,
                 'user_id' => null,
             ]);
     }

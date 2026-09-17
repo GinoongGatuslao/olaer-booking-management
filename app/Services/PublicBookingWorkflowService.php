@@ -16,10 +16,10 @@ use InvalidArgumentException;
 class PublicBookingWorkflowService
 {
     public function __construct(
-        private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
         private readonly DetailExtraGuestService $detailGuests,
@@ -35,7 +35,11 @@ class PublicBookingWorkflowService
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
 
-            $this->scheduleLock->lockOne($facilityId);
+            $facility = $this->scheduleLock->lockOne($facilityId);
+
+            if ($facility->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
 
             $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
@@ -51,12 +55,6 @@ class PublicBookingWorkflowService
             );
             $extraGuestCount =
                 $occupancy['paid_extra_guest_count'];
-
-            $this->availability->assertFacilityAvailable(
-                $facilityId,
-                $checkInDate,
-                $checkOutDate,
-            );
 
             $quote = $this->quoteService->quote(
                 facilityId: $facilityId,
@@ -136,6 +134,8 @@ class PublicBookingWorkflowService
                 'user_id' => null,
                 ...$quote['detail_snapshot'],
             ]);
+
+            $this->scheduleBlocks->acquireForBookingDetail($detail);
 
             $this->detailGuests->createForBooking(
                 $booking,

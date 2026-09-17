@@ -26,6 +26,7 @@ use App\Services\BookingWorkflowService;
 use App\Services\CashierReservationWorkflowService;
 use App\Services\DecimalMoneyService;
 use App\Services\FacilityProductConfigurationService;
+use App\Services\FacilityScheduleBlockService;
 use App\Services\GuestReservationManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -1357,7 +1358,7 @@ class BatchTwoRemediationTest extends TestCase
     {
         $guest = $this->guest();
         $booking = $this->bareBooking($guest, 'B'.uniqid(), $amount, 4);
-        BookingDetail::query()->create([
+        $detail = BookingDetail::query()->create([
             'booking_id' => $booking->booking_id,
             'facility_id' => $facility->facility_id,
             'facility_product_id' => $product->facility_product_id,
@@ -1381,6 +1382,8 @@ class BatchTwoRemediationTest extends TestCase
             'extra_guest_fee' => '0.00',
             'line_total' => $amount,
         ]);
+
+        app(FacilityScheduleBlockService::class)->acquireForBookingDetail($detail);
 
         return $booking;
     }

@@ -29,6 +29,7 @@ class GuestReservationManagementService
         private readonly DiscountResolverService $discountResolver,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly BookingAvailabilityService $availability,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
         private readonly DetailExtraGuestService $detailGuests,
@@ -97,7 +98,7 @@ class GuestReservationManagementService
                 throw new InvalidArgumentException('No active OTP request was found. Please request a new OTP.');
             }
 
-            if ($record->expires_at->isPast()) {
+            if (Carbon::parse($record->expires_at)->isPast()) {
                 throw new InvalidArgumentException('OTP expired. Please request a new OTP.');
             }
 
@@ -125,6 +126,7 @@ class GuestReservationManagementService
         return $reservation;
     }
 
+    /** @return Collection<int, FacilityType> */
     public function facilityTypes(): Collection
     {
         return FacilityType::query()
@@ -133,6 +135,7 @@ class GuestReservationManagementService
             ->get();
     }
 
+    /** @return Collection<int, string> */
     public function rateTypesForFacilityType(?int $facilityTypeId): Collection
     {
         if (! $facilityTypeId) {
@@ -155,6 +158,7 @@ class GuestReservationManagementService
             ->values();
     }
 
+    /** @return Collection<int, Facility> */
     public function availableFacilities(
         ?int $facilityTypeId,
         ?string $rateType,
@@ -197,6 +201,7 @@ class GuestReservationManagementService
             ->values();
     }
 
+    /** @return array<string, mixed>|null */
     public function quotePreview(
         ?int $facilityId,
         ?string $rateType,
@@ -223,6 +228,7 @@ class GuestReservationManagementService
         );
     }
 
+    /** @param array<string, mixed> $data */
     public function updateReservation(int $reservationId, array $data): Reservation
     {
         $reservation = DB::transaction(function () use ($reservationId, $data): Reservation {
@@ -248,7 +254,14 @@ class GuestReservationManagementService
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
 
-            $this->scheduleLock->lockOne($facilityId);
+            $facilities = $this->scheduleLock->lockMany([
+                (int) $detail->facility_id,
+                $facilityId,
+            ])->keyBy('facility_id');
+
+            if ($facilities->get($facilityId)?->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
 
             $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
@@ -265,16 +278,6 @@ class GuestReservationManagementService
             $extraGuestCount =
                 $occupancy['paid_extra_guest_count'];
 
-            if (! $this->availability->isFacilityAvailable(
-                $facilityId,
-                $checkInDate,
-                $checkOutDate,
-                null,
-                (int) $detail->reservation_details_id,
-            )) {
-                throw new InvalidArgumentException('Selected facility is not available for the selected date range.');
-            }
-
             $discount = $this->discountResolver->resolveForFacility(
                 $facilityId,
                 $checkInDate,
@@ -289,6 +292,13 @@ class GuestReservationManagementService
                 discountId: $discount?->discount_id,
                 totalGuestCount: $totalGuestCount,
             );
+
+            $this->scheduleBlocks->synchronizeReservationDetail($detail, [
+                'facility_id' => $facilityId,
+                'check_in_date' => $checkInDate,
+                'check_out_date' => $checkOutDate,
+                ...$quote['detail_snapshot'],
+            ]);
 
             $reservation->update([
                 'total_price' => $quote['total_price'],
@@ -342,11 +352,24 @@ class GuestReservationManagementService
             $this->guardActiveReservation($reservation);
             $this->guardNoVerifiedPayments($reservation);
 
+            $details = ReservationDetail::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($details->isNotEmpty()) {
+                $this->scheduleLock->lockMany(
+                    $details->pluck('facility_id')->all(),
+                );
+            }
+
             $reservation->update([
                 'status' => 'Cancelled',
                 'cancellation_reason' => $reason,
                 'cancelled_at' => Carbon::today()->toDateString(),
             ]);
+
+            $this->scheduleBlocks->releaseReservationDetails($details);
 
             GuestVerificationOtp::query()
                 ->where('reservation_id', $reservation->reservation_id)
@@ -400,6 +423,10 @@ class GuestReservationManagementService
         }
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $extraGuests
+     * @return array<int, array{first_name: string, middle_name: ?string, last_name: string}>
+     */
     private function cleanExtraGuests(array $extraGuests): array
     {
         $clean = [];

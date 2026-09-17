@@ -227,7 +227,7 @@ class PublicBookingJourneyTest extends TestCase
                 ),
             )
             ->call('save')
-            ->assertSee('not available');
+            ->assertSee('no longer available');
 
         $this->assertNull(
             session('guest.booking_confirmation_id'),

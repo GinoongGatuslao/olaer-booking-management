@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
+use App\Models\ReservationDetail;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,11 @@ use InvalidArgumentException;
 class StaffReservationCancellationService
 {
     private const OTP_PURPOSE = 'reservation_manage';
+
+    public function __construct(
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
+    ) {}
 
     public function cancel(
         int $reservationId,
@@ -74,12 +80,24 @@ class StaffReservationCancellationService
                 );
             }
 
+            $details = ReservationDetail::query()
+                ->where('reservation_id', $reservation->reservation_id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($details->isNotEmpty()) {
+                $this->scheduleLock->lockMany(
+                    $details->pluck('facility_id')->all(),
+                );
+            }
+
             $reservation->update([
                 'status' => 'Cancelled',
                 'cancellation_reason' => $reason,
-                'cancelled_at' =>
-                    Carbon::today()->toDateString(),
+                'cancelled_at' => Carbon::today()->toDateString(),
             ]);
+
+            $this->scheduleBlocks->releaseReservationDetails($details);
 
             $this->expireManagementOtps(
                 (int) $reservation->reservation_id,
@@ -107,7 +125,7 @@ class StaffReservationCancellationService
             ->with('role')
             ->findOrFail($userId);
 
-        if ($user->role?->role_name !== 'Cashier') {
+        if (! $user->role()->where('role_name', 'Cashier')->exists()) {
             throw new InvalidArgumentException(
                 'Only a Cashier may cancel reservations.',
             );

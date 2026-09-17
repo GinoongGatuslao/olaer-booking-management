@@ -17,10 +17,10 @@ use InvalidArgumentException;
 class BookingWorkflowService
 {
     public function __construct(
-        private readonly BookingAvailabilityService $availability,
         private readonly BookingQuoteService $quoteService,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
@@ -37,7 +37,11 @@ class BookingWorkflowService
             $rateType = (string) $data['rate_type'];
             $discountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
 
-            $this->scheduleLock->lockOne($facilityId);
+            $facility = $this->scheduleLock->lockOne($facilityId);
+
+            if ($facility->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
 
             $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
             $extraGuests = $this->cleanExtraGuests(
@@ -53,12 +57,6 @@ class BookingWorkflowService
             );
             $extraGuestCount =
                 $occupancy['paid_extra_guest_count'];
-
-            $this->availability->assertFacilityAvailable(
-                $facilityId,
-                $checkInDate,
-                $checkOutDate,
-            );
 
             $quote = $this->quoteService->quote(
                 facilityId: $facilityId,
@@ -125,6 +123,8 @@ class BookingWorkflowService
                 ...$quote['detail_snapshot'],
             ]);
 
+            $this->scheduleBlocks->acquireForBookingDetail($detail);
+
             $this->detailGuests->createForBooking(
                 $booking,
                 $detail,
@@ -158,9 +158,13 @@ class BookingWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($bookingDetailsId);
 
-            $this->scheduleLock->lockOne(
+            $facility = $this->scheduleLock->lockOne(
                 (int) $detail->facility_id,
             );
+
+            if ($facility->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
 
             $oldCheckIn = Carbon::parse($detail->check_in_date);
             $oldCheckOut = Carbon::parse($detail->check_out_date);
@@ -168,12 +172,10 @@ class BookingWorkflowService
             $newCheckOutDate = Carbon::parse($newCheckInDate)->addDays($days)->toDateString();
 
             $this->guardEditableBookingDetail($detail);
-            $this->availability->assertFacilityAvailable(
-                (int) $detail->facility_id,
-                $newCheckInDate,
-                $newCheckOutDate,
-                (int) $detail->booking_details_id
-            );
+            $this->scheduleBlocks->synchronizeBookingDetail($detail, [
+                'check_in_date' => $newCheckInDate,
+                'check_out_date' => $newCheckOutDate,
+            ]);
 
             $detail->update([
                 'check_in_date' => $newCheckInDate,
@@ -209,6 +211,10 @@ class BookingWorkflowService
                 $newFacilityId,
             );
 
+            if ($newFacility?->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
+
             $detail->setRelation('booking', $booking);
             $detail->setRelation('facility', $oldFacility);
 
@@ -229,13 +235,6 @@ class BookingWorkflowService
             $this->occupancy->forFacility(
                 $newFacility,
                 $totalGuestCount,
-            );
-
-            $this->availability->assertFacilityAvailable(
-                $newFacilityId,
-                (string) $detail->check_in_date,
-                (string) $detail->check_out_date,
-                (int) $detail->booking_details_id
             );
 
             $totalGuestCount = (int) ($detail->guest_count ?? $booking->total_guest_count);
@@ -308,6 +307,11 @@ class BookingWorkflowService
             if (! $this->money->equals($newLineTotal, $reconciledNewLineTotal)) {
                 throw new InvalidArgumentException('The historical booking discount cannot be represented truthfully after transfer.');
             }
+
+            $this->scheduleBlocks->synchronizeBookingDetail($detail, [
+                'facility_id' => $newFacilityId,
+                ...$destinationQuote['detail_snapshot'],
+            ]);
 
             $detail->update([
                 'facility_id' => $newFacilityId,
@@ -421,6 +425,8 @@ class BookingWorkflowService
                 extraGuestFee: '0.00',
                 lineTotal: $newLineTotal,
             );
+
+            $this->scheduleBlocks->extendCottageDayToBoth($detail);
 
             $detail->update([
                 'rate_type' => $this->products->canonicalRateType($bothRate),

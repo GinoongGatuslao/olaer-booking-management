@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\BookingDetail;
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
+use App\Services\FacilityScheduleBlockService;
 use App\Services\GuestReservationManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -73,7 +75,7 @@ class GuestReservationManagementHardeningTest extends TestCase
         );
 
         $bookingId = $this->createBooking('Booked', 0.00);
-        $this->createBookingDetail(
+        $bookingDetailId = $this->createBookingDetail(
             bookingId: $bookingId,
             facilityId: $blockedFacilityId,
             status: 'Transferred',
@@ -81,9 +83,12 @@ class GuestReservationManagementHardeningTest extends TestCase
             checkOut: '2026-09-12',
         );
 
+        DB::transaction(fn () => app(FacilityScheduleBlockService::class)
+            ->acquireForBookingDetail(BookingDetail::query()->findOrFail($bookingDetailId)));
+
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
-            'Selected facility is not available',
+            'no longer available',
         );
 
         app(GuestReservationManagementService::class)
@@ -491,16 +496,33 @@ class GuestReservationManagementHardeningTest extends TestCase
         string $checkIn,
         string $checkOut,
     ): int {
+        $productId = DB::table('tbl_facility')
+            ->where('facility_id', $facilityId)
+            ->value('facility_product_id');
+
         return DB::table('tbl_booking_details')
             ->insertGetId([
                 'booking_id' => $bookingId,
                 'facility_id' => $facilityId,
+                'facility_product_id' => $productId,
+                'guest_count' => 4,
+                'capacity_policy' => 'strict',
+                'included_guest_count_snapshot' => 4,
+                'strict_maximum_snapshot' => 10,
+                'schedule_policy' => 'overnight',
+                'rate_code' => 'OVERNIGHT',
+                'unit_rate' => 1000.00,
                 'rate_type' => 'Overnight',
                 'check_in_date' => $checkIn,
                 'check_out_date' => $checkOut,
                 'check_in_time' => '12:00:00',
                 'status' => $status,
                 'discount_id' => null,
+                'base_price' => 1000.00,
+                'discount_rate' => 0,
+                'discount_amount' => 0,
+                'extra_guest_fee' => 0,
+                'line_total' => 1000.00,
                 'user_id' => null,
             ]);
     }

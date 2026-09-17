@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\GuestVerificationOtp;
 use App\Models\Reservation;
+use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -11,6 +12,11 @@ use InvalidArgumentException;
 class ReservationNoShowReleaseService
 {
     private const OTP_PURPOSE = 'reservation_manage';
+
+    public function __construct(
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
+    ) {}
 
     public function expirePastUnpaidReservations(
         ?string $asOfDate = null,
@@ -49,11 +55,22 @@ class ReservationNoShowReleaseService
                         );
                     },
                 )
-                ->with('details')
                 ->orderBy('reservation_id')
                 ->limit($limit)
                 ->lockForUpdate()
                 ->get();
+
+            $details = ReservationDetail::query()
+                ->whereIn('reservation_id', $reservations->pluck('reservation_id'))
+                ->orderBy('reservation_details_id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($details->isNotEmpty()) {
+                $this->scheduleLock->lockMany(
+                    $details->pluck('facility_id')->all(),
+                );
+            }
 
             foreach ($reservations as $reservation) {
                 $reservation->update([
@@ -64,6 +81,8 @@ class ReservationNoShowReleaseService
                     (int) $reservation->reservation_id,
                 );
             }
+
+            $this->scheduleBlocks->releaseReservationDetails($details);
 
             return $reservations->count();
         });

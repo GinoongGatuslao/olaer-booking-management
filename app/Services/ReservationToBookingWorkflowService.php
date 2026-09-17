@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingDetail;
+use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
@@ -22,12 +23,13 @@ class ReservationToBookingWorkflowService
     public function __construct(
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
-        private readonly BookingAvailabilityService $availability,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function convert(
         int $reservationId,
         array $data,
@@ -59,21 +61,15 @@ class ReservationToBookingWorkflowService
 
             $this->guardConvertible($reservation, $reservationDetails);
 
-            $this->scheduleLock->lockMany(
+            $facilities = $this->scheduleLock->lockMany(
                 $reservationDetails
                     ->pluck('facility_id')
                     ->map(fn ($facilityId): int => (int) $facilityId)
                     ->all(),
             );
 
-            foreach ($reservationDetails as $detail) {
-                $this->availability->assertFacilityAvailable(
-                    (int) $detail->facility_id,
-                    Carbon::parse($detail->check_in_date)->toDateString(),
-                    Carbon::parse($detail->check_out_date)->toDateString(),
-                    null,
-                    (int) $detail->reservation_details_id,
-                );
+            if ($facilities->contains(fn (Facility $facility): bool => $facility->facility_status !== 'Available')) {
+                throw new InvalidArgumentException('One or more selected facilities are not available.');
             }
 
             $amountDue = $this->money->normalize($reservation->amount_due);
@@ -170,6 +166,11 @@ class ReservationToBookingWorkflowService
                     ...$this->snapshotValues($detail),
                 ]);
 
+                $this->scheduleBlocks->transferReservationOwnership(
+                    $detail,
+                    $bookingDetail,
+                );
+
                 $bookingDetailsByReservationDetailId[
                     (int) $detail->reservation_details_id
                 ] = $bookingDetail;
@@ -262,7 +263,7 @@ class ReservationToBookingWorkflowService
             ->with('role')
             ->findOrFail($userId);
 
-        if ($user->role?->role_name !== 'Cashier') {
+        if (! $user->role()->where('role_name', 'Cashier')->exists()) {
             throw new InvalidArgumentException(
                 'Only a Cashier may convert reservations to bookings.',
             );

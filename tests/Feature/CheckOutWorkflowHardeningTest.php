@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\BookingDetail;
 use App\Services\CheckOutWorkflowService;
+use App\Services\FacilityScheduleBlockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -68,16 +70,23 @@ class CheckOutWorkflowHardeningTest extends TestCase
             $maintenanceId,
         );
 
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage(
-            'still has an unpaid balance',
-        );
+        DB::transaction(fn () => app(FacilityScheduleBlockService::class)
+            ->acquireForBookingDetail(BookingDetail::query()->findOrFail($detailId)));
 
-        app(CheckOutWorkflowService::class)
-            ->checkOutBookingDetail(
-                $detailId,
-                $cashierId,
-            );
+        try {
+            app(CheckOutWorkflowService::class)
+                ->checkOutBookingDetail(
+                    $detailId,
+                    $cashierId,
+                );
+            $this->fail('A booking with an unpaid balance was checked out.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertStringContainsString('still has an unpaid balance', $exception->getMessage());
+        }
+
+        $this->assertDatabaseHas('tbl_facility_schedule_blocks', [
+            'booking_detail_id' => $detailId,
+        ]);
     }
 
     public function test_successful_checkout_releases_facility_and_closes_booking(): void
@@ -101,6 +110,9 @@ class CheckOutWorkflowHardeningTest extends TestCase
             $maintenanceId,
         );
 
+        DB::transaction(fn () => app(FacilityScheduleBlockService::class)
+            ->acquireForBookingDetail(BookingDetail::query()->findOrFail($detailId)));
+
         app(CheckOutWorkflowService::class)
             ->checkOutBookingDetail(
                 $detailId,
@@ -121,6 +133,10 @@ class CheckOutWorkflowHardeningTest extends TestCase
         $this->assertDatabaseHas('tbl_booking', [
             'booking_id' => $bookingId,
             'status' => 'Checked-out',
+        ]);
+
+        $this->assertDatabaseMissing('tbl_facility_schedule_blocks', [
+            'booking_detail_id' => $detailId,
         ]);
     }
 
@@ -207,10 +223,31 @@ class CheckOutWorkflowHardeningTest extends TestCase
                 ]);
         }
 
+        $productId = DB::table('tbl_facility_product')
+            ->where('product_code', 'ROOM_STANDARD')
+            ->value('facility_product_id');
+
+        if ($productId === null) {
+            $productId = DB::table('tbl_facility_product')->insertGetId([
+                'product_code' => 'ROOM_STANDARD',
+                'facility_type_id' => $typeId,
+                'display_name' => 'Standard Room',
+                'size_label' => 'Standard',
+                'schedule_policy' => 'overnight',
+                'capacity_policy' => 'strict',
+                'included_guest_count' => 4,
+                'strict_maximum' => 10,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         return DB::table('tbl_facility')
             ->insertGetId([
                 'facility_name' => 'Room '.uniqid(),
                 'facility_type_id' => $typeId,
+                'facility_product_id' => $productId,
                 'facility_size' => 'Standard',
                 'facility_status' => $status,
                 'capacity' => '10',
@@ -253,16 +290,33 @@ class CheckOutWorkflowHardeningTest extends TestCase
         int $facilityId,
         string $status,
     ): int {
+        $productId = DB::table('tbl_facility')
+            ->where('facility_id', $facilityId)
+            ->value('facility_product_id');
+
         return DB::table('tbl_booking_details')
             ->insertGetId([
                 'booking_id' => $bookingId,
                 'facility_id' => $facilityId,
+                'facility_product_id' => $productId,
+                'guest_count' => 4,
+                'capacity_policy' => 'strict',
+                'included_guest_count_snapshot' => 4,
+                'strict_maximum_snapshot' => 10,
+                'schedule_policy' => 'overnight',
+                'rate_code' => 'OVERNIGHT',
+                'unit_rate' => 1000.00,
                 'rate_type' => 'Overnight',
                 'check_in_date' => '2026-12-10',
                 'check_out_date' => '2026-12-11',
                 'check_in_time' => '12:00:00',
                 'status' => $status,
                 'discount_id' => null,
+                'base_price' => 1000.00,
+                'discount_rate' => 0,
+                'discount_amount' => 0,
+                'extra_guest_fee' => 0,
+                'line_total' => 1000.00,
                 'user_id' => null,
             ]);
     }
@@ -324,7 +378,7 @@ class CheckOutWorkflowHardeningTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function addTimestampsIfPresent(
         string $table,

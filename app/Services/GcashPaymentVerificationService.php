@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\BookingDetail;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -14,6 +15,8 @@ class GcashPaymentVerificationService
     public function __construct(
         private readonly GcashReferenceIntegrityService $references,
         private readonly DecimalMoneyService $money,
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
     ) {}
 
     public function verify(
@@ -178,6 +181,18 @@ class GcashPaymentVerificationService
                 );
             }
 
+            $details = BookingDetail::query()
+                ->where('booking_id', $booking->booking_id)
+                ->orderBy('booking_details_id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($details->isNotEmpty()) {
+                $this->scheduleLock->lockMany(
+                    $details->pluck('facility_id')->all(),
+                );
+            }
+
             $payment->update([
                 'payment_status' => 'Rejected',
                 'rejection_reason' => $reason,
@@ -198,6 +213,8 @@ class GcashPaymentVerificationService
                     'status' => 'Payment Rejected',
                     'user_id' => $cashierUserId,
                 ]);
+
+            $this->scheduleBlocks->releaseBookingDetails($details);
 
             return $this->freshPayment($payment);
         });

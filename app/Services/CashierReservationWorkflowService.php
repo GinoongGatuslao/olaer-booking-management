@@ -20,9 +20,9 @@ use InvalidArgumentException;
 class CashierReservationWorkflowService
 {
     public function __construct(
-        private readonly FacilityAvailabilityService $availability,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly ReservationQuoteService $quotes,
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
@@ -50,14 +50,6 @@ class CashierReservationWorkflowService
             $extraGuests = $this->cleanExtraGuests($data['extra_guests'] ?? []);
             $occupancy = $this->occupancy->forFacility($facility, (int) $data['total_guest_count']);
             $this->occupancy->assertNamedPaidExtraGuests($extraGuests, $occupancy['paid_extra_guest_count']);
-
-            if (! $this->availability->isAvailable(
-                $facilityId,
-                (string) $data['check_in_date'],
-                (string) $data['check_out_date'],
-            )) {
-                throw new InvalidArgumentException('Selected facility is no longer available for the selected date range.');
-            }
 
             $quote = $this->quotes->quote(
                 facilityId: $facilityId,
@@ -105,6 +97,8 @@ class CashierReservationWorkflowService
                 'discount_id' => filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null,
                 ...$quote['detail_snapshot'],
             ]);
+
+            $this->scheduleBlocks->acquireForReservationDetail($detail);
 
             $this->detailGuests->createForReservation($reservation, $detail, $extraGuests);
 
@@ -193,15 +187,6 @@ class CashierReservationWorkflowService
                 throw new InvalidArgumentException('Cottage and function-hall reservations cannot contain room extra-guest charges or records.');
             }
 
-            if (! $this->availability->isAvailable(
-                (int) $newFacility->facility_id,
-                (string) $data['check_in_date'],
-                (string) $data['check_out_date'],
-                $reservationId,
-            )) {
-                throw new InvalidArgumentException('Selected facility is not available for the new date range.');
-            }
-
             $quote = $this->quotes->quote(
                 facilityId: (int) $newFacility->facility_id,
                 rateType: (string) $data['rate_type'],
@@ -221,6 +206,13 @@ class CashierReservationWorkflowService
                     'The selected change would make this reservation fully paid or overpaid. Complete the appropriate booking/payment process before rescheduling.',
                 );
             }
+
+            $this->scheduleBlocks->synchronizeReservationDetail($detail, [
+                'facility_id' => (int) $newFacility->facility_id,
+                'check_in_date' => $data['check_in_date'],
+                'check_out_date' => $data['check_out_date'],
+                ...$quote['detail_snapshot'],
+            ]);
 
             $reservation->update([
                 'total_price' => $quote['total_price'],

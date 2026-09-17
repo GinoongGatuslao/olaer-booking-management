@@ -14,15 +14,16 @@ use InvalidArgumentException;
 class PublicReservationWorkflowService
 {
     public function __construct(
-        private readonly FacilityAvailabilityService $availability,
         private readonly ReservationQuoteService $quoteService,
         private readonly DiscountResolverService $discountResolver,
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly GuestConfirmationEmailService $confirmationEmailService,
         private readonly DetailExtraGuestService $detailGuests,
     ) {}
 
+    /** @param array<string, mixed> $data */
     public function createGuestReservation(array $data): Reservation
     {
         $reservation = DB::transaction(function () use ($data): Reservation {
@@ -31,7 +32,11 @@ class PublicReservationWorkflowService
             $checkInDate = (string) $data['check_in_date'];
             $checkOutDate = (string) $data['check_out_date'];
 
-            $this->scheduleLock->lockOne($facilityId);
+            $facility = $this->scheduleLock->lockOne($facilityId);
+
+            if ($facility->facility_status !== 'Available') {
+                throw new InvalidArgumentException('The selected facility is not available.');
+            }
 
             $preferredDiscountId = filled($data['discount_id'] ?? null) ? (int) $data['discount_id'] : null;
             $resolvedDiscount = $this->discountResolver->resolveForFacility($facilityId, $checkInDate, $preferredDiscountId);
@@ -50,10 +55,6 @@ class PublicReservationWorkflowService
             );
             $extraGuestCount =
                 $occupancy['paid_extra_guest_count'];
-
-            if (! $this->availability->isAvailable($facilityId, $checkInDate, $checkOutDate)) {
-                throw new InvalidArgumentException('Selected facility is no longer available for the selected date range.');
-            }
 
             $quote = $this->quoteService->quote(
                 facilityId: $facilityId,
@@ -102,6 +103,8 @@ class PublicReservationWorkflowService
                 ...$quote['detail_snapshot'],
             ]);
 
+            $this->scheduleBlocks->acquireForReservationDetail($detail);
+
             $this->detailGuests->createForReservation(
                 $reservation,
                 $detail,
@@ -121,6 +124,10 @@ class PublicReservationWorkflowService
         return $reservation;
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $extraGuests
+     * @return array<int, array{first_name: string, middle_name: ?string, last_name: string}>
+     */
     private function cleanExtraGuests(array $extraGuests): array
     {
         $clean = [];

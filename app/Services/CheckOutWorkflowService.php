@@ -11,17 +11,21 @@ use Throwable;
 
 class CheckOutWorkflowService
 {
+    public function __construct(
+        private readonly FacilityScheduleLockService $scheduleLock,
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
+    ) {}
+
     public function checkOutBookingDetail(
         int $bookingDetailsId,
         int $userId,
     ): BookingDetail {
+        $this->guardCashier($userId);
+
         DB::beginTransaction();
 
         try {
-            $this->guardCashier($userId);
-
             $detail = BookingDetail::query()
-                ->with(['booking', 'facility'])
                 ->lockForUpdate()
                 ->findOrFail($bookingDetailsId);
 
@@ -31,12 +35,17 @@ class CheckOutWorkflowService
 
             $detail->setRelation('booking', $booking);
 
+            $facility = $this->scheduleLock->lockOne((int) $detail->facility_id);
+            $detail->setRelation('facility', $facility);
+
             $this->guardCanCheckOut($detail, $booking);
 
             $detail->update([
                 'status' => 'Checked-out',
                 'user_id' => $userId,
             ]);
+
+            $this->scheduleBlocks->releaseBookingDetails([$detail]);
 
             if ($detail->facility !== null) {
                 $otherCheckedInDetailsExist = BookingDetail::query()
@@ -103,7 +112,7 @@ class CheckOutWorkflowService
             ->with('role')
             ->findOrFail($userId);
 
-        if ($user->role?->role_name !== 'Cashier') {
+        if (! $user->role()->where('role_name', 'Cashier')->exists()) {
             throw new InvalidArgumentException(
                 'Only a Cashier may check out bookings.',
             );
