@@ -12,7 +12,7 @@ class MigrateGcashProofsToPrivateStorage extends Command
         {--dry-run : Show what would be moved without changing files}';
 
     protected $description =
-        'Move legacy GCash proof files from public to private storage.';
+        'Move legacy GCash proof files to the private object-storage bucket.';
 
     public function handle(
         GcashProofStorageService $proofStorage,
@@ -50,7 +50,7 @@ class MigrateGcashProofsToPrivateStorage extends Command
 
                         $disk = $proofStorage->diskContaining($path);
 
-                        if ($disk === 'local') {
+                        if ($disk === GcashProofStorageService::PRIVATE_DISK) {
                             $alreadyPrivate++;
                             continue;
                         }

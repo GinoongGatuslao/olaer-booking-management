@@ -14,6 +14,7 @@ use App\Models\FacilityType;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\ProductRate;
+use App\Services\GcashProofStorageService;
 use App\Services\PublicBookingWorkflowService;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -29,7 +30,7 @@ class PublicBookingJourneyTest extends TestCase
     public function test_guest_booking_redirects_to_a_dedicated_confirmation_page(): void
     {
         Mail::fake();
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
         [$facilityType, $facility] = $this->createBookableFacility();
         ModeOfPayment::query()->firstOrCreate([
@@ -86,7 +87,7 @@ class PublicBookingJourneyTest extends TestCase
             session('guest.booking_confirmation_id'),
         );
 
-        Storage::disk('local')->assertExists(
+        Storage::disk(GcashProofStorageService::PRIVATE_DISK)->assertExists(
             $payment->proof_of_payment_path,
         );
 
@@ -168,7 +169,7 @@ class PublicBookingJourneyTest extends TestCase
     public function test_failed_booking_cleans_up_the_uploaded_proof_and_does_not_create_a_confirmation_session(): void
     {
         Mail::fake();
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
         [$facilityType, $facility] = $this->createBookableFacility();
         ModeOfPayment::query()->firstOrCreate([
@@ -236,7 +237,8 @@ class PublicBookingJourneyTest extends TestCase
         $this->assertSame(1, Payment::query()->count());
         $this->assertSame(
             [],
-            Storage::disk('local')->allFiles('gcash-proofs'),
+            Storage::disk(GcashProofStorageService::PRIVATE_DISK)
+                ->allFiles('gcash-proofs'),
         );
     }
 
