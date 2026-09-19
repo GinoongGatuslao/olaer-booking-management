@@ -8,11 +8,19 @@ use InvalidArgumentException;
 
 class GcashProofStorageService
 {
+    public const PRIVATE_DISK = 'storage-4-private';
+
+    public const PUBLIC_DISK = 'storage-4-public';
+
+    private const LEGACY_PRIVATE_DISK = 'local';
+
+    private const LEGACY_PUBLIC_DISK = 'public';
+
     private const DIRECTORY = 'gcash-proofs';
 
     public function store(UploadedFile $file): string
     {
-        $path = $file->store(self::DIRECTORY, 'local');
+        $path = $file->store(self::DIRECTORY, self::PRIVATE_DISK);
 
         if (! is_string($path) || ! $this->isAllowedPath($path)) {
             throw new InvalidArgumentException(
@@ -27,9 +35,15 @@ class GcashProofStorageService
     {
         $path = $this->normalize($path);
 
-        if ($path !== null) {
-            Storage::disk('local')->delete($path);
+        if ($path === null) {
+            return;
         }
+
+        Storage::disk(self::PRIVATE_DISK)->delete($path);
+
+        // Clean up a same-path legacy copy if this request was created while
+        // the application still used the server-local private disk.
+        Storage::disk(self::LEGACY_PRIVATE_DISK)->delete($path);
     }
 
     public function diskContaining(string $path): ?string
@@ -40,15 +54,19 @@ class GcashProofStorageService
             return null;
         }
 
-        if (Storage::disk('local')->exists($path)) {
-            return 'local';
+        if (Storage::disk(self::PRIVATE_DISK)->exists($path)) {
+            return self::PRIVATE_DISK;
         }
 
-        // Temporary backward compatibility for proofs created before this
-        // hardening package. Run the migration command to remove this legacy
-        // public copy after moving it to private storage.
-        if (Storage::disk('public')->exists($path)) {
-            return 'public';
+        // Backward compatibility for proofs created before Laravel Cloud
+        // object storage was enabled. These should be migrated to the private
+        // bucket using the existing migration command.
+        if (Storage::disk(self::LEGACY_PRIVATE_DISK)->exists($path)) {
+            return self::LEGACY_PRIVATE_DISK;
+        }
+
+        if (Storage::disk(self::LEGACY_PUBLIC_DISK)->exists($path)) {
+            return self::LEGACY_PUBLIC_DISK;
         }
 
         return null;
@@ -62,40 +80,48 @@ class GcashProofStorageService
             return false;
         }
 
-        if (Storage::disk('local')->exists($path)) {
-            Storage::disk('public')->delete($path);
+        if (Storage::disk(self::PRIVATE_DISK)->exists($path)) {
+            Storage::disk(self::LEGACY_PRIVATE_DISK)->delete($path);
+            Storage::disk(self::LEGACY_PUBLIC_DISK)->delete($path);
 
             return true;
         }
 
-        if (! Storage::disk('public')->exists($path)) {
-            return false;
-        }
-
-        $stream = Storage::disk('public')->readStream($path);
-
-        if ($stream === false) {
-            return false;
-        }
-
-        try {
-            $written = Storage::disk('local')->writeStream(
-                $path,
-                $stream,
-            );
-        } finally {
-            if (is_resource($stream)) {
-                fclose($stream);
+        foreach (
+            [self::LEGACY_PRIVATE_DISK, self::LEGACY_PUBLIC_DISK]
+            as $legacyDisk
+        ) {
+            if (! Storage::disk($legacyDisk)->exists($path)) {
+                continue;
             }
+
+            $stream = Storage::disk($legacyDisk)->readStream($path);
+
+            if ($stream === false) {
+                return false;
+            }
+
+            try {
+                $written = Storage::disk(self::PRIVATE_DISK)->writeStream(
+                    $path,
+                    $stream,
+                );
+            } finally {
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }
+
+            if (! $written) {
+                return false;
+            }
+
+            Storage::disk($legacyDisk)->delete($path);
+
+            return true;
         }
 
-        if (! $written) {
-            return false;
-        }
-
-        Storage::disk('public')->delete($path);
-
-        return true;
+        return false;
     }
 
     public function normalize(string $path): ?string
