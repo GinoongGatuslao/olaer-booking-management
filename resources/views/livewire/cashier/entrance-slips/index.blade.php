@@ -4,6 +4,7 @@ use App\Models\EntranceSlip;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Services\PaymentWorkflowService;
+use App\Services\EntranceSlipWorkflowService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -95,6 +96,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
             ->with([
                 'createdBy',
                 'handledBy',
+                'admittedBy',
                 'payments.modeOfPayment',
             ])
             ->when(
@@ -380,6 +382,23 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                 'success',
                 'Entrance slip payment recorded successfully.',
             );
+        } catch (\Throwable $exception) {
+            $this->addError('payment', $exception->getMessage());
+        }
+    }
+
+    public function admit(EntranceSlipWorkflowService $workflow): void
+    {
+        if ($this->selectedSlipId === null) {
+            $this->addError('payment', 'Select an entrance slip first.');
+
+            return;
+        }
+
+        try {
+            $workflow->admit($this->selectedSlipId, (int) Auth::id());
+            unset($this->selectedSlip, $this->slips);
+            session()->flash('success', 'Guest admitted. The entrance slip is now locked.');
         } catch (\Throwable $exception) {
             $this->addError('payment', $exception->getMessage());
         }
@@ -789,6 +808,15 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                 </div>
 
                                 <div class="flex justify-between gap-4">
+                                    <dt class="text-zinc-500">Admission</dt>
+                                    <dd class="text-right font-medium">
+                                        {{ $this->selectedSlip->admitted_at
+                                            ? 'Admitted by '.$this->fullName($this->selectedSlip->admittedBy)
+                                            : 'Not admitted' }}
+                                    </dd>
+                                </div>
+
+                                <div class="flex justify-between gap-4">
                                     <dt class="text-zinc-500">Guest count</dt>
                                     <dd class="font-medium">
                                         {{ $this->totalGuests($this->selectedSlip) }}
@@ -832,7 +860,8 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
                                             <p class="font-medium">
                                                 ₱{{ number_format(
-                                                    (float) ($detail->entrance_fee_subtotal
+                                                    (float) ($detail->line_total_snapshot
+                                                        ?? $detail->entrance_fee_subtotal
                                                         ?? $detail->subtotal
                                                         ?? (
                                                             (float) ($detail->entranceFee?->entrance_fee_price ?? 0)
@@ -897,9 +926,14 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     Record Full Payment
                                 </flux:button>
                             </form>
-                        @else
+                        @elseif ($this->selectedSlip->admitted_at !== null)
                             <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
-                                This entrance slip is paid and counts as an admitted entry.
+                                Guest admitted at {{ $this->selectedSlip->admitted_at->format('M d, Y h:i A') }}. This slip is locked.
+                            </div>
+                        @else
+                            <div class="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                                <p>Payment is complete. Admit the guest to lock this entrance slip.</p>
+                                <flux:button type="button" wire:click="admit" variant="primary" class="w-full">Admit guest</flux:button>
                             </div>
                         @endif
 

@@ -31,20 +31,24 @@
             <tr class="bg-zinc-100 text-left">
                 <th class="border border-zinc-300 p-2">Category</th>
                 <th class="border border-zinc-300 p-2 text-right">Qty</th>
+                <th class="border border-zinc-300 p-2 text-right">Rate</th>
                 <th class="border border-zinc-300 p-2 text-right">Discounted Qty</th>
                 <th class="border border-zinc-300 p-2">Discount</th>
+                <th class="border border-zinc-300 p-2 text-right">Subtotal</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($entranceSlip->details as $detail)
                 <tr>
-                    <td class="border border-zinc-300 p-2">{{ $detail->entranceFee->category ?? 'Entrance Fee' }}</td>
+                    <td class="border border-zinc-300 p-2">{{ $detail->entranceFee?->entrance_fee_name ?? 'Entrance Fee' }}</td>
                     <td class="border border-zinc-300 p-2 text-right">{{ $detail->guest_quantity }}</td>
+                    <td class="border border-zinc-300 p-2 text-right">₱{{ number_format((float) ($detail->unit_rate_snapshot ?? $detail->entranceFee?->entrance_fee_price), 2) }}</td>
                     <td class="border border-zinc-300 p-2 text-right">{{ $detail->discounted_quantity ?? 0 }}</td>
-                    <td class="border border-zinc-300 p-2">{{ $detail->discount->discount_name ?? 'None' }}</td>
+                    <td class="border border-zinc-300 p-2">{{ $detail->discount?->discount_name ?? 'None' }}</td>
+                    <td class="border border-zinc-300 p-2 text-right">₱{{ number_format((float) ($detail->line_total_snapshot ?? ((float) ($detail->entranceFee?->entrance_fee_price ?? 0) * $detail->guest_quantity)), 2) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="4" class="border border-zinc-300 p-2 text-center text-zinc-500">No entrance slip details found.</td></tr>
+                <tr><td colspan="6" class="border border-zinc-300 p-2 text-center text-zinc-500">No entrance slip details found.</td></tr>
             @endforelse
         </tbody>
     </table>
@@ -58,4 +62,8 @@
         <div class="border-t border-zinc-400 pt-2 text-center">Security Guard / Created By<br>{{ $entranceSlip->createdBy->full_name ?? $entranceSlip->createdBy->username ?? '' }}</div>
         <div class="border-t border-zinc-400 pt-2 text-center">Cashier / Handled By<br>{{ $entranceSlip->handledBy->full_name ?? $entranceSlip->handledBy->username ?? '' }}</div>
     </div>
+
+    @if ($entranceSlip->admitted_at)
+        <p class="mt-6 text-center text-sm"><strong>Admitted:</strong> {{ $entranceSlip->admitted_at->format('M d, Y h:i A') }} by {{ $entranceSlip->admittedBy?->full_name ?? $entranceSlip->admittedBy?->username }}</p>
+    @endif
 </x-print.layout>

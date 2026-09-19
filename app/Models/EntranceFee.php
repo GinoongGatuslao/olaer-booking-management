@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use InvalidArgumentException;
 
 class EntranceFee extends Model
 {
@@ -18,6 +19,15 @@ class EntranceFee extends Model
         'entrance_fee_name',
         'entrance_fee_price',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (EntranceFee $fee): void {
+            if (bccomp((string) $fee->entrance_fee_price, '0.00', 2) !== 1) {
+                throw new InvalidArgumentException('Entrance fee rate must be greater than ₱0.00.');
+            }
+        });
+    }
 
     protected function casts(): array
     {

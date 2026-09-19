@@ -2,14 +2,25 @@
 
 namespace App\Services;
 
+use App\FacilityRateCode;
+use App\FacilityScheduleSlot;
 use App\Models\BookingDetail;
 use App\Models\Facility;
+use App\Models\FacilityProduct;
+use App\Models\ProductRate;
 use App\Models\ReservationDetail;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
 class FacilityAvailabilityService
 {
+    public function __construct(
+        private readonly FacilityScheduleBlockService $scheduleBlocks,
+    ) {}
+
     public function isAvailable(
         int $facilityId,
         string $checkInDate,
@@ -44,8 +55,8 @@ class FacilityAvailabilityService
             }
 
             [$existingStart, $existingEnd] = $this->normalizedPeriod(
-                $detail->check_in_date->toDateString(),
-                $detail->check_out_date->toDateString(),
+                (string) $detail->check_in_date,
+                (string) $detail->check_out_date,
             );
 
             if ($this->periodsOverlap($requestedStart, $requestedEnd, $existingStart, $existingEnd)) {
@@ -76,8 +87,8 @@ class FacilityAvailabilityService
             }
 
             [$existingStart, $existingEnd] = $this->normalizedPeriod(
-                $detail->check_in_date->toDateString(),
-                $detail->check_out_date->toDateString(),
+                (string) $detail->check_in_date,
+                (string) $detail->check_out_date,
             );
 
             if ($this->periodsOverlap($requestedStart, $requestedEnd, $existingStart, $existingEnd)) {
@@ -92,6 +103,7 @@ class FacilityAvailabilityService
      * For same-day cottage/function-hall use, the database stores the same check-in and check-out date.
      * Internally, treat that as one full calendar-day block to avoid double-booking the same facility.
      */
+    /** @return array{CarbonImmutable, CarbonImmutable} */
     private function normalizedPeriod(string $checkInDate, string $checkOutDate): array
     {
         $start = CarbonImmutable::parse($checkInDate)->startOfDay();
@@ -115,5 +127,83 @@ class FacilityAvailabilityService
         CarbonImmutable $existingEnd
     ): bool {
         return $requestedStart->lessThan($existingEnd) && $requestedEnd->greaterThan($existingStart);
+    }
+
+    /** @return Collection<int, int> */
+    public function availableFacilityIds(
+        int $facilityProductId,
+        FacilityRateCode|string $rateCode,
+        string $checkInDate,
+        string $checkOutDate,
+    ): Collection {
+        $product = FacilityProduct::query()
+            ->with('productRates')
+            ->findOrFail($facilityProductId);
+        $rateCode = $rateCode instanceof FacilityRateCode
+            ? $rateCode
+            : FacilityRateCode::tryFrom($rateCode);
+
+        if (! $product->is_active || $rateCode === null) {
+            throw new InvalidArgumentException('The selected facility product or rate is inactive.');
+        }
+
+        $rateIsActive = $product->productRates->contains(
+            fn (ProductRate $rate): bool => $rate->rate_code === $rateCode && $rate->is_active,
+        );
+
+        if (! $rateIsActive) {
+            throw new InvalidArgumentException('The selected rate is not available for this facility product.');
+        }
+
+        $requiredBlocks = $this->scheduleBlocks->requiredBlocks(
+            1,
+            $product->schedule_policy,
+            $rateCode,
+            $checkInDate,
+            $checkOutDate,
+        );
+
+        return Facility::query()
+            ->where('facility_product_id', $facilityProductId)
+            ->where('facility_status', 'Available')
+            ->whereDoesntHave(
+                'scheduleBlocks',
+                fn (Builder $query): Builder => $this->matchingBlocks($query, $requiredBlocks),
+            )
+            ->orderBy('facility_id')
+            ->pluck('facility_id')
+            ->map(fn (mixed $facilityId): int => (int) $facilityId);
+    }
+
+    public function availabilityCount(
+        int $facilityProductId,
+        FacilityRateCode|string $rateCode,
+        string $checkInDate,
+        string $checkOutDate,
+    ): int {
+        return $this->availableFacilityIds(
+            $facilityProductId,
+            $rateCode,
+            $checkInDate,
+            $checkOutDate,
+        )->count();
+    }
+
+    /**
+     * @param  array<int, array{facility_id: int, service_date: string, slot: FacilityScheduleSlot}>  $requiredBlocks
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    private function matchingBlocks(Builder $query, array $requiredBlocks): Builder
+    {
+        return $query->where(function (Builder $query) use ($requiredBlocks): void {
+            foreach ($requiredBlocks as $block) {
+                $query->orWhere(function (Builder $query) use ($block): void {
+                    $query
+                        ->where('service_date', $block['service_date'])
+                        ->where('slot', $block['slot']->value);
+                });
+            }
+        });
     }
 }

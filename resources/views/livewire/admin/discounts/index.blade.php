@@ -42,6 +42,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
     public string $discountPercent = '';
     public string $discountStart = '';
     public string $discountEnd = '';
+    public bool $hasValidity = false;
     public string $status = 'Inactive';
 
     public bool $appToAdult = false;
@@ -75,11 +76,6 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         $now = now();
 
         return Discount::query()
-            ->withCount([
-                'reservationDetails',
-                'entranceSlipDetails',
-                'bookingDetails',
-            ])
             ->when(trim($this->search) !== '', function (Builder $query): void {
                 $like = '%'.trim($this->search).'%';
 
@@ -240,6 +236,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             $discount->discount_start?->format('Y-m-d\TH:i') ?? '';
         $this->discountEnd =
             $discount->discount_end?->format('Y-m-d\TH:i') ?? '';
+        $this->hasValidity = $discount->discount_start !== null || $discount->discount_end !== null;
         $this->status = (string) $discount->status;
 
         $this->appToAdult = (bool) $discount->app_to_adult;
@@ -260,6 +257,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         $this->discountPercent = '';
         $this->discountStart = '';
         $this->discountEnd = '';
+        $this->hasValidity = false;
         $this->status = 'Inactive';
 
         $this->appToAdult = false;
@@ -293,13 +291,16 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             ],
             'discountStart' => [
                 'nullable',
+                Rule::requiredIf($this->hasValidity),
                 'date',
             ],
             'discountEnd' => [
                 'nullable',
+                Rule::requiredIf($this->hasValidity),
                 'date',
                 'after_or_equal:discountStart',
             ],
+            'hasValidity' => ['boolean'],
             'status' => [
                 'required',
                 Rule::in(['Active', 'Inactive']),
@@ -368,13 +369,13 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             'app_to_function_hall' =>
                 (bool) $validated['appToFunctionHall'],
             'discount_start' =>
-                filled($validated['discountStart'])
+                $validated['hasValidity'] && filled($validated['discountStart'])
                     ? Carbon::parse(
                         $validated['discountStart'],
                     )->format('Y-m-d H:i:s')
                     : null,
             'discount_end' =>
-                filled($validated['discountEnd'])
+                $validated['hasValidity'] && filled($validated['discountEnd'])
                     ? Carbon::parse(
                         $validated['discountEnd'],
                     )->format('Y-m-d H:i:s')
@@ -479,22 +480,6 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         return $this->sortDirection === 'asc' ? '↑' : '↓';
     }
 
-    public function usageCount(Discount $discount): int
-    {
-        return (int) $discount->reservation_details_count
-            + (int) $discount->entrance_slip_details_count
-            + (int) $discount->booking_details_count;
-    }
-
-    public function usageSummary(Discount $discount): string
-    {
-        return sprintf(
-            'Reservations %d · Entrance slips %d · Bookings %d',
-            (int) $discount->reservation_details_count,
-            (int) $discount->entrance_slip_details_count,
-            (int) $discount->booking_details_count,
-        );
-    }
 };
 
 ?>
@@ -556,7 +541,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
 
                         <flux:select
                             wire:model.live="statusFilter"
-                            label="Admin status"
+                            label="Status"
                         >
                             <option value="">All statuses</option>
                             <option value="Active">Active</option>
@@ -610,7 +595,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                 </div>
 
                 <div class="overflow-x-auto">
-                    <table class="w-full min-w-[86rem] text-left text-sm">
+                    <table class="w-full min-w-[76rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
                                 <th class="px-5 py-3">
@@ -661,12 +646,11 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('status')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Admin Status {{ $this->sortIcon('status') }}
+                                        Status {{ $this->sortIcon('status') }}
                                     </button>
                                 </th>
 
                                 <th class="px-5 py-3">Effective State</th>
-                                <th class="px-5 py-3">Usage</th>
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
                         </thead>
@@ -714,16 +698,6 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         </flux:badge>
                                     </td>
 
-                                    <td class="max-w-xs px-5 py-4">
-                                        <p class="font-medium">
-                                            {{ $this->usageCount($discount) }} transaction link(s)
-                                        </p>
-
-                                        <p class="mt-1 text-xs leading-5 text-zinc-500">
-                                            {{ $this->usageSummary($discount) }}
-                                        </p>
-                                    </td>
-
                                     <td class="px-5 py-4 text-right">
                                         <flux:button
                                             type="button"
@@ -737,7 +711,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="px-5 py-12 text-center text-zinc-500">
+                                    <td colspan="8" class="px-5 py-12 text-center text-zinc-500">
                                         No discount matches the selected filters.
                                     </td>
                                 </tr>
@@ -765,6 +739,9 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         <aside>
             <flux:card>
                 <div class="flex items-start justify-between gap-3">
+                    <flux:switch wire:model.live="hasValidity" label="Use a validity period" description="Turn this on when the discount has a specific start and end." />
+
+                    @if ($hasValidity)
                     <div>
                         <h2 class="font-semibold">
                             {{ $editingId !== null
@@ -835,8 +812,9 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                         @enderror
                     </div>
+                    @endif
 
-                    <flux:select wire:model="status" label="Admin status">
+                    <flux:select wire:model="status" label="Status">
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                     </flux:select>

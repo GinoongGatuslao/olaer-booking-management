@@ -17,6 +17,7 @@ class PrintDocumentController extends Controller
         $entranceSlip->load([
             'createdBy.role',
             'handledBy.role',
+            'admittedBy.role',
             'guest.address',
             'details.entranceFee',
             'details.discount',
@@ -100,11 +101,10 @@ class PrintDocumentController extends Controller
         BillingStatementService $billingStatements,
     ): View {
         return view('print.billing-statement', [
-            'statement' =>
-                $billingStatements
-                    ->statementForBooking(
-                        (int) $booking->booking_id,
-                    ),
+            'statement' => $billingStatements
+                ->statementForBooking(
+                    (int) $booking->booking_id,
+                ),
         ]);
     }
 }

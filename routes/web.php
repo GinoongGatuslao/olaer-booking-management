@@ -45,6 +45,14 @@ Volt::route('/admin/facilities', 'admin.facilities.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.facilities.index');
 
+Volt::route('/admin/facilities/create', 'admin.facilities.create')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.facilities.create');
+
+Volt::route('/admin/facilities/{facility}/edit', 'admin.facilities.edit')
+    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->name('admin.facilities.edit');
+
 Volt::route('/admin/amenities', 'admin.amenities.index')
     ->middleware(['auth', 'active', 'role:Admin,Manager'])
     ->name('admin.amenities.index');
@@ -167,6 +175,9 @@ Volt::route('/', 'guest.home')
 
 Volt::route('/reserve', 'guest.reservations.create')
     ->name('guest.reservations.create');
+
+Volt::route('/plan-facilities', 'guest.facilities.planner')
+    ->name('guest.facilities.planner');
 
 Volt::route('/reservation/success', 'guest.reservations.success')
     ->name('guest.reservations.success');

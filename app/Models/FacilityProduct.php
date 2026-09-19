@@ -89,4 +89,10 @@ class FacilityProduct extends Model
     {
         return $this->hasMany(ProductRate::class, 'facility_product_id', 'facility_product_id');
     }
+
+    /** @return HasMany<FacilityRequirementGroup, $this> */
+    public function requirementGroups(): HasMany
+    {
+        return $this->hasMany(FacilityRequirementGroup::class, 'facility_product_id', 'facility_product_id');
+    }
 }

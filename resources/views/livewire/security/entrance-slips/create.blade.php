@@ -151,7 +151,7 @@ class extends Component
         ]);
 
         try {
-            $slip = $workflow->issue([
+            $payload = [
                 'user_id' => (int) Auth::id(),
                 'adult_count' =>
                     (int) $validated['adultCount'],
@@ -183,7 +183,11 @@ class extends Component
                     (int) $validated[
                         'pwdScDiscountedQuantity'
                     ],
-            ]);
+            ];
+            $wasEditing = $this->createdSlipId !== null;
+            $slip = $wasEditing
+                ? $workflow->updateBeforeAdmission($this->createdSlipId, $payload)
+                : $workflow->issue($payload);
 
             $this->createdSlipId =
                 (int) $slip->entrance_slip_id;
@@ -195,7 +199,9 @@ class extends Component
 
             session()->flash(
                 'success',
-                'Entrance slip created successfully. Print the slip and direct the guest to the cashier for full payment.',
+                $wasEditing
+                    ? 'Entrance slip updated. Print the revised slip before sending the guest to the cashier.'
+                    : 'Entrance slip created. Review or edit it, then print it and direct the guest to the cashier.',
             );
         } catch (\Throwable $exception) {
             $this->addError(
@@ -403,7 +409,7 @@ class extends Component
 
                     <div class="flex flex-col gap-3 sm:flex-row">
                         <flux:button type="submit" variant="primary">
-                            Create entrance slip
+                            {{ $createdSlipId !== null ? 'Save entrance slip changes' : 'Create entrance slip' }}
                         </flux:button>
 
                         <flux:button type="button" variant="ghost" wire:click="resetForm">

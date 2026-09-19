@@ -19,9 +19,12 @@ class EntranceSlipDetail extends Model
     protected $fillable = [
         'entrance_slip_id',
         'entrance_fee_id',
+        'unit_rate_snapshot',
         'guest_quantity',
         'discount_id',
+        'discount_rate_snapshot',
         'discounted_quantity',
+        'line_total_snapshot',
     ];
 
     protected function casts(): array
@@ -29,6 +32,9 @@ class EntranceSlipDetail extends Model
         return [
             'guest_quantity' => 'integer',
             'discounted_quantity' => 'integer',
+            'unit_rate_snapshot' => 'decimal:2',
+            'discount_rate_snapshot' => 'decimal:6',
+            'line_total_snapshot' => 'decimal:2',
         ];
     }
 

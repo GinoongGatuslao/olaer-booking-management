@@ -17,6 +17,7 @@ class Facility extends Model
     protected $primaryKey = 'facility_id';
 
     protected $fillable = [
+        'facility_number',
         'facility_name',
         'facility_type_id',
         'facility_product_id',
@@ -70,5 +71,10 @@ class Facility extends Model
     public function guestFines(): HasMany
     {
         return $this->hasMany(GuestFine::class, 'facility_id', 'facility_id');
+    }
+
+    public function scheduleBlocks(): HasMany
+    {
+        return $this->hasMany(FacilityScheduleBlock::class, 'facility_id', 'facility_id');
     }
 }

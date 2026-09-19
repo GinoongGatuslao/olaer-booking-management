@@ -17,6 +17,7 @@ class PublicWebsiteFoundationTest extends TestCase
     {
         foreach ([
             'guest.home',
+            'guest.facilities.planner',
             'guest.reservations.create',
             'guest.reservations.success',
             'guest.bookings.create',
@@ -100,7 +101,7 @@ class PublicWebsiteFoundationTest extends TestCase
             ->assertOk()
             ->assertSee('Reserve a Facility')
             ->assertSee('Direct booking')
-            ->assertSee(route('guest.reservations.create'), false)
+            ->assertSee(route('guest.facilities.planner'), false)
             ->assertSee(route('guest.bookings.create'), false);
     }
 

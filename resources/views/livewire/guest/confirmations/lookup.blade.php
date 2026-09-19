@@ -401,7 +401,7 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                                 Reservation results show the held facility and balance. Booking results also show payment review, amenity requests, and recorded charges when available.
                             </p>
                             <div class="mt-6 flex flex-wrap gap-3 print:hidden">
-                                <flux:button href="{{ route('guest.reservations.create') }}" variant="primary" wire:navigate>
+                                <flux:button href="{{ route('guest.facilities.planner') }}" variant="primary" wire:navigate>
                                     Reserve a Facility
                                 </flux:button>
                                 <flux:button href="{{ route('guest.reservations.manage') }}" variant="ghost" wire:navigate>

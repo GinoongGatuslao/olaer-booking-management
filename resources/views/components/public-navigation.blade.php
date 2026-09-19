@@ -37,10 +37,10 @@
                 Manage
             </a>
             <a
-                href="{{ route('guest.reservations.create') }}"
+                href="{{ route('guest.facilities.planner') }}"
                 class="rounded-full bg-public-forest px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-public-forest-deep"
             >
-                Reserve a Facility
+                Plan Facilities
             </a>
         </div>
 
@@ -90,10 +90,10 @@
                         Direct Booking
                     </a>
                     <a
-                        href="{{ route('guest.reservations.create') }}"
+                        href="{{ route('guest.facilities.planner') }}"
                         class="mt-2 rounded-2xl bg-public-forest px-4 py-3 text-center text-sm font-semibold text-white"
                     >
-                        Reserve a Facility
+                        Plan Facilities
                     </a>
                 </nav>
             </div>
