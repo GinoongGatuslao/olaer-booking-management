@@ -7,6 +7,7 @@ use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\GcashProofStorageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -26,9 +27,11 @@ class GcashProofAccessTest extends TestCase
 
     public function test_guest_cannot_open_a_gcash_proof(): void
     {
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
-        $payment = $this->createPaymentWithProof('local');
+        $payment = $this->createPaymentWithProof(
+            GcashProofStorageService::PRIVATE_DISK,
+        );
 
         $this->get(route('payments.gcash-proof', $payment))
             ->assertRedirect(route('login'));
@@ -36,9 +39,11 @@ class GcashProofAccessTest extends TestCase
 
     public function test_security_guard_cannot_open_a_gcash_proof(): void
     {
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
-        $payment = $this->createPaymentWithProof('local');
+        $payment = $this->createPaymentWithProof(
+            GcashProofStorageService::PRIVATE_DISK,
+        );
         $security = $this->createUser('Security Guard');
 
         $this->actingAs($security)
@@ -48,9 +53,11 @@ class GcashProofAccessTest extends TestCase
 
     public function test_cashier_can_open_a_private_gcash_proof(): void
     {
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
-        $payment = $this->createPaymentWithProof('local');
+        $payment = $this->createPaymentWithProof(
+            GcashProofStorageService::PRIVATE_DISK,
+        );
         $cashier = $this->createUser('Cashier');
 
         $response = $this->actingAs($cashier)
@@ -76,8 +83,22 @@ class GcashProofAccessTest extends TestCase
         );
     }
 
+    public function test_legacy_local_private_proof_uses_authorized_fallback(): void
+    {
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
+        Storage::fake('local');
+
+        $payment = $this->createPaymentWithProof('local');
+        $manager = $this->createUser('Manager');
+
+        $this->actingAs($manager)
+            ->get(route('payments.gcash-proof', $payment))
+            ->assertOk();
+    }
+
     public function test_legacy_public_proof_uses_authorized_fallback(): void
     {
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
         Storage::fake('local');
         Storage::fake('public');
 
@@ -91,10 +112,10 @@ class GcashProofAccessTest extends TestCase
 
     public function test_invalid_or_traversal_path_is_not_served(): void
     {
-        Storage::fake('local');
+        Storage::fake(GcashProofStorageService::PRIVATE_DISK);
 
         $payment = $this->createPaymentWithProof(
-            'local',
+            GcashProofStorageService::PRIVATE_DISK,
             '../secret.txt',
             writeFile: false,
         );
