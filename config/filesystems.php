@@ -47,6 +47,30 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Local fallbacks for the Laravel Cloud bucket disk names.
+         *
+         * In Laravel Cloud, attached buckets with these disk names are injected
+         * at runtime and replace these local definitions with S3-compatible
+         * object-storage configuration. Locally and in tests, these definitions
+         * keep the same application code working without Cloud credentials.
+         */
+        'storage-4-private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/storage-4-private'),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'storage-4-public' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public/storage-4-public'),
+            'url' => rtrim((string) env('APP_URL', 'http://localhost'), '/').'/storage/storage-4-public',
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
