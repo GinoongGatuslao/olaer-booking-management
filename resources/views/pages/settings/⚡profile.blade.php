@@ -33,7 +33,7 @@ new #[Title('Profile settings')] class extends Component {
         $this->status = (string) ($user->status ?: 'Unknown');
         $this->canManageStaff = in_array(
             $this->roleName,
-            ['Admin', 'Manager'],
+            ['Admin'],
             true,
         );
     }
@@ -111,7 +111,7 @@ new #[Title('Profile settings')] class extends Component {
                 icon="information-circle"
                 heading="Profile changes are managed centrally"
             >
-                Staff names, contact information, roles, and account status are maintained by an Admin or Manager.
+                Staff names, contact information, roles, and account status are maintained by an Admin.
             </flux:callout>
 
             @if ($canManageStaff)
