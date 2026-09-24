@@ -24,7 +24,17 @@ class Facility extends Model
         'facility_size',
         'facility_status',
         'capacity',
+        'min_capacity',
+        'max_capacity',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'min_capacity' => 'integer',
+            'max_capacity' => 'integer',
+        ];
+    }
 
     public function facilityType(): BelongsTo
     {
