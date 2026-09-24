@@ -92,10 +92,19 @@ class PaymentWorkflowService
                 $targetId,
             );
 
-            $amountDue = $this->ledger->balanceFor($targetType, $targetId);
+            $ledger = $this->ledger->summaryFor($targetType, $targetId);
+            $amountDue = $ledger['balance'];
 
+            $repairs = [];
+            if ($target->getAttribute('total_price') !== null
+                && ! $this->money->equals((string) $target->getAttribute('total_price'), $ledger['total'])) {
+                $repairs['total_price'] = $ledger['total'];
+            }
             if (! $this->money->equals((string) $target->getAttribute('amount_due'), $amountDue)) {
-                $target->update(['amount_due' => $amountDue]);
+                $repairs['amount_due'] = $amountDue;
+            }
+            if ($repairs !== []) {
+                $target->update($repairs);
             }
 
             $this->guardTargetIsPayable(
