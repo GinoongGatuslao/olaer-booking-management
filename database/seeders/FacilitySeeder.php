@@ -33,10 +33,10 @@ class FacilitySeeder extends Seeder
     private function seedCottages(int $typeId, array $productIds): void
     {
         $groups = [
-            ['prefix' => 'C300', 'count' => 55, 'size' => 'Small Cottage', 'capacity' => '4-6', 'price' => 300.00, 'product_code' => FacilityProductCode::CottageSmall],
-            ['prefix' => 'C400', 'count' => 46, 'size' => 'Medium Cottage', 'capacity' => '8-10', 'price' => 400.00, 'product_code' => FacilityProductCode::CottageMedium],
-            ['prefix' => 'C600', 'count' => 26, 'size' => 'Large Cottage', 'capacity' => '10-15', 'price' => 600.00, 'product_code' => FacilityProductCode::CottageLarge],
-            ['prefix' => 'C900', 'count' => 5, 'size' => 'Extra Large Cottage', 'capacity' => '15-25', 'price' => 900.00, 'product_code' => FacilityProductCode::CottageExtraLarge],
+            ['prefix' => 'C300', 'count' => 55, 'size' => 'Small Cottage', 'capacity' => '4-6', 'min' => 4, 'max' => 6, 'price' => 300.00, 'product_code' => FacilityProductCode::CottageSmall],
+            ['prefix' => 'C400', 'count' => 46, 'size' => 'Medium Cottage', 'capacity' => '8-10', 'min' => 8, 'max' => 10, 'price' => 400.00, 'product_code' => FacilityProductCode::CottageMedium],
+            ['prefix' => 'C600', 'count' => 26, 'size' => 'Large Cottage', 'capacity' => '10-15', 'min' => 10, 'max' => 15, 'price' => 600.00, 'product_code' => FacilityProductCode::CottageLarge],
+            ['prefix' => 'C900', 'count' => 5, 'size' => 'Extra Large Cottage', 'capacity' => '15-25', 'min' => 15, 'max' => 25, 'price' => 900.00, 'product_code' => FacilityProductCode::CottageExtraLarge],
         ];
 
         foreach ($groups as $group) {
@@ -49,6 +49,8 @@ class FacilitySeeder extends Seeder
                     facilityProductId: (int) $productIds[$group['product_code']->value],
                     facilitySize: $group['size'],
                     capacity: $group['capacity'],
+                    minCapacity: $group['min'],
+                    maxCapacity: $group['max'],
                     prices: [
                         'Day Rate' => $group['price'],
                         'Night Rate' => $group['price'],
@@ -67,6 +69,8 @@ class FacilitySeeder extends Seeder
                 facilityProductId: $productId,
                 facilitySize: 'Standard Room',
                 capacity: '4 default / 10 max',
+                minCapacity: 4,
+                maxCapacity: 10,
                 prices: [
                     'Overnight' => 2500.00,
                 ]
@@ -78,8 +82,8 @@ class FacilitySeeder extends Seeder
     private function seedFunctionHalls(int $typeId, array $productIds): void
     {
         $halls = [
-            ['name' => 'FH-1', 'size' => 'Function Hall 1', 'capacity' => '25', 'price' => 1200.00, 'product_code' => FacilityProductCode::FunctionHall1],
-            ['name' => 'FH-2', 'size' => 'Function Hall 2', 'capacity' => '30', 'price' => 1500.00, 'product_code' => FacilityProductCode::FunctionHall2],
+            ['name' => 'FH-1', 'size' => 'Function Hall 1', 'capacity' => '25', 'min' => 25, 'max' => 25, 'price' => 1200.00, 'product_code' => FacilityProductCode::FunctionHall1],
+            ['name' => 'FH-2', 'size' => 'Function Hall 2', 'capacity' => '30', 'min' => 30, 'max' => 30, 'price' => 1500.00, 'product_code' => FacilityProductCode::FunctionHall2],
         ];
 
         foreach ($halls as $hall) {
@@ -89,6 +93,8 @@ class FacilitySeeder extends Seeder
                 facilityProductId: (int) $productIds[$hall['product_code']->value],
                 facilitySize: $hall['size'],
                 capacity: $hall['capacity'],
+                minCapacity: $hall['min'],
+                maxCapacity: $hall['max'],
                 prices: [
                     'Day Rate' => $hall['price'],
                     'Night Rate' => $hall['price'],
@@ -104,6 +110,8 @@ class FacilitySeeder extends Seeder
         int $facilityProductId,
         string $facilitySize,
         string $capacity,
+        int $minCapacity,
+        int $maxCapacity,
         array $prices
     ): void {
         DB::table('tbl_facility')->updateOrInsert(
@@ -114,6 +122,8 @@ class FacilitySeeder extends Seeder
                 'facility_size' => $facilitySize,
                 'facility_status' => 'Available',
                 'capacity' => $capacity,
+                'min_capacity' => $minCapacity,
+                'max_capacity' => $maxCapacity,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
