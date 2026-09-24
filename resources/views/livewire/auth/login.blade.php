@@ -50,7 +50,7 @@ $login = function () {
     }
 
     $routeName = match ($user->role?->role_name) {
-        'Admin', 'Manager' => 'admin.dashboard',
+        'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
         'Maintenance Staff' => 'maintenance.dashboard',
         'Security Guard' => 'security.dashboard',
