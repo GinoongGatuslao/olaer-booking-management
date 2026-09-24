@@ -114,7 +114,7 @@ class BatchTwoLedgerConsolidationTest extends TestCase
         $booking->refresh();
 
         $this->assertSame('6500.00', $booking->amount_due);
-        $this->assertSame('2500.00', $booking->total_price);
+        $this->assertSame('7500.00', $booking->total_price);
 
         $summary = app(TransactionLedgerService::class)->summaryForBooking($booking);
         $this->assertSame('1000.00', $summary['verified_payments']);
