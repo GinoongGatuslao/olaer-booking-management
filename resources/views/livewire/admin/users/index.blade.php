@@ -63,6 +63,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public function roles()
     {
         return Role::query()
+            ->where('role_name', '!=', 'Manager')
             ->orderBy('role_name')
             ->get();
     }
@@ -276,7 +277,13 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             ],
             'contactNo' => ['required', 'regex:/^[0-9]{11}$/'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
-            'roleId' => ['required', 'integer', 'exists:tbl_role,role_id'],
+            'roleId' => [
+                'required',
+                'integer',
+                Rule::exists('tbl_role', 'role_id')->where(
+                    fn ($query) => $query->where('role_name', '!=', 'Manager'),
+                ),
+            ],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
@@ -323,7 +330,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             if ((int) $validated['roleId'] !== (int) $currentUser->role_id) {
                 $this->addError(
                     'roleId',
-                    'You cannot change your own role while logged in. Ask another administrator or manager.',
+                    'You cannot change your own role while logged in. Ask another administrator.',
                 );
 
                 return;
@@ -474,7 +481,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     {
         return match ($roleName) {
             'Admin' => 'zinc',
-            'Manager' => 'purple',
             'Cashier' => 'blue',
             'Maintenance Staff' => 'amber',
             'Security Guard' => 'green',
@@ -554,7 +560,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                             <flux:input
                                 wire:model.live.debounce.300ms="search"
                                 label="Search"
-                                placeholder="Name, username, email, address"
+                                placeholder="Name, username, email, contact, status, or role"
                                 clearable
                             />
 
