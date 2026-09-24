@@ -20,6 +20,7 @@ class PaymentWorkflowService
     public function __construct(
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DecimalMoneyService $money,
+        private readonly TransactionLedgerService $ledger,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -91,7 +92,11 @@ class PaymentWorkflowService
                 $targetId,
             );
 
-            $amountDue = $this->money->normalize((string) $target->getAttribute('amount_due'));
+            $amountDue = $this->ledger->balanceFor($targetType, $targetId);
+
+            if (! $this->money->equals((string) $target->getAttribute('amount_due'), $amountDue)) {
+                $target->update(['amount_due' => $amountDue]);
+            }
 
             $this->guardTargetIsPayable(
                 $targetType,
