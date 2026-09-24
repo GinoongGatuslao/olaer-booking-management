@@ -173,11 +173,9 @@ Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
 Volt::route('/', 'guest.home')
     ->name('guest.home');
 
-Volt::route('/reserve', 'guest.reservations.create')
+Volt::route('/reserve', 'guest.facilities.planner')
     ->name('guest.reservations.create');
 
-Volt::route('/plan-facilities', 'guest.facilities.planner')
-    ->name('guest.facilities.planner');
 
 Volt::route('/reservation/success', 'guest.reservations.success')
     ->name('guest.reservations.success');
