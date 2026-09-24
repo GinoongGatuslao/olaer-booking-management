@@ -108,7 +108,7 @@ return [
     | Enabled Features
     |--------------------------------------------------------------------------
     |
-    | Olaer staff accounts are created and maintained by Admin/Manager through
+    | Olaer staff accounts are created and maintained by Admin through
     | User Management. Public self-registration, starter-kit email
     | verification, passkeys, and two-factor settings are therefore outside
     | the approved capstone workflow.
