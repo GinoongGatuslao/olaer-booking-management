@@ -33,7 +33,6 @@ class UserSeeder extends Seeder
 
         $users = [
             ['role' => 'Admin', 'first_name' => 'System', 'last_name' => 'Admin', 'username' => 'admin', 'email' => 'admin@olaer.test'],
-            ['role' => 'Manager', 'first_name' => 'System', 'last_name' => 'Manager', 'username' => 'manager', 'email' => 'manager@olaer.test'],
             ['role' => 'Cashier', 'first_name' => 'Demo', 'last_name' => 'Cashier', 'username' => 'cashier', 'email' => 'cashier@olaer.test'],
             ['role' => 'Maintenance Staff', 'first_name' => 'Demo', 'last_name' => 'Maintenance', 'username' => 'maintenance', 'email' => 'maintenance@olaer.test'],
             ['role' => 'Security Guard', 'first_name' => 'Demo', 'last_name' => 'Security', 'username' => 'security', 'email' => 'security@olaer.test'],
