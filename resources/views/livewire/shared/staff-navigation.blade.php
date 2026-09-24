@@ -43,7 +43,7 @@ new class extends Component
         SecurityDashboardService $securityDashboard,
     ): void {
         $this->counts = match ($this->roleName) {
-            'Admin', 'Manager' => $realtimeDashboard->admin(),
+            'Admin' => $realtimeDashboard->admin(),
             'Cashier' => $realtimeDashboard->cashier(),
             'Maintenance Staff' => $realtimeDashboard->maintenance(),
             'Security Guard' => $securityDashboard->overview((int) auth()->id()),
@@ -80,7 +80,7 @@ new class extends Component
 
 <div wire:poll.30s.visible="refreshNavigationCounts" class="contents">
     <flux:sidebar.nav>
-        @if (in_array($roleName, ['Admin', 'Manager'], true))
+        @if (in_array($roleName, ['Admin'], true))
             <flux:sidebar.item
                 icon="home"
                 :href="route('admin.dashboard')"
