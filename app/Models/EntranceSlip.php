@@ -32,6 +32,10 @@ class EntranceSlip extends Model
         'handled_by_user_id',
         'admitted_by_user_id',
         'admitted_at',
+        'voided_at',
+        'voided_by_user_id',
+        'void_reason',
+        'replacement_entrance_slip_id',
         'status',
     ];
 
@@ -48,6 +52,7 @@ class EntranceSlip extends Model
             'total_price' => 'decimal:2',
             'amount_due' => 'decimal:2',
             'admitted_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 
@@ -64,6 +69,16 @@ class EntranceSlip extends Model
     public function admittedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'admitted_by_user_id', 'user_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_user_id', 'user_id');
+    }
+
+    public function replacement(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replacement_entrance_slip_id', 'entrance_slip_id');
     }
 
     public function guest(): BelongsTo
