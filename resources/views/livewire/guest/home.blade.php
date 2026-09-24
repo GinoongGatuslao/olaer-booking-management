@@ -163,7 +163,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
 
                 <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                     <flux:button
-                        href="{{ route('guest.facilities.planner') }}"
+                        href="{{ route('guest.reservations.create') }}"
                         variant="primary"
                         class="!rounded-full !bg-white !px-6 !py-3 !font-semibold !text-public-forest hover:!bg-public-cream"
                     >
@@ -296,7 +296,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         </div>
 
                         <a
-                            href="{{ route('guest.facilities.planner') }}"
+                            href="{{ route('guest.reservations.create') }}"
                             class="mt-auto inline-flex items-center justify-between gap-3 border-t border-white/15 pt-6 text-sm font-semibold text-public-sand hover:text-white"
                         >
                             Check availability
@@ -319,7 +319,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                     <p class="mt-2 text-sm leading-6 text-public-muted">Create a temporary facility hold and complete payment verification with the cashier.</p>
                 </div>
                 <flux:button
-                    href="{{ route('guest.facilities.planner') }}"
+                    href="{{ route('guest.reservations.create') }}"
                     variant="primary"
                     class="!rounded-full sm:shrink-0"
                 >
@@ -365,7 +365,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         A reservation places a temporary hold on your selected facility. Payment and final booking verification are handled by the cashier.
                     </p>
                     <a
-                        href="{{ route('guest.facilities.planner') }}"
+                        href="{{ route('guest.reservations.create') }}"
                         class="mt-6 inline-flex rounded-full bg-public-forest px-5 py-3 text-sm font-semibold text-white hover:bg-public-forest-deep"
                     >
                         Start a Reservation
@@ -544,7 +544,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 Start with a reservation to check real availability for your preferred schedule.
             </p>
             <flux:button
-                href="{{ route('guest.facilities.planner') }}"
+                href="{{ route('guest.reservations.create') }}"
                 variant="primary"
                 class="mt-8 !rounded-full !px-7 !py-3"
             >
