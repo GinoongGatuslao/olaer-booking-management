@@ -15,7 +15,7 @@ class TransactionLedgerService
     public function __construct(private readonly DecimalMoneyService $money) {}
 
     /**
-     * @return array{charges: string, discounts: string, applied_credits: string, verified_payments: string, balance: string}
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
      */
     public function summaryForReservation(Reservation|int $reservation): array
     {
@@ -50,7 +50,7 @@ class TransactionLedgerService
     }
 
     /**
-     * @return array{charges: string, discounts: string, applied_credits: string, verified_payments: string, balance: string}
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
      */
     public function summaryForBooking(Booking|int $booking): array
     {
@@ -123,7 +123,7 @@ class TransactionLedgerService
     }
 
     /**
-     * @return array{charges: string, discounts: string, applied_credits: string, verified_payments: string, balance: string}
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
      */
     public function summaryForEntranceSlip(EntranceSlip|int $entranceSlip): array
     {
@@ -161,17 +161,23 @@ class TransactionLedgerService
         );
     }
 
-    /** @return numeric-string */
-    public function balanceFor(string $targetType, Model|int $target): string
+    /**
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
+     */
+    public function summaryFor(string $targetType, Model|int $target): array
     {
-        $summary = match ($targetType) {
+        return match ($targetType) {
             'booking' => $this->summaryForBooking($target instanceof Booking ? $target : (int) $target),
             'reservation' => $this->summaryForReservation($target instanceof Reservation ? $target : (int) $target),
             'entrance_slip' => $this->summaryForEntranceSlip($target instanceof EntranceSlip ? $target : (int) $target),
             default => throw new InvalidArgumentException('Unsupported transaction ledger target.'),
         };
+    }
 
-        return $summary['balance'];
+    /** @return numeric-string */
+    public function balanceFor(string $targetType, Model|int $target): string
+    {
+        return $this->summaryFor($targetType, $target)['balance'];
     }
 
     /** @return array{0: string, 1: string} */
@@ -223,7 +229,7 @@ class TransactionLedgerService
     }
 
     /**
-     * @return array{charges: string, discounts: string, applied_credits: string, verified_payments: string, balance: string}
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
      */
     private function finish(
         string $charges,
@@ -231,13 +237,14 @@ class TransactionLedgerService
         string $appliedCredits,
         string $verifiedPayments,
     ): array {
-        $balance = $this->money->subtract($charges, $discounts);
-        $balance = $this->money->subtract($balance, $appliedCredits);
+        $total = $this->money->maxZero($this->money->subtract($charges, $discounts));
+        $balance = $this->money->subtract($total, $appliedCredits);
         $balance = $this->money->subtract($balance, $verifiedPayments);
 
         return [
             'charges' => $this->money->normalize($charges),
             'discounts' => $this->money->normalize($discounts),
+            'total' => $total,
             'applied_credits' => $this->money->normalize($appliedCredits),
             'verified_payments' => $this->money->normalize($verifiedPayments),
             'balance' => $this->money->maxZero($balance),
