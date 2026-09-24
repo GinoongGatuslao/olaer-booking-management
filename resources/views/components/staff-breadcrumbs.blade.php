@@ -3,7 +3,7 @@
     $roleName = auth()->user()?->role?->role_name;
 
     $dashboardRoute = match ($roleName) {
-        'Admin', 'Manager' => 'admin.dashboard',
+        'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
         'Maintenance Staff' => 'maintenance.dashboard',
         'Security Guard' => 'security.dashboard',
