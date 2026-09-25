@@ -50,7 +50,7 @@ class ReservationToBookingWorkflowService
                 ->findOrFail($reservationId);
 
             $reservationDetails = ReservationDetail::query()
-                ->with(['facility.facilityType', 'facilityProduct', 'discount'])
+                ->with(['facility.facilityType', 'facilityProduct', 'discount', 'roomOccupants'])
                 ->where('reservation_id', $reservation->reservation_id)
                 ->lockForUpdate()
                 ->get();
@@ -171,6 +171,15 @@ class ReservationToBookingWorkflowService
                     $bookingDetail,
                 );
 
+                foreach ($detail->roomOccupants as $occupant) {
+                    $bookingDetail->roomOccupants()->create([
+                        'position' => $occupant->position,
+                        'first_name' => $occupant->first_name,
+                        'middle_name' => $occupant->middle_name,
+                        'last_name' => $occupant->last_name,
+                    ]);
+                }
+
                 $bookingDetailsByReservationDetailId[
                     (int) $detail->reservation_details_id
                 ] = $bookingDetail;
@@ -245,6 +254,7 @@ class ReservationToBookingWorkflowService
                 'reservation',
                 'details.facility.facilityType',
                 'details.discount',
+                'details.roomOccupants',
                 'extraGuests',
                 'payments',
             ]);
