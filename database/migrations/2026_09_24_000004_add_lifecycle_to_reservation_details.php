@@ -19,19 +19,17 @@ return new class extends Migration
                 ->nullOnDelete();
         });
 
-        DB::table('tbl_reservation_details')
-            ->join('tbl_reservation', 'tbl_reservation.reservation_id', '=', 'tbl_reservation_details.reservation_id')
-            ->whereIn('tbl_reservation.status', ['Cancelled', 'No-show'])
-            ->update([
-                'tbl_reservation_details.status' => DB::raw('tbl_reservation.status'),
-            ]);
-
-        DB::table('tbl_reservation_details')
-            ->join('tbl_reservation', 'tbl_reservation.reservation_id', '=', 'tbl_reservation_details.reservation_id')
-            ->where('tbl_reservation.status', 'Converted')
-            ->update([
-                'tbl_reservation_details.status' => 'Converted',
-            ]);
+        DB::table('tbl_reservation')
+            ->whereIn('status', ['Cancelled', 'No-show', 'Converted'])
+            ->orderBy('reservation_id')
+            ->select(['reservation_id', 'status'])
+            ->chunkById(100, function ($reservations): void {
+                foreach ($reservations as $reservation) {
+                    DB::table('tbl_reservation_details')
+                        ->where('reservation_id', $reservation->reservation_id)
+                        ->update(['status' => $reservation->status]);
+                }
+            }, 'reservation_id');
     }
 
     public function down(): void
