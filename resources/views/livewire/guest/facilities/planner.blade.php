@@ -37,8 +37,8 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     public string $barangay = '';
     public string $purok = '';
 
-    /** @var array<int, array{first_name: string, middle_name: string, last_name: string}> */
-    public array $extraGuests = [];
+    /** @var array<int, array<int, array{first_name: string, middle_name: string, last_name: string}>> */
+    public array $roomOccupants = [];
 
     public function mount(FacilityRequirementService $requirements): void
     {
@@ -107,7 +107,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         unset($this->groups[$index]);
         $this->groups = array_values($this->groups);
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
     public function updatedGroups(): void
@@ -142,12 +142,12 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             }
         }
 
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
     public function updatedPartyCount(): void
     {
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
     public function savePlan(
@@ -160,7 +160,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $this->partyCount,
                 $this->groups,
             );
-            $this->syncExtraGuestRows();
+            $this->syncRoomOccupantRows();
             $this->planTotal = $assignments->quoteIntentTotal($intent);
             if ($this->bookingMode) {
                 $this->paymentAmount = $this->planTotal;
@@ -186,7 +186,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $this->partyCount,
                 $this->groups,
             );
-            $this->syncExtraGuestRows();
+            $this->syncRoomOccupantRows();
             $this->planTotal = $assignments->quoteIntentTotal($intent);
 
             $guestData = [
@@ -199,7 +199,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 'city' => $this->city,
                 'barangay' => $this->barangay,
                 'purok' => $this->purok,
-                'extra_guests' => $this->extraGuests,
+                'room_occupants' => $this->roomOccupants,
             ];
 
             if ($this->bookingMode) {
@@ -253,10 +253,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
             'purok' => ['nullable', 'string', 'max:50'],
-            'extraGuests' => ['array'],
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
+            'roomOccupants' => ['array'],
+            'roomOccupants.*' => ['array'],
+            'roomOccupants.*.*.first_name' => ['required', 'string', 'max:50'],
+            'roomOccupants.*.*.middle_name' => ['nullable', 'string', 'max:50'],
+            'roomOccupants.*.*.last_name' => ['required', 'string', 'max:50'],
             ...($this->bookingMode ? [
                 'paymentAmount' => ['required', 'numeric', 'min:1'],
                 'referenceNumber' => ['required', 'string', 'max:50'],
@@ -281,9 +282,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
     }
 
-    private function expectedExtraGuestCount(): int
+    /** @return array<int, int> */
+    private function expectedRoomGuestCounts(): array
     {
-        $count = 0;
+        $counts = [];
 
         foreach ($this->groups as $index => $group) {
             $product = $this->productFor($index);
@@ -298,27 +300,32 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             $remainder = $estimatedUsers % $quantity;
 
             for ($unit = 0; $unit < $quantity; $unit++) {
-                $unitGuests = $minimum + ($unit < $remainder ? 1 : 0);
-                $count += max(0, $unitGuests - $product->included_guest_count);
+                $counts[] = $minimum + ($unit < $remainder ? 1 : 0);
             }
         }
 
-        return $count;
+        return $counts;
     }
 
-    private function syncExtraGuestRows(): void
+    private function syncRoomOccupantRows(): void
     {
-        $rows = [];
+        $rooms = [];
 
-        for ($index = 0; $index < $this->expectedExtraGuestCount(); $index++) {
-            $rows[] = [
-                'first_name' => $this->extraGuests[$index]['first_name'] ?? '',
-                'middle_name' => $this->extraGuests[$index]['middle_name'] ?? '',
-                'last_name' => $this->extraGuests[$index]['last_name'] ?? '',
-            ];
+        foreach ($this->expectedRoomGuestCounts() as $roomIndex => $guestCount) {
+            $occupants = [];
+
+            for ($occupantIndex = 0; $occupantIndex < $guestCount; $occupantIndex++) {
+                $occupants[] = [
+                    'first_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['first_name'] ?? '',
+                    'middle_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['middle_name'] ?? '',
+                    'last_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['last_name'] ?? '',
+                ];
+            }
+
+            $rooms[] = $occupants;
         }
 
-        $this->extraGuests = $rows;
+        $this->roomOccupants = $rooms;
     }
 };
 
@@ -423,16 +430,26 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
         </flux:card>
 
-        @if ($extraGuests !== [])
+        @if ($roomOccupants !== [])
             <flux:card>
-                <flux:heading size="lg">Paid room extra guests</flux:heading>
-                <flux:text class="mt-1">Rooms include four guests. Name each guest charged above the included count.</flux:text>
-                <div class="mt-5 space-y-4">
-                    @foreach ($extraGuests as $index => $extraGuest)
-                        <div wire:key="extra-guest-{{ $index }}" class="grid gap-4 rounded-xl border border-zinc-200 p-4 md:grid-cols-3 dark:border-zinc-700">
-                            <flux:input wire:model="extraGuests.{{ $index }}.first_name" label="First name" />
-                            <flux:input wire:model="extraGuests.{{ $index }}.middle_name" label="Middle name" />
-                            <flux:input wire:model="extraGuests.{{ $index }}.last_name" label="Last name" />
+                <flux:heading size="lg">Room occupants</flux:heading>
+                <flux:text class="mt-1">Every room occupant must be named. The system will attach these names to the exact room automatically assigned at submission.</flux:text>
+                <div class="mt-5 space-y-5">
+                    @foreach ($roomOccupants as $roomIndex => $occupants)
+                        <div wire:key="room-occupants-{{ $roomIndex }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                            <div class="mb-3 flex items-center justify-between">
+                                <p class="font-semibold">Room {{ $roomIndex + 1 }}</p>
+                                <flux:badge color="blue">{{ count($occupants) }} occupant{{ count($occupants) === 1 ? '' : 's' }}</flux:badge>
+                            </div>
+                            <div class="space-y-3">
+                                @foreach ($occupants as $occupantIndex => $occupant)
+                                    <div wire:key="room-{{ $roomIndex }}-occupant-{{ $occupantIndex }}" class="grid gap-3 md:grid-cols-3">
+                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="Occupant {{ $occupantIndex + 1 }} first name" />
+                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
+                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     @endforeach
                 </div>
