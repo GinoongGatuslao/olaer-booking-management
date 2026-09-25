@@ -46,7 +46,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             'amenity_description',
             'amenity_type',
             'amenity_price',
-            'usage',
         ];
 
         $sortField = in_array($this->sortField, $allowedSorts, true)
@@ -97,11 +96,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             'amenity_price' => $query->orderBy(
                 'amenity_price',
                 $direction,
-            ),
-            'usage' => $query->orderByRaw(
-                '(facility_amenities_count + amenity_request_details_count + fines_count) '
-                .$direction
-            ),
+            ), 
             default => $query->orderBy(
                 AmenityName::query()
                     ->select('amenity_name')
@@ -162,7 +157,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             'amenity_description',
             'amenity_type',
             'amenity_price',
-            'usage',
         ];
 
         if (! in_array($field, $allowedSorts, true)) {
@@ -475,55 +469,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                     <table class="w-full min-w-[68rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('amenity_name')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Amenity {{ $this->sortIcon('amenity_name') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('amenity_description')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Description {{ $this->sortIcon('amenity_description') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('amenity_type')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Type {{ $this->sortIcon('amenity_type') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('amenity_price')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Price {{ $this->sortIcon('amenity_price') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('usage')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Usage {{ $this->sortIcon('usage') }}
-                                    </button>
-                                </th>
 
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
@@ -551,16 +496,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
                                     <td class="px-5 py-4 font-medium">
                                         ₱{{ number_format((float) $amenity->amenity_price, 2) }}
-                                    </td>
-
-                                    <td class="max-w-sm px-5 py-4">
-                                        <p class="font-medium">
-                                            {{ $this->usageCount($amenity) }} total link(s)
-                                        </p>
-
-                                        <p class="mt-1 text-xs leading-5 text-zinc-500">
-                                            {{ $this->usageSummary($amenity) }}
-                                        </p>
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
