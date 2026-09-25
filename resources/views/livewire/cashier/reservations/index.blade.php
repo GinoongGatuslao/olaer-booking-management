@@ -1053,6 +1053,68 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         </section>
     @endif
 
+    @if ($detailActionId && $detailAction)
+        <flux:card>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <flux:heading size="lg">
+                        @switch($detailAction)
+                            @case('reschedule') Reschedule facility @break
+                            @case('transfer') Upgrade / transfer facility @break
+                            @case('cancel') Cancel facility @break
+                            @case('occupants') Edit room occupants @break
+                        @endswitch
+                    </flux:heading>
+                    <flux:text class="mt-1">This action changes only the selected facility detail, not the other facilities under the reservation.</flux:text>
+                </div>
+                <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Close</flux:button>
+            </div>
+
+            @error('detailAction')
+                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            <form wire:submit="saveDetailAction" class="mt-5 space-y-4">
+                @if ($detailAction === 'reschedule')
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
+                        <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
+                    </div>
+                @elseif ($detailAction === 'transfer')
+                    <flux:select wire:model="detailFacilityProductId" label="Destination facility product *">
+                        <option value="">Choose an upgrade product</option>
+                        @foreach ($this->detailTransferProducts() as $product)
+                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    <p class="text-xs text-zinc-500">The exact physical unit is assigned automatically. Cheaper/downgrade transfers are rejected by the service.</p>
+                @elseif ($detailAction === 'cancel')
+                    <flux:textarea wire:model="detailCancellationReason" label="Cancellation reason *" rows="3" />
+                    <p class="text-xs text-zinc-500">Paid value remains as same-transaction credit and is not refunded or moved to another booking.</p>
+                @elseif ($detailAction === 'occupants')
+                    <div class="space-y-3">
+                        @forelse ($detailOccupants as $index => $occupant)
+                            <div class="grid gap-3 md:grid-cols-3">
+                                <flux:input wire:model="detailOccupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.middle_name" label="Middle name" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.last_name" label="Last name *" />
+                            </div>
+                        @empty
+                            <p class="text-sm text-zinc-500">This facility has no room occupant list.</p>
+                        @endforelse
+                    </div>
+                @endif
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Cancel</flux:button>
+                    <flux:button type="submit" variant="{{ $detailAction === 'cancel' ? 'danger' : 'primary' }}">
+                        Save
+                    </flux:button>
+                </div>
+            </form>
+        </flux:card>
+    @endif
+
     @if ($rescheduleReservationId)
         <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
             <h2 class="font-semibold">Reschedule reservation #{{ $rescheduleReservationId }}</h2>
@@ -1192,7 +1254,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             </thead>
             <tbody class="divide-y divide-brand-border dark:divide-zinc-800">
                 @forelse ($reservations as $reservation)
-                    @php($detail = $reservation->details->first())
                     <tr
                         wire:key="reservation-row-{{ $reservation->reservation_id }}"
                         class="transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
@@ -1202,18 +1263,43 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             <div class="font-medium text-brand-text dark:text-white">{{ $this->fullName($reservation->guest) }}</div>
                             <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $reservation->guest->contact_no }} {{ $reservation->guest->email ? '• '.$reservation->guest->email : '' }}</div>
                         </td>
-                        <td class="px-4 py-3">
-                            @if ($detail && $detail->facility)
-                                <div class="font-medium text-brand-text dark:text-white">{{ $detail->facility->facility_name }}</div>
-                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $detail->facility->facilityType?->facility_type }} • {{ $detail->rate_type }}</div>
-                            @else
-                                <span class="text-brand-text-muted dark:text-zinc-400">No facility detail</span>
-                            @endif
-                        </td>
-                        <td class="px-4 py-3">
-                            @if ($detail)
-                                {{ $detail->check_in_date->format('M d, Y') }} → {{ $detail->check_out_date->format('M d, Y') }}
-                            @endif
+                        <td class="px-4 py-3" colspan="2">
+                            <div class="space-y-3">
+                                @forelse ($reservation->details as $detail)
+                                    <div @class([
+                                        'rounded-lg border p-3',
+                                        'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' => $detail->status === 'Cancelled',
+                                        'border-zinc-200 dark:border-zinc-700' => $detail->status !== 'Cancelled',
+                                    ])>
+                                        <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                                            <div>
+                                                <div class="font-medium text-brand-text dark:text-white">
+                                                    {{ $detail->facility?->facility_number }} — {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
+                                                </div>
+                                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">
+                                                    {{ $detail->facility?->facilityType?->facility_type }}
+                                                    · {{ $detail->facility?->facilityProduct?->display_name }}
+                                                    · {{ $detail->rate_type }}
+                                                    · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}
+                                                    · {{ $detail->status ?? 'Active' }}
+                                                </div>
+                                            </div>
+                                            @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
+                                                <div class="flex flex-wrap gap-1">
+                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:button>
+                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'transfer')">Transfer</flux:button>
+                                                    @if ($detail->roomOccupants->isNotEmpty())
+                                                        <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:button>
+                                                    @endif
+                                                    <flux:button size="sm" type="button" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel Facility</flux:button>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @empty
+                                    <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
+                                @endforelse
+                            </div>
                         </td>
                         <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
                         <td class="px-4 py-3">₱{{ number_format($this->amountPaid($reservation), 2) }}</td>
@@ -1223,12 +1309,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         </td>
                         <td class="px-4 py-3 text-right">
                             @if ($reservation->status === 'Active')
-                                <div class="flex justify-end gap-2">
-                                    <flux:button size="sm" type="button" wire:click="beginReschedule({{ $reservation->reservation_id }})">Reschedule</flux:button>
-                                    <flux:button size="sm" variant="danger" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">Cancel</flux:button>
-                                </div>
+                                <flux:button size="sm" variant="danger" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
+                                    Cancel Entire Reservation
+                                </flux:button>
                             @else
-                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">No action</span>
+                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
                             @endif
                         </td>
                     </tr>
