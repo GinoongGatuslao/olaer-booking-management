@@ -90,6 +90,13 @@ class ReservationDetail extends Model
         return $this->belongsTo(Discount::class, 'discount_id', 'discount_id');
     }
 
+    /** @return HasMany<ReservationRoomOccupant, $this> */
+    public function roomOccupants(): HasMany
+    {
+        return $this->hasMany(ReservationRoomOccupant::class, 'reservation_details_id', 'reservation_details_id')
+            ->orderBy('position');
+    }
+
     /** @return HasMany<ReservationExtraGuest, $this> */
     public function extraGuests(): HasMany
     {
