@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $party_count
  * @property string $status
  * @property int|null $reservation_id
+ * @property int|null $booking_id
  * @property CarbonInterface $expires_at
  * @property CarbonInterface|null $fulfilled_at
  */
@@ -26,6 +27,7 @@ class FacilityRequirementIntent extends Model
         'party_count',
         'status',
         'reservation_id',
+        'booking_id',
         'expires_at',
         'fulfilled_at',
     ];
@@ -57,5 +59,11 @@ class FacilityRequirementIntent extends Model
     public function reservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
+    }
+
+    /** @return BelongsTo<Booking, $this> */
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }
 }
