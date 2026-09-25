@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Address;
+use App\Models\Amenity;
+use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Facility;
@@ -548,6 +550,14 @@ class FacilityAssignmentService
                 'verified_at' => now(),
             ]);
 
+            if ($walkIn && ($guestData['amenities'] ?? []) !== []) {
+                $this->addWalkInAmenityBalance(
+                    $booking,
+                    $guestData['amenities'],
+                    $userId,
+                );
+            }
+
             $lockedIntent->update([
                 'status' => 'Fulfilled',
                 'booking_id' => $booking->booking_id,
@@ -563,6 +573,93 @@ class FacilityAssignmentService
                 'payments.modeOfPayment',
             ]);
         }, attempts: 3);
+    }
+
+    /** @param array<int, array<string, mixed>> $items */
+    private function addWalkInAmenityBalance(
+        Booking $booking,
+        array $items,
+        int $userId,
+    ): void {
+        $deliveryFacilityId = (int) $booking->details()
+            ->orderBy('booking_details_id')
+            ->value('facility_id');
+
+        if ($deliveryFacilityId < 1) {
+            throw new InvalidArgumentException(
+                'Walk-In amenities require an assigned booking facility.',
+            );
+        }
+
+        $quoted = [];
+        $total = '0.00';
+
+        foreach ($items as $item) {
+            $amenityId = (int) ($item['amenity_id'] ?? 0);
+            $quantity = (int) ($item['quantity'] ?? 0);
+
+            if ($amenityId < 1 || $quantity < 1) {
+                continue;
+            }
+
+            $amenity = Amenity::query()
+                ->with('amenityName')
+                ->lockForUpdate()
+                ->findOrFail($amenityId);
+
+            if (strtolower((string) $amenity->amenity_type) !== 'rentable') {
+                throw new InvalidArgumentException(
+                    'Only rentable amenities can be added to a Walk-In booking.',
+                );
+            }
+
+            $unitPrice = $this->money->normalize((string) $amenity->amenity_price);
+
+            if ($this->money->compare($unitPrice, '0.00') !== 1) {
+                throw new InvalidArgumentException(
+                    'Rentable amenities must have a price greater than zero.',
+                );
+            }
+
+            $lineTotal = $this->money->multiply($unitPrice, $quantity);
+            $total = $this->money->add($total, $lineTotal);
+            $quoted[] = [
+                'amenity_id' => $amenity->amenity_id,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'line_total' => $lineTotal,
+            ];
+        }
+
+        if ($quoted === []) {
+            return;
+        }
+
+        $request = AmenityRequest::query()->create([
+            'booking_id' => $booking->booking_id,
+            'amenity_request_status' => 'Pending',
+            'total_price' => $total,
+            'date_created' => today()->toDateString(),
+            'user_id' => $userId,
+            'assigned_to_user_id' => null,
+            'delivered_at' => null,
+            'cancelled_at' => null,
+        ]);
+
+        foreach ($quoted as $item) {
+            $request->details()->create([
+                'facility_id' => $deliveryFacilityId,
+                'amenity_id' => $item['amenity_id'],
+                'amenity_quantity' => $item['quantity'],
+                'unit_price' => $item['unit_price'],
+                'line_total' => $item['line_total'],
+            ]);
+        }
+
+        $booking->update([
+            'total_price' => $this->money->add((string) $booking->total_price, $total),
+            'amount_due' => $total,
+        ]);
     }
 
     /** @return EloquentCollection<int, Facility> */
