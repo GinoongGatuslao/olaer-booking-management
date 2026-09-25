@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\FacilityProduct;
+use App\Models\Facility;
 use App\Services\FacilityManagementService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -8,44 +8,82 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
-new #[Layout('layouts.app')] #[Title('Add Facilities - Olaer Spring Resort')] class extends Component
+new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] class extends Component
 {
-    public string $facilityProductId = '';
-    public int $quantity = 1;
-    public string $namePrefix = '';
+    public string $sourceFacilityId = '';
+    public string $facilityNumber = '';
+    public string $facilityName = '';
     public string $status = 'Available';
 
     #[Computed]
-    public function products(): Collection
+    public function facilities(): Collection
     {
-        return FacilityProduct::query()
-            ->with(['facilityType', 'productRates'])
-            ->where('is_active', true)
+        return Facility::query()
+            ->with(['facilityType', 'facilityProduct'])
             ->orderBy('facility_type_id')
-            ->orderBy('display_name')
+            ->orderBy('facility_number')
             ->get();
+    }
+
+    public function updatedSourceFacilityId(
+        FacilityManagementService $facilities,
+    ): void {
+        $source = Facility::query()
+            ->with('facilityProduct')
+            ->find((int) $this->sourceFacilityId);
+
+        if ($source === null) {
+            $this->facilityNumber = '';
+            $this->facilityName = '';
+
+            return;
+        }
+
+        try {
+            $this->facilityNumber = $facilities->suggestedCloneNumber($source);
+        } catch (\Throwable) {
+            $this->facilityNumber = '';
+        }
+
+        $this->facilityName = $source->facility_name.' Copy';
     }
 
     public function save(FacilityManagementService $facilities): void
     {
         $validated = $this->validate([
-            'facilityProductId' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
-            'quantity' => ['required', 'integer', 'min:1', 'max:100'],
-            'namePrefix' => ['nullable', 'string', 'max:70'],
+            'sourceFacilityId' => [
+                'required',
+                'integer',
+                'exists:tbl_facility,facility_id',
+            ],
+            'facilityNumber' => [
+                'required',
+                'string',
+                'max:50',
+                'unique:tbl_facility,facility_number',
+            ],
+            'facilityName' => ['required', 'string', 'max:100'],
             'status' => ['required', 'in:Available,Unavailable'],
         ]);
 
         try {
-            $created = $facilities->createFromPreset(
-                (int) $validated['facilityProductId'],
-                (int) $validated['quantity'],
-                $validated['namePrefix'] ?: null,
+            $clone = $facilities->cloneFacility(
+                (int) $validated['sourceFacilityId'],
+                $validated['facilityNumber'],
+                $validated['facilityName'],
                 $validated['status'],
             );
-            session()->flash('success', $created->count().' '.($created->count() === 1 ? 'facility' : 'facilities').' created with automatic numbering.');
-            $this->redirect(route('admin.facilities.index'), navigate: true);
+
+            session()->flash(
+                'success',
+                "Facility {$clone->facility_number} cloned successfully.",
+            );
+            $this->redirect(
+                route('admin.facilities.index'),
+                navigate: true,
+            );
         } catch (\Throwable $exception) {
-            $this->addError('facilityProductId', $exception->getMessage());
+            $this->addError('sourceFacilityId', $exception->getMessage());
         }
     }
 };
@@ -55,25 +93,49 @@ new #[Layout('layouts.app')] #[Title('Add Facilities - Olaer Spring Resort')] cl
 <div class="mx-auto max-w-3xl space-y-6">
     <div>
         <p class="text-sm text-zinc-500">Facility Management</p>
-        <h1 class="text-2xl font-bold tracking-tight">Add facilities from a preset</h1>
-        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">The preset supplies type, category, capacity policy, schedule, and rates. Every physical facility receives a unique number.</p>
+        <h1 class="text-2xl font-bold tracking-tight">Clone facility</h1>
+        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Copy a physical facility's product, capacity, rates, and inclusive amenities. The source facility number is never copied; review the new number and name before saving.
+        </p>
     </div>
+
     <flux:card>
         <form wire:submit="save" class="space-y-5">
-            <flux:select wire:model="facilityProductId" label="Facility preset">
-                <option value="">Choose preset</option>
-                @foreach ($this->products as $product)
-                    <option value="{{ $product->facility_product_id }}">{{ $product->facilityType?->facility_type }} — {{ $product->display_name }}</option>
+            <flux:select wire:model.live="sourceFacilityId" label="Source facility *">
+                <option value="">Choose facility to clone</option>
+                @foreach ($this->facilities as $facility)
+                    <option value="{{ $facility->facility_id }}">
+                        {{ $facility->facility_number }} — {{ $facility->facility_name }}
+                        ({{ $facility->facilityProduct?->display_name ?? $facility->facilityType?->facility_type }})
+                    </option>
                 @endforeach
             </flux:select>
+
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input wire:model="quantity" type="number" min="1" max="100" label="Quantity" />
-                <flux:select wire:model="status" label="Initial status"><option>Available</option><option>Unavailable</option></flux:select>
+                <flux:input
+                    wire:model="facilityNumber"
+                    label="New facility number *"
+                    placeholder="Example: COT-SMA-056"
+                />
+                <flux:input
+                    wire:model="facilityName"
+                    label="New facility name *"
+                    placeholder="Example: Poolside Cottage 56"
+                />
             </div>
-            <flux:input wire:model="namePrefix" label="Optional name prefix" placeholder="Example: Poolside Cottage" description="Leave blank to use the preset name." />
+
+            <flux:select wire:model="status" label="Initial status *">
+                <option>Available</option>
+                <option>Unavailable</option>
+            </flux:select>
+
             <div class="flex justify-end gap-3">
-                <flux:button href="{{ route('admin.facilities.index') }}" wire:navigate variant="ghost">Cancel</flux:button>
-                <flux:button type="submit" variant="primary">Create facilities</flux:button>
+                <flux:button href="{{ route('admin.facilities.index') }}" wire:navigate variant="ghost">
+                    Cancel
+                </flux:button>
+                <flux:button type="submit" variant="primary">
+                    Clone facility
+                </flux:button>
             </div>
         </form>
     </flux:card>
