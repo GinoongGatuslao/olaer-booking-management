@@ -180,7 +180,7 @@ Volt::route('/reserve', 'guest.facilities.planner')
 Volt::route('/reservation/success', 'guest.reservations.success')
     ->name('guest.reservations.success');
 
-Volt::route('/book', 'guest.bookings.create')
+Volt::route('/book', 'guest.facilities.planner')
     ->name('guest.bookings.create');
 
 Volt::route('/booking/success', 'guest.bookings.success')
