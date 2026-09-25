@@ -86,6 +86,10 @@ Volt::route('/cashier/reservations', 'cashier.reservations.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.reservations.index');
 
+Volt::route('/cashier/reservations/create', 'cashier.reservations.create')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.reservations.create');
+
 Volt::route('/cashier/bookings', 'cashier.bookings.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.bookings.index');
