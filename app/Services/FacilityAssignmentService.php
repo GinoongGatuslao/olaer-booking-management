@@ -84,6 +84,44 @@ class FacilityAssignmentService
                 'address_id' => $address->address_id,
             ]);
             $totalPrice = $this->money->add(...collect($assignments)->pluck('quote.total_price')->all());
+            $paymentAmount = null;
+            $paymentMode = null;
+            $paymentReference = null;
+            $proofPath = null;
+
+            if (array_key_exists('payment_amount', $guestData)) {
+                $paymentAmount = $this->money->normalize((string) $guestData['payment_amount']);
+                $minimumPayment = $this->money->percentage($totalPrice, '0.500000');
+
+                if ($this->money->compare($paymentAmount, $minimumPayment) === -1) {
+                    throw new InvalidArgumentException(
+                        'Reservation downpayment must be at least 50% of the final discounted total.',
+                    );
+                }
+
+                if ($this->money->compare($paymentAmount, $totalPrice) === 1) {
+                    throw new InvalidArgumentException(
+                        'Reservation downpayment cannot exceed the reservation total.',
+                    );
+                }
+
+                $paymentMode = ModeOfPayment::query()
+                    ->whereRaw('LOWER(mode_of_payment) = ?', ['gcash'])
+                    ->first();
+
+                if ($paymentMode === null) {
+                    throw new InvalidArgumentException('GCash payment mode is not configured.');
+                }
+
+                $paymentReference = $this->gcashReferences->assertAvailable(
+                    trim((string) ($guestData['reference_number'] ?? '')),
+                );
+                $proofPath = trim((string) ($guestData['proof_of_payment_path'] ?? ''));
+
+                if ($proofPath === '') {
+                    throw new InvalidArgumentException('Proof of payment is required.');
+                }
+            }
 
             $reservation = Reservation::query()->create([
                 'r_ref_no' => $this->newReference(),
@@ -130,6 +168,24 @@ class FacilityAssignmentService
                 }
             }
 
+            if ($paymentAmount !== null && $paymentMode !== null) {
+                Payment::query()->create([
+                    'p_ref_no' => $this->newPaymentReference(),
+                    'booking_id' => null,
+                    'reservation_id' => $reservation->reservation_id,
+                    'entrance_slip_id' => null,
+                    'mode_of_payment_id' => $paymentMode->mode_of_payment_id,
+                    'reference_number' => $paymentReference,
+                    'proof_of_payment_path' => $proofPath,
+                    'amount_paid' => $paymentAmount,
+                    'date_paid' => today()->toDateString(),
+                    'user_id' => null,
+                    'payment_status' => 'Pending',
+                    'verified_by_user_id' => null,
+                    'verified_at' => null,
+                ]);
+            }
+
             $lockedIntent->update([
                 'status' => 'Fulfilled',
                 'reservation_id' => $reservation->reservation_id,
@@ -141,6 +197,7 @@ class FacilityAssignmentService
                 'details.facility.facilityType',
                 'details.discount',
                 'extraGuests',
+                'payments.modeOfPayment',
             ]);
         }, attempts: 3);
 
