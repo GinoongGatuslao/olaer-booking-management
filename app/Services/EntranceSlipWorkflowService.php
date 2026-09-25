@@ -169,6 +169,81 @@ class EntranceSlipWorkflowService
     }
 
     /** @param array<string, mixed> $data */
+    public function quote(array $data): array
+    {
+        return $this->calculationPayload($data)['calculation'];
+    }
+
+    /**
+     * Cashier-only direct Walk-In admission. The entrance charge is settled
+     * through the parent booking payment, so the slip itself is issued paid
+     * and receives an auditable credit adjustment rather than a duplicate
+     * payment row/reference number.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function issueSettledWalkIn(array $data): EntranceSlip
+    {
+        $cashierUserId = (int) ($data['user_id'] ?? 0);
+        $this->guardCashier($cashierUserId);
+        $payload = $this->calculationPayload($data);
+
+        return DB::transaction(function () use ($data, $cashierUserId, $payload): EntranceSlip {
+            $calculation = $payload['calculation'];
+            $total = $this->money->normalize((string) $calculation['amount_due']);
+
+            $slip = EntranceSlip::query()->create([
+                'no_of_adult' => $payload['counts']['adult'],
+                'no_of_children' => $payload['counts']['children'],
+                'no_of_PWD_SC' => $payload['counts']['pwd_sc'],
+                'no_of_Male' => $payload['male_count'],
+                'no_of_Female' => $payload['female_count'],
+                'no_of_Tourist' => $payload['tourist_count'],
+                'created_by_user_id' => $cashierUserId,
+                'guest_id' => filled($data['guest_id'] ?? null) ? (int) $data['guest_id'] : null,
+                'date_created' => Carbon::today()->toDateString(),
+                'time_created' => Carbon::now()->format('H:i:s'),
+                'total_price' => $total,
+                'amount_due' => '0.00',
+                'handled_by_user_id' => $cashierUserId,
+                'admitted_by_user_id' => $cashierUserId,
+                'admitted_at' => now(),
+                'status' => 'Paid',
+            ]);
+
+            foreach ($calculation['lines'] as $line) {
+                $slip->details()->create([
+                    'entrance_fee_id' => (int) $line['entrance_fee_id'],
+                    'unit_rate_snapshot' => number_format((float) $line['unit_price'], 2, '.', ''),
+                    'guest_quantity' => (int) $line['quantity'],
+                    'discount_id' => $line['discount_id'] ? (int) $line['discount_id'] : null,
+                    'discount_rate_snapshot' => number_format((float) $line['discount_percent'] / 100, 6, '.', ''),
+                    'discounted_quantity' => (int) $line['discounted_quantity'],
+                    'line_total_snapshot' => number_format((float) $line['line_total'], 2, '.', ''),
+                ]);
+            }
+
+            TransactionAdjustment::query()->create([
+                'reservation_id' => null,
+                'booking_id' => null,
+                'entrance_slip_id' => $slip->entrance_slip_id,
+                'direction' => 'Credit',
+                'amount' => $total,
+                'reason' => 'Settled through direct Walk-In booking core payment.',
+                'created_by_user_id' => $cashierUserId,
+            ]);
+
+            return $slip->fresh([
+                'details.entranceFee',
+                'details.discount',
+                'createdBy',
+                'handledBy',
+                'admittedBy',
+            ]);
+        }, attempts: 3);
+    }
+
+    /** @param array<string, mixed> $data */
     public function updateBeforeAdmission(int $entranceSlipId, array $data): EntranceSlip
     {
         $securityUserId = (int) ($data['user_id'] ?? 0);
