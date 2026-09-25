@@ -5,6 +5,7 @@ use App\Models\FacilityInspection;
 use App\Models\FacilityInspectionRequest;
 use App\Models\Fine;
 use App\Models\GuestFine;
+use App\Models\InspectionDraftFine;
 use App\Services\CheckOutInspectionRequestService;
 use App\Services\FacilityInspectionWorkflowService;
 use Illuminate\Database\Eloquent\Collection;
@@ -67,6 +68,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
             'fines' => $this->fines(),
             'selectedChecklistItems' => $this->selectedChecklistItems(),
             'selectedGuestFines' => $this->selectedGuestFines(),
+            'selectedDraftFines' => $this->selectedDraftFines(),
             'selectedInspection' => $this->selectedInspection(),
             'selectedInspectionRequest' =>
                 $this->selectedInspectionRequest(),
@@ -377,13 +379,52 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 
             session()->flash(
                 'success',
-                'Fine recorded and added to cashier billing.',
+                'Fine saved as draft. It will not affect cashier billing until Complete Inspection.',
             );
         } catch (\Throwable $exception) {
             $this->addError(
                 'inspection',
                 $exception->getMessage(),
             );
+        }
+    }
+
+    public function completeInspection(
+        FacilityInspectionWorkflowService $inspectionWorkflow,
+    ): void {
+        if ($this->selectedBookingDetailsId === null) {
+            return;
+        }
+
+        try {
+            $inspectionWorkflow->completeInspection(
+                $this->selectedBookingDetailsId,
+                (int) Auth::id(),
+                trim($this->remarks) !== '' ? trim($this->remarks) : null,
+            );
+
+            session()->flash(
+                'success',
+                'Inspection completed. Draft fines are now posted to cashier billing and locked.',
+            );
+        } catch (\Throwable $exception) {
+            $this->addError('inspection', $exception->getMessage());
+        }
+    }
+
+    public function removeDraftFine(
+        int $draftFineId,
+        FacilityInspectionWorkflowService $inspectionWorkflow,
+    ): void {
+        try {
+            $inspectionWorkflow->removeDraftFine(
+                $draftFineId,
+                (int) Auth::id(),
+            );
+
+            session()->flash('success', 'Draft fine removed.');
+        } catch (\Throwable $exception) {
+            $this->addError('inspection', $exception->getMessage());
         }
     }
 
@@ -410,12 +451,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
             return false;
         }
 
-        if ($request->status === 'In Progress') {
-            return true;
-        }
-
-        return $request->status === 'Completed'
-            && $inspection?->inspection_status === 'Damage Found';
+        return $request->status === 'In Progress';
     }
 
     public function requestStatusColor(string $status): string
@@ -935,6 +971,27 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         );
     }
 
+    private function selectedDraftFines(): Collection
+    {
+        if ($this->selectedRequestId === null) {
+            return new Collection();
+        }
+
+        return InspectionDraftFine::query()
+            ->with([
+                'fine.amenity.amenityName',
+                'fine.damageType',
+                'createdBy',
+                'updatedBy',
+            ])
+            ->where(
+                'facility_inspection_request_id',
+                $this->selectedRequestId,
+            )
+            ->orderBy('inspection_draft_fine_id')
+            ->get();
+    }
+
     private function selectedGuestFines(): Collection
     {
         if (
@@ -1272,10 +1329,9 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 
                     <flux:button
                         wire:click="markNoDamage"
-                        wire:confirm="Confirm that all checklist items are complete and undamaged?"
                         variant="primary"
                     >
-                        Mark All Complete / No Damage
+                        Complete as No Damage
                     </flux:button>
                 </div>
             @elseif (
@@ -1294,9 +1350,56 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                 </div>
             @endif
 
+            @if ($selectedDraftFines->isNotEmpty())
+                <div class="mt-5 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h3 class="font-semibold text-amber-950 dark:text-amber-100">Draft fines</h3>
+                            <p class="text-sm text-amber-800 dark:text-amber-200">Not payable yet. Review these entries, then complete the inspection to post and lock them.</p>
+                        </div>
+                        @if ($this->canRecordFine())
+                            <flux:button wire:click="completeInspection" variant="primary">
+                                Complete Inspection
+                            </flux:button>
+                        @endif
+                    </div>
+
+                    <div class="mt-4 overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-900">
+                        <table class="min-w-full divide-y divide-amber-200 text-sm dark:divide-amber-900">
+                            <thead>
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Fine</th>
+                                    <th class="px-3 py-2 text-left">Qty</th>
+                                    <th class="px-3 py-2 text-left">Draft charge</th>
+                                    <th class="px-3 py-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-amber-200 dark:divide-amber-900">
+                                @foreach ($selectedDraftFines as $draftFine)
+                                    <tr>
+                                        <td class="px-3 py-2">{{ $this->formatFineLabel($draftFine->fine) }}</td>
+                                        <td class="px-3 py-2">{{ $draftFine->quantity }}</td>
+                                        <td class="px-3 py-2">₱{{ number_format((float) $draftFine->total_charge, 2) }}</td>
+                                        <td class="px-3 py-2 text-right">
+                                            @if ($draftFine->status === 'Draft' && $this->canRecordFine())
+                                                <flux:button type="button" size="sm" variant="ghost" wire:click="removeDraftFine({{ $draftFine->inspection_draft_fine_id }})">
+                                                    Remove
+                                                </flux:button>
+                                            @else
+                                                <flux:badge color="green">{{ $draftFine->status }}</flux:badge>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
+
             <div class="mt-5">
                 <h3 class="text-sm font-semibold">
-                    Recorded fines for this facility
+                    Posted fines for this facility
                 </h3>
 
                 <div class="mt-2 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -1332,7 +1435,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             @empty
                                 <tr>
                                     <td colspan="4" class="px-3 py-5 text-center text-zinc-500">
-                                        No fines have been recorded for this facility.
+                                        No fines have been posted for this facility.
                                     </td>
                                 </tr>
                             @endforelse
