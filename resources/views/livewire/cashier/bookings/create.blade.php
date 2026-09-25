@@ -6,6 +6,8 @@ use App\Models\Amenity;
 use App\Models\ModeOfPayment;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
+use App\Services\EntranceSlipWorkflowService;
+use App\Services\DecimalMoneyService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -25,6 +27,11 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
     public string $referenceNumber = '';
     public bool $walkIn = false;
     public array $amenities = [];
+    public int $adultCount = 1;
+    public int $childrenCount = 0;
+    public int $pwdScCount = 0;
+    public int $maleCount = 1;
+    public int $femaleCount = 0;
 
     public string $firstName = '';
     public string $middleName = '';
@@ -164,6 +171,57 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
     {
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+
+        if ($this->walkIn) {
+            $this->adultCount = max(1, $this->partyCount);
+            $this->childrenCount = 0;
+            $this->pwdScCount = 0;
+            $this->maleCount = max(1, $this->partyCount);
+            $this->femaleCount = 0;
+        }
+    }
+
+    public function updatedWalkIn(): void
+    {
+        if ($this->walkIn) {
+            $this->adultCount = max(1, $this->partyCount);
+            $this->maleCount = max(1, $this->partyCount);
+        }
+
+        $this->refreshRequiredPayment();
+    }
+
+    public function updatedAdultCount(): void { $this->refreshRequiredPayment(); }
+    public function updatedChildrenCount(): void { $this->refreshRequiredPayment(); }
+    public function updatedPwdScCount(): void { $this->refreshRequiredPayment(); }
+
+    public function admissionTotal(): string
+    {
+        if (! $this->walkIn) {
+            return '0.00';
+        }
+
+        try {
+            return app(DecimalMoneyService::class)->normalize((string) app(EntranceSlipWorkflowService::class)
+                ->quote($this->entrancePayload())['amount_due']);
+        } catch (\Throwable) {
+            return '0.00';
+        }
+    }
+
+    public function requiredCoreTotal(): string
+    {
+        return app(DecimalMoneyService::class)->add(
+            $this->planTotal !== '' ? $this->planTotal : '0.00',
+            $this->admissionTotal(),
+        );
+    }
+
+    private function refreshRequiredPayment(): void
+    {
+        if ($this->planTotal !== '') {
+            $this->paymentAmount = $this->requiredCoreTotal();
+        }
     }
 
     public function savePlan(
@@ -180,7 +238,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             );
             $this->syncRoomOccupantRows();
             $this->planTotal = $assignments->quoteIntentTotal($intent);
-            $this->paymentAmount = $this->planTotal;
+            $this->paymentAmount = $this->requiredCoreTotal();
         } catch (\Throwable $exception) {
             $this->addError('plan', $exception->getMessage());
         }
@@ -201,7 +259,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             $this->syncRoomOccupantRows();
 
             $this->planTotal = $assignments->quoteIntentTotal($intent);
-            $this->paymentAmount = $this->planTotal;
+            $this->paymentAmount = $this->requiredCoreTotal();
 
             $booking = $assignments->createStaffBooking($intent, [
                 'first_name' => $this->firstName,
@@ -219,6 +277,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                 'mode_of_payment_id' => (int) $this->modeOfPaymentId,
                 'reference_number' => $this->referenceNumber,
                 'walk_in' => $this->walkIn,
+                'entrance' => $this->entrancePayload(),
                 'amenities' => $this->amenities,
             ]);
 
@@ -261,6 +320,11 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'modeOfPaymentId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
             'referenceNumber' => ['nullable', 'string', 'max:100'],
             'walkIn' => ['boolean'],
+            'adultCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
+            'childrenCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
+            'pwdScCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
+            'maleCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
+            'femaleCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
             'amenities' => ['array'],
             'amenities.*.amenity_id' => ['nullable', 'integer', 'exists:tbl_amenity,amenity_id'],
             'amenities.*.quantity' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -282,6 +346,25 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function entrancePayload(): array
+    {
+        return [
+            'user_id' => (int) Auth::id(),
+            'adult_count' => $this->adultCount,
+            'children_count' => $this->childrenCount,
+            'pwd_sc_count' => $this->pwdScCount,
+            'male_count' => $this->maleCount,
+            'female_count' => $this->femaleCount,
+            'tourist_count' => 0,
+            'adult_discount_id' => null,
+            'children_discount_id' => null,
+            'pwd_sc_discount_id' => null,
+            'adult_discounted_quantity' => 0,
+            'children_discounted_quantity' => 0,
+            'pwd_sc_discounted_quantity' => 0,
+        ];
     }
 
     private function expectedRoomGuestCounts(): array
@@ -449,7 +532,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
 
         <flux:card>
             <flux:heading size="lg">Payment & admission</flux:heading>
-            <flux:text>Core facility charges must be fully paid to create the booking. GCash reference is required when GCash is selected.</flux:text>
+            <flux:text>Core facility charges—and Walk-In admission charges when applicable—must be fully paid before admission. Amenities may remain outstanding.</flux:text>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
                 <flux:select wire:model="modeOfPaymentId" label="Mode of payment *">
                     <option value="">Choose payment mode</option>
@@ -458,16 +541,35 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                     @endforeach
                 </flux:select>
                 <flux:input wire:model="referenceNumber" label="Reference number" />
-                <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Core payment" readonly />
+                <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
             </div>
             <label class="mt-4 flex items-start gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                <input wire:model="walkIn" type="checkbox" class="mt-1 rounded border-zinc-300" />
+                <input wire:model.live="walkIn" type="checkbox" class="mt-1 rounded border-zinc-300" />
                 <span>
                     <span class="block font-medium">Walk-In booking</span>
                     <span class="block text-sm text-zinc-500">Create as immediately active/checked-in after the core payment succeeds.</span>
                 </span>
             </label>
             @if ($walkIn)
+                <div class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                    <div>
+                        <p class="font-medium">Entrance / admission</p>
+                        <p class="text-sm text-zinc-500">Category total and Male + Female must each equal the booking party count. Tourist is hidden from presentation and stored as zero for this workflow.</p>
+                    </div>
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <flux:input wire:model.live="adultCount" type="number" min="0" label="Adults *" />
+                        <flux:input wire:model.live="childrenCount" type="number" min="0" label="Children *" />
+                        <flux:input wire:model.live="pwdScCount" type="number" min="0" label="PWD / Senior *" />
+                        <flux:input wire:model="maleCount" type="number" min="0" label="Male *" />
+                        <flux:input wire:model="femaleCount" type="number" min="0" label="Female *" />
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-3 text-sm">
+                        <span class="font-medium">Facility core: ₱{{ number_format((float) ($planTotal ?: 0), 2) }}</span>
+                        <span class="font-medium">Admission: ₱{{ number_format((float) $this->admissionTotal(), 2) }}</span>
+                        <span class="font-semibold">Required before admission: ₱{{ number_format((float) $this->requiredCoreTotal(), 2) }}</span>
+                    </div>
+                </div>
+
                 <div class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                     <div class="flex items-center justify-between gap-3">
                         <div>
