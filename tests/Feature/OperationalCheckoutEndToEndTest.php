@@ -337,7 +337,7 @@ class OperationalCheckoutEndToEndTest extends TestCase
             $maintenanceId,
         );
 
-        $guestFine = app(
+        $draftFine = app(
             FacilityInspectionWorkflowService::class,
         )->recordFine(
             $scenario['booking_details_id'],
@@ -349,11 +349,37 @@ class OperationalCheckoutEndToEndTest extends TestCase
             $facilityAmenityId,
         );
 
-        $this->assertSame(
-            '200.00',
-            (string) $guestFine
-                ->total_charge,
+        $this->assertSame('200.00', (string) $draftFine->total_charge);
+
+        $this->assertDatabaseHas(
+            'tbl_booking',
+            [
+                'booking_id' => $scenario['booking_id'],
+                'total_price' => 1000.00,
+                'amount_due' => 0.00,
+                'status' => 'Checked-in',
+            ],
         );
+        $this->assertDatabaseHas(
+            'tbl_facility_inspection_request',
+            [
+                'facility_inspection_request_id' => $inspectionRequest
+                    ->facility_inspection_request_id,
+                'status' => 'In Progress',
+                'assigned_to_user_id' => $maintenanceId,
+            ],
+        );
+        $this->assertDatabaseMissing('tbl_guest_fine', [
+            'booking_id' => $scenario['booking_id'],
+            'fine_id' => $fineId,
+        ]);
+
+        app(FacilityInspectionWorkflowService::class)
+            ->completeInspection(
+                $scenario['booking_details_id'],
+                $maintenanceId,
+                'Finalize damage findings.',
+            );
 
         $this->assertDatabaseHas(
             'tbl_booking',
@@ -420,7 +446,6 @@ class OperationalCheckoutEndToEndTest extends TestCase
         $this->assertDatabaseHas(
             'tbl_guest_fine',
             [
-                'guest_fine_id' => $guestFine->guest_fine_id,
                 'booking_id' => $scenario['booking_id'],
                 'booking_details_id' => $scenario['booking_details_id'],
                 'facility_id' => $scenario['facility_id'],
