@@ -4,15 +4,24 @@ use App\FacilitySchedulePolicy;
 use App\Models\FacilityProduct;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
+use App\Services\GcashProofStorageService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')] class extends Component
 {
+    use WithFileUploads;
+
     public string $token = '';
+    public bool $bookingMode = false;
+    public string $planTotal = '';
+    public string $paymentAmount = '';
+    public string $referenceNumber = '';
+    public $proofOfPayment = null;
     public int $partyCount = 1;
 
     /** @var array<int, array<string, mixed>> */
@@ -33,7 +42,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
     public function mount(FacilityRequirementService $requirements): void
     {
-        $storedToken = (string) session('guest.facility_plan_token', '');
+        $this->bookingMode = request()->routeIs('guest.bookings.create');
+        $sessionKey = $this->bookingMode ? 'guest.booking_plan_token' : 'guest.facility_plan_token';
+        $storedToken = (string) session($sessionKey, '');
 
         try {
             $intent = $storedToken !== ''
@@ -45,7 +56,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         if ($intent === null || $intent->status !== 'Draft') {
             $intent = $requirements->createIntent(session()->getId());
-            session()->put('guest.facility_plan_token', $intent->token);
+            session()->put($sessionKey, $intent->token);
         }
 
         $this->token = $intent->token;
@@ -139,16 +150,22 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         $this->syncExtraGuestRows();
     }
 
-    public function savePlan(FacilityRequirementService $requirements): void
-    {
+    public function savePlan(
+        FacilityRequirementService $requirements,
+        FacilityAssignmentService $assignments,
+    ): void {
         try {
-            $requirements->replaceGroups(
+            $intent = $requirements->replaceGroups(
                 $requirements->ownedIntent($this->token, session()->getId()),
                 $this->partyCount,
                 $this->groups,
             );
             $this->syncExtraGuestRows();
-            session()->flash('success', 'Facility plan saved. Availability was checked against current reservations and bookings.');
+            $this->planTotal = $assignments->quoteIntentTotal($intent);
+            if ($this->bookingMode) {
+                $this->paymentAmount = $this->planTotal;
+            }
+            session()->flash('success', 'Facility plan saved. Availability and pricing were checked against current reservations and bookings.');
         } catch (\Throwable $exception) {
             $this->addError('plan', $exception->getMessage());
         }
@@ -157,8 +174,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     public function submit(
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
+        GcashProofStorageService $proofStorage,
     ): void {
         $this->validate($this->rules());
+
+        $proofPath = null;
 
         try {
             $intent = $requirements->replaceGroups(
@@ -167,7 +187,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $this->groups,
             );
             $this->syncExtraGuestRows();
-            $reservation = $assignments->createReservation($intent, [
+            $this->planTotal = $assignments->quoteIntentTotal($intent);
+
+            $guestData = [
                 'first_name' => $this->firstName,
                 'middle_name' => $this->middleName,
                 'last_name' => $this->lastName,
@@ -178,12 +200,34 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 'barangay' => $this->barangay,
                 'purok' => $this->purok,
                 'extra_guests' => $this->extraGuests,
-            ]);
+            ];
+
+            if ($this->bookingMode) {
+                $proofPath = $proofStorage->store($this->proofOfPayment);
+                $booking = $assignments->createPendingBooking($intent, [
+                    ...$guestData,
+                    'payment_amount' => $this->paymentAmount,
+                    'reference_number' => $this->referenceNumber,
+                    'proof_of_payment_path' => $proofPath,
+                ]);
+
+                session()->forget('guest.booking_plan_token');
+                session()->put('guest.booking_confirmation_id', (int) $booking->booking_id);
+                $this->redirect(route('guest.bookings.success'), navigate: true);
+
+                return;
+            }
+
+            $reservation = $assignments->createReservation($intent, $guestData);
 
             session()->forget('guest.facility_plan_token');
             session()->put('guest.reservation_confirmation_id', (int) $reservation->reservation_id);
             $this->redirect(route('guest.reservations.success'), navigate: true);
         } catch (\Throwable $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
             $this->addError('plan', $exception->getMessage());
         }
     }
@@ -213,6 +257,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
             'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
+            ...($this->bookingMode ? [
+                'paymentAmount' => ['required', 'numeric', 'min:1'],
+                'referenceNumber' => ['required', 'string', 'max:50'],
+                'proofOfPayment' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
+            ] : []),
         ];
     }
 
@@ -277,9 +326,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
 <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
     <div class="max-w-3xl">
-        <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Facility planner</p>
+        <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">{{ $bookingMode ? 'Direct booking' : 'Reservation' }}</p>
         <h1 class="mt-1 text-3xl font-bold tracking-tight text-zinc-950 dark:text-white">Plan one stay with multiple facilities</h1>
-        <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Choose facility groups and quantities. The system checks live availability and assigns the exact units only when you submit.</p>
+        <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Choose facility products, schedules, and quantities. The system assigns exact physical units only when the transaction is submitted.</p>
     </div>
 
     @if (session('success'))
@@ -346,9 +395,12 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 @endforeach
             </div>
 
-            <div class="mt-5 flex flex-wrap gap-3">
+            <div class="mt-5 flex flex-wrap items-center gap-3">
                 <flux:button type="button" variant="ghost" wire:click="addGroup">Add another facility group</flux:button>
-                <flux:button type="button" wire:click="savePlan">Check and save availability</flux:button>
+                <flux:button type="button" wire:click="savePlan">Check availability & total</flux:button>
+                @if ($planTotal !== '')
+                    <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Current total: ₱{{ number_format((float) $planTotal, 2) }}</span>
+                @endif
             </div>
         </flux:card>
 
@@ -387,6 +439,24 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </flux:card>
         @endif
 
+        @if ($bookingMode)
+            <flux:card>
+                <flux:heading size="lg">GCash payment verification</flux:heading>
+                <flux:text class="mt-1">Direct online booking requires full payment. The payment remains Pending until a Cashier verifies the reference and private proof.</flux:text>
+                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Payment amount" readonly />
+                    <flux:input wire:model="referenceNumber" label="GCash reference number" />
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Proof of payment <span class="text-red-600">*</span>
+                    </label>
+                    <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950" />
+                    <p class="mt-1 text-xs text-zinc-500">JPG, PNG, or PDF up to 4 MB. Stored privately.</p>
+                </div>
+            </flux:card>
+        @endif
+
         @if ($errors->any())
             <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
                 <ul class="list-disc space-y-1 pl-5">
@@ -398,7 +468,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         @endif
 
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">Submit reservation plan</flux:button>
+            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Submit booking for verification' : 'Submit reservation' }}</flux:button>
         </div>
     </form>
 </section>
