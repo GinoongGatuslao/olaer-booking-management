@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\EntranceSlip;
+use App\Models\TransactionAdjustment;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,8 @@ class EntranceSlipWorkflowService
 {
     public function __construct(
         private readonly EntranceSlipCalculator $calculator,
+        private readonly DecimalMoneyService $money,
+        private readonly TransactionLedgerService $ledger,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -212,6 +215,108 @@ class EntranceSlipWorkflowService
             }
 
             return $slip->fresh(['details.entranceFee', 'details.discount', 'createdBy', 'payments']);
+        }, attempts: 3);
+    }
+
+    /**
+     * Locked-slip correction: preserve the original as voided history and
+     * issue a replacement. Verified value carries only to this replacement.
+     *
+     * @param array<string, mixed> $replacementData
+     */
+    public function voidAndRecreate(
+        int $entranceSlipId,
+        string $reason,
+        array $replacementData,
+    ): EntranceSlip {
+        $securityUserId = (int) ($replacementData['user_id'] ?? 0);
+        $this->guardSecurityGuard($securityUserId);
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new InvalidArgumentException('A void reason is required.');
+        }
+
+        return DB::transaction(function () use (
+            $entranceSlipId,
+            $reason,
+            $replacementData,
+            $securityUserId,
+        ): EntranceSlip {
+            $old = EntranceSlip::query()
+                ->with(['payments', 'details'])
+                ->whereKey($entranceSlipId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ((int) $old->created_by_user_id !== $securityUserId) {
+                throw new InvalidArgumentException(
+                    'Only the security guard who created the slip may initiate its correction.',
+                );
+            }
+
+            if ($old->admitted_at === null && $old->payments()->doesntExist()) {
+                throw new InvalidArgumentException(
+                    'This slip is still editable. Use the normal pre-admission edit workflow.',
+                );
+            }
+
+            if ($old->voided_at !== null || $old->status === 'Voided') {
+                throw new InvalidArgumentException('This entrance slip is already voided.');
+            }
+
+            $replacement = $this->issue($replacementData);
+
+            $verifiedValue = $this->money->add(
+                ...$old->payments
+                    ->where('payment_status', 'Verified')
+                    ->pluck('amount_paid')
+                    ->map(fn (mixed $amount): string => (string) $amount)
+                    ->all(),
+            );
+            $replacementTotal = $this->ledger
+                ->summaryForEntranceSlip($replacement)['total'];
+            $carryValue = $this->money->compare($verifiedValue, $replacementTotal) === 1
+                ? $replacementTotal
+                : $verifiedValue;
+
+            if ($this->money->compare($carryValue, '0.00') === 1) {
+                TransactionAdjustment::query()->create([
+                    'reservation_id' => null,
+                    'booking_id' => null,
+                    'entrance_slip_id' => $replacement->entrance_slip_id,
+                    'direction' => 'Credit',
+                    'amount' => $carryValue,
+                    'reason' => 'Verified value carried from voided entrance slip #'.$old->entrance_slip_id,
+                    'created_by_user_id' => $securityUserId,
+                ]);
+            }
+
+            $replacementSummary = $this->ledger->summaryForEntranceSlip(
+                $replacement->fresh(['details', 'payments']),
+            );
+            $replacement->update([
+                'total_price' => $replacementSummary['total'],
+                'amount_due' => $replacementSummary['balance'],
+                'status' => $this->money->compare($replacementSummary['balance'], '0.00') !== 1
+                    ? 'Paid'
+                    : 'Unpaid',
+            ]);
+
+            $old->update([
+                'voided_at' => now(),
+                'voided_by_user_id' => $securityUserId,
+                'void_reason' => $reason,
+                'replacement_entrance_slip_id' => $replacement->entrance_slip_id,
+                'status' => 'Voided',
+            ]);
+
+            return $replacement->fresh([
+                'details.entranceFee',
+                'details.discount',
+                'createdBy',
+                'payments',
+            ]);
         }, attempts: 3);
     }
 
