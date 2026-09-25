@@ -22,7 +22,7 @@ class GcashPaymentIntegrityTest extends TestCase
     public function test_only_cashier_can_verify_gcash_payment(): void
     {
         $payment = $this->createPendingGcashPayment();
-        $manager = $this->createUser('Manager');
+        $manager = $this->createUser('Admin');
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
