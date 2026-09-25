@@ -21,6 +21,9 @@ class InspectionDraftFine extends Model
         'unit_charge_snapshot',
         'total_charge',
         'remarks',
+        'status',
+        'guest_fine_id',
+        'published_at',
         'created_by_user_id',
         'updated_by_user_id',
     ];
@@ -32,6 +35,7 @@ class InspectionDraftFine extends Model
             'source_id' => 'integer',
             'unit_charge_snapshot' => 'decimal:2',
             'total_charge' => 'decimal:2',
+            'published_at' => 'datetime',
         ];
     }
 
@@ -48,6 +52,11 @@ class InspectionDraftFine extends Model
     public function fine(): BelongsTo
     {
         return $this->belongsTo(Fine::class, 'fine_id', 'fine_id');
+    }
+
+    public function publishedFine(): BelongsTo
+    {
+        return $this->belongsTo(GuestFine::class, 'guest_fine_id', 'guest_fine_id');
     }
 
     public function createdBy(): BelongsTo
