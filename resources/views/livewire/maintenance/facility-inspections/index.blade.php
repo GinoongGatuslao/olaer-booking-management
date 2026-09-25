@@ -51,6 +51,8 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
     public ?int $fineId = null;
     public int $fineQuantity = 1;
     public string $remarks = '';
+    public ?string $pendingCompletion = null;
+    public bool $showCompletionDialog = false;
 
     public function mount(): void
     {
@@ -279,6 +281,34 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         $this->remarks = '';
 
         $this->resetValidation();
+    }
+
+    public function requestCompletion(string $type): void
+    {
+        if (! in_array($type, ['no_damage', 'publish_fines'], true)) {
+            return;
+        }
+
+        $this->pendingCompletion = $type;
+        $this->showCompletionDialog = true;
+    }
+
+    public function confirmCompletion(
+        FacilityInspectionWorkflowService $inspectionWorkflow,
+    ): void {
+        $type = $this->pendingCompletion;
+        $this->showCompletionDialog = false;
+        $this->pendingCompletion = null;
+
+        if ($type === 'no_damage') {
+            $this->markNoDamage($inspectionWorkflow);
+
+            return;
+        }
+
+        if ($type === 'publish_fines') {
+            $this->completeInspection($inspectionWorkflow);
+        }
     }
 
     public function markNoDamage(
@@ -1328,7 +1358,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                     </div>
 
                     <flux:button
-                        wire:click="markNoDamage"
+                        wire:click="requestCompletion('no_damage')"
                         variant="primary"
                     >
                         Complete as No Damage
@@ -1358,7 +1388,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             <p class="text-sm text-amber-800 dark:text-amber-200">Not payable yet. Review these entries, then complete the inspection to post and lock them.</p>
                         </div>
                         @if ($this->canRecordFine())
-                            <flux:button wire:click="completeInspection" variant="primary">
+                            <flux:button wire:click="requestCompletion('publish_fines')" variant="primary">
                                 Complete Inspection
                             </flux:button>
                         @endif
@@ -1737,4 +1767,27 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
             {{ $inspectionRequests->links() }}
         </x-slot:pagination>
     </x-staff-table-shell>
+    <flux:modal wire:model="showCompletionDialog" class="md:w-[32rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">
+                    {{ $pendingCompletion === 'publish_fines' ? 'Complete inspection and publish fines?' : 'Complete inspection with no damage?' }}
+                </flux:heading>
+                <flux:text class="mt-1">
+                    @if ($pendingCompletion === 'publish_fines')
+                        All current draft fines will become payable, the booking balance will be updated atomically, and the inspection will be locked against ordinary edits.
+                    @else
+                        The inspection will be completed and locked with no payable damage findings.
+                    @endif
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showCompletionDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="confirmCompletion">
+                    Complete Inspection
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>
