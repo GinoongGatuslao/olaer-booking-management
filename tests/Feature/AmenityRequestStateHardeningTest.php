@@ -21,7 +21,7 @@ class AmenityRequestStateHardeningTest extends TestCase
         $bookingId = $this->createBooking('Checked-in', 0.00);
         $this->createBookingDetail($bookingId, $facilityId, 'Checked-in');
         $amenityId = $this->createAmenity(100.00);
-        $managerId = $this->createUser('Manager');
+        $managerId = $this->createUser('Admin');
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
