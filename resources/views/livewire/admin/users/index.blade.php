@@ -37,6 +37,8 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public int $perPage = 10;
 
     public ?int $editingUserId = null;
+    public ?int $statusChangeUserId = null;
+    public bool $showStatusDialog = false;
     public string $firstName = '';
     public string $middleName = '';
     public string $lastName = '';
@@ -417,6 +419,29 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         $this->resetForm();
     }
 
+    public function requestStatusChange(int $userId): void
+    {
+        if ($userId === (int) Auth::id()) {
+            return;
+        }
+
+        User::query()->findOrFail($userId);
+        $this->statusChangeUserId = $userId;
+        $this->showStatusDialog = true;
+    }
+
+    public function confirmStatusChange(): void
+    {
+        if ($this->statusChangeUserId === null) {
+            return;
+        }
+
+        $userId = $this->statusChangeUserId;
+        $this->showStatusDialog = false;
+        $this->statusChangeUserId = null;
+        $this->toggleStatus($userId);
+    }
+
     public function toggleStatus(int $userId): void
     {
         if ($userId === (int) Auth::id()) {
@@ -700,8 +725,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                             </flux:button>
 
                                             <flux:button
-                                                wire:click="toggleStatus({{ $user->user_id }})"
-                                                wire:confirm="{{ $user->status === 'Active' ? 'Deactivate this account?' : 'Activate this account?' }}"
+                                                wire:click="requestStatusChange({{ $user->user_id }})"
                                                 size="sm"
                                                 variant="ghost"
                                                 :disabled="(int) $user->user_id === (int) auth()->id()"
@@ -848,4 +872,23 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             </flux:card>
         </aside>
     </div>
+    <flux:modal wire:model="showStatusDialog" class="md:w-[28rem]">
+        @php($statusUser = $statusChangeUserId ? \App\Models\User::query()->find($statusChangeUserId) : null)
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Confirm account status change</flux:heading>
+                <flux:text class="mt-1">
+                    @if ($statusUser)
+                        {{ $statusUser->status === 'Active' ? 'Deactivate' : 'Activate' }}
+                        {{ $this->fullName($statusUser) }}?
+                    @endif
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showStatusDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="danger" wire:click="confirmStatusChange">Confirm</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>
