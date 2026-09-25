@@ -19,10 +19,8 @@
             <p>Senior / PWD: {{ $entranceSlip->no_of_PWD_SC }}</p>
         </div>
         <div class="rounded-xl border border-zinc-200 p-4">
-            <h3 class="mb-2 font-semibold">Tourism Count</h3>
             <p>Male: {{ $entranceSlip->no_of_Male }}</p>
             <p>Female: {{ $entranceSlip->no_of_Female }}</p>
-            <p>Tourist: {{ $entranceSlip->no_of_Tourist }}</p>
         </div>
     </div>
 
