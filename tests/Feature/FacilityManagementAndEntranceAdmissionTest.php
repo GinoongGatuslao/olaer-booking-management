@@ -7,6 +7,8 @@ use App\FacilityProductCode;
 use App\FacilityRateCode;
 use App\FacilitySchedulePolicy;
 use App\Models\EntranceFee;
+use App\Models\Facility;
+use App\Models\FacilityPrice;
 use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Models\ModeOfPayment;
@@ -24,7 +26,7 @@ class FacilityManagementAndEntranceAdmissionTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_facility_preset_bulk_creation_generates_unique_numbers_and_rates(): void
+    public function test_facility_clone_copies_configuration_but_never_source_number(): void
     {
         $type = FacilityType::query()->create(['facility_type' => 'Room']);
         $product = FacilityProduct::query()->create([
@@ -45,16 +47,39 @@ class FacilityManagementAndEntranceAdmissionTest extends TestCase
             'amount' => '1500.00',
             'is_active' => true,
         ]);
+        $source = Facility::query()->create([
+            'facility_number' => 'ROO-STA-001',
+            'facility_name' => 'Garden Room 1',
+            'facility_type_id' => $type->facility_type_id,
+            'facility_product_id' => $product->facility_product_id,
+            'facility_size' => 'Standard',
+            'facility_status' => 'Available',
+            'capacity' => '4 default / 10 max',
+            'min_capacity' => 4,
+            'max_capacity' => 10,
+        ]);
+        FacilityPrice::query()->create([
+            'facility_id' => $source->facility_id,
+            'rate_type' => 'Overnight',
+            'facility_price' => '1500.00',
+        ]);
 
-        $created = app(FacilityManagementService::class)->createFromPreset(
-            $product->facility_product_id,
-            3,
-            'Garden Room',
+        $clone = app(FacilityManagementService::class)->cloneFacility(
+            $source->facility_id,
+            'ROO-STA-002',
+            'Garden Room 2',
         );
 
-        $this->assertSame(['ROO-STA-001', 'ROO-STA-002', 'ROO-STA-003'], $created->pluck('facility_number')->all());
-        $this->assertSame(['Garden Room 1', 'Garden Room 2', 'Garden Room 3'], $created->pluck('facility_name')->all());
-        $this->assertDatabaseCount('tbl_facility_price', 3);
+        $this->assertSame('ROO-STA-002', $clone->facility_number);
+        $this->assertNotSame($source->facility_number, $clone->facility_number);
+        $this->assertSame($source->facility_product_id, $clone->facility_product_id);
+        $this->assertSame(4, $clone->min_capacity);
+        $this->assertSame(10, $clone->max_capacity);
+        $this->assertDatabaseHas('tbl_facility_price', [
+            'facility_id' => $clone->facility_id,
+            'rate_type' => 'Overnight',
+            'facility_price' => '1500.00',
+        ]);
     }
 
     public function test_entrance_slip_is_editable_by_creator_until_payment_and_cashier_admission(): void
