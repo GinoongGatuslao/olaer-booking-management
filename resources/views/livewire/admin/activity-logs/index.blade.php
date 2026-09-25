@@ -42,6 +42,9 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
     #[Url(as: 'per_page', except: 25)]
     public int $perPage = 25;
 
+    public ?int $selectedLogId = null;
+    public bool $showDetailModal = false;
+
     public function updatedSearch(): void
     {
         $this->resetPage();
@@ -256,6 +259,31 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                 })
                 ->count(),
         ];
+    }
+
+    public function showDetails(int $activityLogId): void
+    {
+        ActivityLog::query()->findOrFail($activityLogId);
+        $this->selectedLogId = $activityLogId;
+        $this->showDetailModal = true;
+    }
+
+    public function closeDetails(): void
+    {
+        $this->showDetailModal = false;
+        $this->selectedLogId = null;
+    }
+
+    #[Computed]
+    public function selectedLog(): ?ActivityLog
+    {
+        if ($this->selectedLogId === null) {
+            return null;
+        }
+
+        return ActivityLog::query()
+            ->with('user')
+            ->find($this->selectedLogId);
     }
 
     public function actorName(ActivityLog $log): string
@@ -709,44 +737,16 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                                 </p>
 
                                 @if ($log->user_agent)
-                                    <details class="mt-2 text-xs">
-                                        <summary class="cursor-pointer hover:underline">
-                                            User agent
-                                        </summary>
-
-                                        <p class="mt-1 max-w-sm break-all rounded bg-zinc-100 p-2 dark:bg-zinc-800">
-                                            {{ $log->user_agent }}
-                                        </p>
-                                    </details>
+                                    <flux:button type="button" size="sm" variant="ghost" class="mt-2" wire:click="showDetails({{ $log->activity_log_id }})">
+                                        User agent
+                                    </flux:button>
                                 @endif
                             </td>
 
                             <td class="px-4 py-4">
-                                @if ($log->old_values || $log->new_values)
-                                    <details class="group">
-                                        <summary class="cursor-pointer font-medium text-zinc-700 hover:underline dark:text-zinc-300">
-                                            View details
-                                        </summary>
-
-                                        <div class="mt-3 grid min-w-[24rem] gap-3">
-                                            @if ($log->old_values)
-                                                <div>
-                                                    <p class="mb-1 text-xs font-semibold uppercase text-zinc-500">Before</p>
-                                                    <pre class="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{{ json_encode($log->old_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
-                                                </div>
-                                            @endif
-
-                                            @if ($log->new_values)
-                                                <div>
-                                                    <p class="mb-1 text-xs font-semibold uppercase text-zinc-500">After</p>
-                                                    <pre class="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{{ json_encode($log->new_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
-                                                </div>
-                                            @endif
-                                        </div>
-                                    </details>
-                                @else
-                                    <span class="text-zinc-400">—</span>
-                                @endif
+                                <flux:button type="button" size="sm" variant="ghost" wire:click="showDetails({{ $log->activity_log_id }})">
+                                    View details
+                                </flux:button>
                             </td>
                         </tr>
                     @empty
@@ -774,4 +774,47 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
             {{ $this->logs->links() }}
         </div>
     </flux:card>
+
+    <flux:modal wire:model="showDetailModal" class="md:w-[46rem]">
+        @if ($this->selectedLog)
+            <div class="space-y-5">
+                <div>
+                    <flux:heading size="lg">Activity log #{{ $this->selectedLog->activity_log_id }}</flux:heading>
+                    <flux:text class="mt-1">{{ $this->selectedLog->description }}</flux:text>
+                </div>
+
+                <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                    <div><dt class="text-zinc-500">Actor</dt><dd class="font-medium">{{ $this->actorName($this->selectedLog) }}</dd></div>
+                    <div><dt class="text-zinc-500">Date & time</dt><dd class="font-medium">{{ $this->selectedLog->created_at?->format('M d, Y h:i:s A') }}</dd></div>
+                    <div><dt class="text-zinc-500">Module / Action</dt><dd class="font-medium">{{ $this->selectedLog->module }} · {{ $this->selectedLog->action }}</dd></div>
+                    <div><dt class="text-zinc-500">Record</dt><dd class="font-medium">{{ $this->subjectName($this->selectedLog) }}</dd></div>
+                    <div><dt class="text-zinc-500">IP address</dt><dd class="font-medium">{{ $this->selectedLog->ip_address ?? 'Not recorded' }}</dd></div>
+                    <div><dt class="text-zinc-500">Client</dt><dd class="font-medium">{{ $this->deviceSummary($this->selectedLog->user_agent) }}</dd></div>
+                </dl>
+
+                <div>
+                    <p class="mb-1 text-xs font-semibold uppercase text-zinc-500">User Agent</p>
+                    <p class="break-all rounded-lg bg-zinc-100 p-3 text-xs dark:bg-zinc-800">{{ $this->selectedLog->user_agent ?? 'Not recorded' }}</p>
+                </div>
+
+                @if ($this->selectedLog->old_values)
+                    <div>
+                        <p class="mb-1 text-xs font-semibold uppercase text-zinc-500">Before</p>
+                        <pre class="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{{ json_encode($this->selectedLog->old_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                    </div>
+                @endif
+
+                @if ($this->selectedLog->new_values)
+                    <div>
+                        <p class="mb-1 text-xs font-semibold uppercase text-zinc-500">After</p>
+                        <pre class="max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{{ json_encode($this->selectedLog->new_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                    </div>
+                @endif
+
+                <div class="flex justify-end">
+                    <flux:button type="button" variant="ghost" wire:click="closeDetails">Close</flux:button>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 </div>
