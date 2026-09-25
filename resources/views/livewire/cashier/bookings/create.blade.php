@@ -2,6 +2,7 @@
 
 use App\FacilitySchedulePolicy;
 use App\Models\FacilityProduct;
+use App\Models\Amenity;
 use App\Models\ModeOfPayment;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
@@ -23,6 +24,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
     public string $modeOfPaymentId = '';
     public string $referenceNumber = '';
     public bool $walkIn = false;
+    public array $amenities = [];
 
     public string $firstName = '';
     public string $middleName = '';
@@ -147,6 +149,17 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         $this->planTotal = '';
     }
 
+    public function addAmenity(): void
+    {
+        $this->amenities[] = ['amenity_id' => '', 'quantity' => 1];
+    }
+
+    public function removeAmenity(int $index): void
+    {
+        unset($this->amenities[$index]);
+        $this->amenities = array_values($this->amenities);
+    }
+
     public function updatedPartyCount(): void
     {
         $this->syncRoomOccupantRows();
@@ -206,6 +219,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                 'mode_of_payment_id' => (int) $this->modeOfPaymentId,
                 'reference_number' => $this->referenceNumber,
                 'walk_in' => $this->walkIn,
+                'amenities' => $this->amenities,
             ]);
 
             session()->forget('cashier.booking_plan_token');
@@ -247,6 +261,9 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'modeOfPaymentId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
             'referenceNumber' => ['nullable', 'string', 'max:100'],
             'walkIn' => ['boolean'],
+            'amenities' => ['array'],
+            'amenities.*.amenity_id' => ['nullable', 'integer', 'exists:tbl_amenity,amenity_id'],
+            'amenities.*.quantity' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }
 
@@ -450,6 +467,33 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                     <span class="block text-sm text-zinc-500">Create as immediately active/checked-in after the core payment succeeds.</span>
                 </span>
             </label>
+            @if ($walkIn)
+                <div class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                    <div class="flex items-center justify-between gap-3">
+                        <div>
+                            <p class="font-medium">Optional amenities</p>
+                            <p class="text-sm text-zinc-500">These may remain unpaid after admission and become the active booking balance.</p>
+                        </div>
+                        <flux:button type="button" size="sm" variant="ghost" wire:click="addAmenity">Add amenity</flux:button>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                        @foreach ($amenities as $index => $item)
+                            <div wire:key="walkin-amenity-{{ $index }}" class="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
+                                <flux:select wire:model="amenities.{{ $index }}.amenity_id" label="Amenity">
+                                    <option value="">Choose amenity</option>
+                                    @foreach (Amenity::query()->with('amenityName')->whereRaw('LOWER(amenity_type) = ?', ['rentable'])->orderBy('amenity_description')->get() as $amenity)
+                                        <option value="{{ $amenity->amenity_id }}">{{ $amenity->amenityName?->amenity_name ?? $amenity->amenity_description }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }}</option>
+                                    @endforeach
+                                </flux:select>
+                                <flux:input wire:model="amenities.{{ $index }}.quantity" type="number" min="1" max="100" label="Quantity" />
+                                <div class="flex items-end">
+                                    <flux:button type="button" variant="ghost" wire:click="removeAmenity({{ $index }})">Remove</flux:button>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </flux:card>
 
         @if ($errors->any())
