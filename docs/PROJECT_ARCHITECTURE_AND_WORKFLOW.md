@@ -1,285 +1,128 @@
-# Olaer Spring Resort — Project Architecture and Workflow
+# Project Architecture and Workflow
 
-## Project title
+## Architecture
 
-**Web-Based Booking Management with Billing System for Olaer Spring Resort**
+The application is a Laravel 13 server-rendered system using Livewire 4 / Volt, Blade, Tailwind CSS and the existing Flux UI layer. Business correctness lives in services and database constraints; Livewire components orchestrate those services rather than duplicating pricing or availability logic.
 
-## Technology stack
+### Facility domain
 
-```text
-Laravel 13
-Livewire Volt
-TALL Stack
-Tailwind CSS
-Alpine.js
-Flux free components
-MySQL in production
-SQLite-compatible automated tests
-```
+`FacilityProduct` / `ProductRate` define reusable normalized products and canonical rates. `Facility` represents a physical unit with a unique Facility Number and numeric `min_capacity` / `max_capacity`.
 
-Volt components must remain class-based single-file components:
+User-facing facility selection uses:
 
-```php
-use Livewire\Volt\Component;
+1. Facility Type / Product
+2. schedule/rate
+3. quantity
+4. estimated users
+5. room occupant names where applicable
 
-new class extends Component
-{
-    // Component state and actions
-};
-```
+`FacilityRequirementIntent` and `FacilityRequirementGroup` capture that plan. `FacilityAvailabilityService` checks availability, and `FacilityAssignmentService` locks candidate facilities and automatically assigns exact units. `FacilityScheduleBlockService` owns the authoritative collision/ownership records.
 
-Functional or closure-style Volt components are outside the project standard.
+There is no standalone primary `/plan-facilities` workflow and public guests do not choose physical facility numbers.
 
-## Roles
+### Parent / detail model
 
-The system uses these exact role names:
+A Reservation or Booking is one parent financial transaction containing many facility details. Each detail may be rescheduled, upgraded/transferred, cancelled, or assigned independently where the lifecycle allows it.
 
-```text
-Admin
-Manager
-Cashier
-Maintenance Staff
-Security Guard
-```
+Room occupants are detail-owned. Every room occupant is named and tied to the exact assigned room. Authorized Admin/Cashier staff may correct occupant names after creation; those mutations are audited.
+
+### Financial model
+
+Committed detail rows store immutable pricing/occupancy snapshots. Master-data edits must never reprice historical committed transactions.
+
+`TransactionLedgerService` derives:
+
+`Charges - Discounts - Applied Credits - Verified Payments = Balance`
+
+The ledger includes posted facility, amenity, fine, adjustment and payment state. Pending GCash is not settled money.
+
+Same-transaction credits are represented by `TransactionCredit` and `TransactionCreditAllocation`. Credits cannot become a guest wallet, cannot be paid out, and cannot move to unrelated future transactions.
+
+### Reservation payment
+
+Reservation minimum downpayment is 50% of the final discounted total. More than 50% is allowed up to 100%. If the final total changes, the minimum is recomputed and verified-payment shortfall must be collected.
+
+Public GCash:
+
+1. reference number;
+2. private proof upload;
+3. Pending;
+4. Cashier verifies or rejects;
+5. only Verified affects the settled balance.
+
+### Booking / Walk-In
+
+Direct public Booking uses the same facility planner and requires full verified core payment.
+
+Cashier direct Walk-In:
+
+1. select facilities through the shared planner;
+2. name all room occupants;
+3. enter entrance/admission categories;
+4. pay facility + admission core charges in full;
+5. system creates/links the settled Entrance Slip;
+6. booking becomes Checked-in;
+7. optional rentable amenities may be added and remain as outstanding booking balance.
+
+### Discounts
+
+Automatic discounts must be Active, have non-null start/end validity, and cover the transaction date. Eligible discounts do not stack; the highest monetary benefit is selected.
+
+### Facility operations
+
+- Reschedule changes one detail's schedule only.
+- Transfer selects a destination product; the system auto-assigns a physical unit.
+- Upgrades are allowed and charge the difference.
+- Downgrades/cheaper transfers are rejected.
+- Cancelling one detail does not cancel the parent. Eligible paid value becomes same-parent transaction credit.
+
+### Entrance Slip
+
+Security Guard can create/manage ordinary Entrance Slips and edit them while pending admission. After acceptance/admission the slip is locked. Correction uses Void + Replacement with audit metadata; the old record remains immutable history.
+
+Direct Walk-In admission may issue a Cashier-settled linked slip as part of the booking core payment.
+
+Tourist data remains in schema for compatibility but is hidden from approved operational presentation.
+
+### Inspection / fines
+
+While an inspection request is In Progress, fines are `InspectionDraftFine` records only. They are invisible as Cashier liability and do not alter booking balance.
+
+Complete Inspection runs atomically:
+
+1. validate active request/drafts;
+2. publish GuestFine rows;
+3. create locked inspection findings;
+4. recalculate booking ledger;
+5. complete request;
+6. mark drafts Published.
+
+A failure rolls the transaction back. Completed findings have no ordinary edit/delete path.
+
+### Storage and audit
+
+GCash proofs use private storage. Authorized application routes serve protected files.
+
+Audited entities are observed through the audit registry, including room occupant mutations. Activity Logs expose actor, record, IP, User-Agent and before/after values through an application modal.
+
+## Approved navigation
 
 ### Admin
 
-```text
-- manages staff accounts and core configuration
-- reviews reports
-- reviews activity logs
-- may access management-level operational information
-```
-
-### Manager
-
-```text
-- supervises resort operations
-- reviews reports and operational status
-- assists with authorized management actions
-```
+Dashboard; User; Facility; Amenity; Entrance Fee; Discount; Fine; Reports → Management Reports, Activity Logs.
 
 ### Cashier
 
-```text
-- manages reservations and bookings
-- records and verifies payments
-- handles check-in and checkout
-- requests maintenance inspection before checkout
-- records final billing payments
-- issues and prints operational documents
-```
+Dashboard; Entrance Slip; Reservation → Reservation Management, Reservation Conversion; Booking → Booking Management, Check-in, Amenity Requests, Check-out; Payment → Payment Management, GCash Verification; Billing Statement; Reports & Work → Reports, Notifications, Action Center.
 
-### Maintenance Staff
+### Maintenance
 
-```text
-- accepts amenity-delivery requests
-- marks amenity requests delivered
-- accepts checkout inspection requests
-- records inspection results
-- records fines for missing or damaged items
-```
+Amenity Requests; Facility Inspections; Notifications; Action Center.
 
 ### Security Guard
 
-```text
-- creates entrance slips
-- records guest-category headcounts
-- sends unpaid slips to the Cashier for payment
-```
+Entrance Slip is the primary operational entry.
 
-## Canonical business rules
+## UI rules
 
-### Reservation
-
-A reservation is a temporary facility hold. It is not automatically a guaranteed booking.
-
-```text
-Active
-→ Cancelled
-→ Converted
-→ No-show
-→ Payment Rejected
-```
-
-An unpaid active reservation may be cancelled without a refund because no payment has been accepted.
-
-A reservation with a verified payment must not be silently cancelled.
-
-A converted reservation must not be converted or cancelled again.
-
-### Booking
-
-A booking represents a guaranteed stay.
-
-```text
-Booked
-→ Checked-in / Partially Checked-in
-→ Partially Checked-out
-→ Checked-out
-```
-
-A fully paid and confirmed booking is not cancelled through the reservation-cancellation workflow.
-
-The system does not implement refunds.
-
-### GCash guest payment
-
-```text
-Guest submits exact full payment and proof
-→ Payment becomes Pending
-→ Cashier verifies or rejects
-→ Verified payment guarantees the booking
-→ Rejected payment releases availability
-```
-
-The proof, reference number, payment amount, and booking target must be reviewed together.
-
-### Amenities
-
-```text
-Cashier requests amenity
-→ Request becomes Pending
-→ Maintenance accepts
-→ Request becomes Delivering
-→ Maintenance delivers
-→ Request becomes Delivered
-```
-
-Amenity delivery does not require advance payment.
-
-Amenity charges are added to the booking balance and are paid during checkout or final billing.
-
-### Checkout inspection
-
-```text
-Cashier requests inspection
-→ Request becomes Pending
-→ Maintenance accepts
-→ Request becomes In Progress
-→ Maintenance records inspection
-→ Request becomes Completed
-```
-
-Only the assigned Maintenance Staff member may complete the request.
-
-A completed request must have a real facility-inspection result.
-
-### Fines
-
-```text
-Maintenance identifies a missing or damaged item
-→ Guest fine is created or updated
-→ Booking total and amount due increase
-→ Cashier collects the balance before checkout
-```
-
-Repeated updates must apply only the difference between the old and new fine totals.
-
-### Checkout
-
-A facility cannot be checked out until:
-
-```text
-- a Cashier-created inspection request exists
-- Maintenance has completed the inspection
-- unpaid amenity charges have been settled
-- fines have been settled
-- booking amount_due is zero
-```
-
-Successful checkout updates:
-
-```text
-Booking detail status → Checked-out
-Booking status → Checked-out when all details are checked out
-Facility status → Available
-```
-
-## Availability
-
-Availability is date-range based.
-
-Non-blocking statuses include records such as:
-
-```text
-Cancelled
-Converted
-No-show
-Payment Rejected
-Rejected
-```
-
-Facility operational status and date-range availability are separate concerns.
-
-## Financial reporting
-
-Recognized revenue comes only from verified payments:
-
-```text
-SUM(tbl_payment.amount_paid)
-WHERE LOWER(payment_status) = 'verified'
-```
-
-Pending and rejected payments are excluded.
-
-Outstanding balances are operational receivables and are not recognized revenue.
-
-## Audit logging
-
-Operational model events should record:
-
-```text
-actor
-action
-module
-subject
-description
-old values
-new values
-IP address
-user agent
-timestamp
-```
-
-Sensitive values must not be stored directly:
-
-```text
-password → [REDACTED]
-remember_token → [REDACTED]
-proof_of_payment_path → [FILE STORED]
-```
-
-Scheduled actions may use a null actor and appear as `System`.
-
-## Concurrency and transaction rules
-
-Use database transactions for changes that affect:
-
-```text
-status
-amount_due
-total_price
-availability
-payment verification
-reservation conversion
-inspection completion
-fine totals
-checkout
-```
-
-Use `lockForUpdate()` for critical state transitions that may be triggered twice or concurrently.
-
-## Database naming rule
-
-The correct Booking Detail primary key is:
-
-```text
-booking_details_id
-```
-
-Do not introduce:
-
-```text
-booking_detail_id
-```
+Required fields use a visible red/required marker in final forms, destructive operations use destructive treatment, important irreversible actions use application dialogs, operational flashes appear fixed at the top-right, selected transaction rows remain highlighted, and layouts remain responsive.
