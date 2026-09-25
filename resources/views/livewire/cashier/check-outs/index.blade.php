@@ -45,6 +45,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
     public ?int $selectedBookingId = null;
     public string $selectedLabel = '';
     public float $selectedBookingAmountDue = 0.00;
+    public bool $showCheckOutDialog = false;
 
     public function mount(): void
     {
@@ -227,6 +228,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         }
     }
 
+    public function requestCheckOut(): void
+    {
+        if ($this->selectedBookingDetailsId === null) {
+            return;
+        }
+
+        $this->showCheckOutDialog = true;
+    }
+
     public function confirmCheckOut(CheckOutWorkflowService $checkOutWorkflow): void
     {
         $validated = $this->validate([
@@ -239,6 +249,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                 (int) Auth::id()
             );
 
+            $this->showCheckOutDialog = false;
             $this->cancelSelection();
             $this->resetPage();
             session()->flash('success', 'Guest checked out successfully. Facility is now available.');
@@ -648,8 +659,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                     )
                         <flux:button
                             variant="primary"
-                            wire:click="confirmCheckOut"
-                            wire:confirm="Confirm this facility check-out?"
+                            wire:click="requestCheckOut"
                         >
                             Confirm Check-out
                         </flux:button>
@@ -909,4 +919,19 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             {{ $bookingDetails->links() }}
         </x-slot:pagination>
     </x-staff-table-shell>
+    <flux:modal wire:model="showCheckOutDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Confirm facility check-out</flux:heading>
+                <flux:text class="mt-1">
+                    {{ $selectedLabel }} will be checked out and the physical facility will be released for future availability.
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showCheckOutDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>
