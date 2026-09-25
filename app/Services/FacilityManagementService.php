@@ -16,70 +16,107 @@ class FacilityManagementService
         private readonly FacilityProductConfigurationService $products,
     ) {}
 
-    /** @return Collection<int, Facility> */
-    public function createFromPreset(
-        int $facilityProductId,
-        int $quantity,
-        ?string $namePrefix = null,
+    public function cloneFacility(
+        int $sourceFacilityId,
+        string $facilityNumber,
+        string $facilityName,
         string $status = 'Available',
-    ): Collection {
-        if ($quantity < 1 || $quantity > 100) {
-            throw new InvalidArgumentException('Facility quantity must be between 1 and 100.');
+    ): Facility {
+        $facilityNumber = Str::upper(Str::squish($facilityNumber));
+        $facilityName = Str::squish($facilityName);
+
+        if ($facilityNumber === '' || $facilityName === '') {
+            throw new InvalidArgumentException(
+                'Facility number and name are required for the clone.',
+            );
         }
 
         if (! in_array($status, ['Available', 'Unavailable'], true)) {
-            throw new InvalidArgumentException('Facility status must be Available or Unavailable.');
+            throw new InvalidArgumentException(
+                'Initial facility status must be Available or Unavailable.',
+            );
         }
 
-        return DB::transaction(function () use ($facilityProductId, $quantity, $namePrefix, $status): Collection {
-            $product = FacilityProduct::query()
-                ->with('productRates')
-                ->whereKey($facilityProductId)
+        return DB::transaction(function () use (
+            $sourceFacilityId,
+            $facilityNumber,
+            $facilityName,
+            $status,
+        ): Facility {
+            $source = Facility::query()
+                ->with([
+                    'facilityType',
+                    'facilityProduct.productRates',
+                    'prices',
+                    'facilityAmenities',
+                ])
+                ->whereKey($sourceFacilityId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if (! $product->is_active) {
-                throw new InvalidArgumentException('Inactive facility presets cannot create new facilities.');
+            if (Facility::query()
+                ->where('facility_number', $facilityNumber)
+                ->exists()) {
+                throw new InvalidArgumentException(
+                    'This facility number is already in use.',
+                );
             }
 
-            Facility::query()->orderBy('facility_id')->lockForUpdate()->get(['facility_id']);
+            $clone = Facility::query()->create([
+                // Deliberately supplied by the operator; source number is never copied.
+                'facility_number' => $facilityNumber,
+                'facility_name' => $facilityName,
+                'facility_type_id' => $source->facility_type_id,
+                'facility_product_id' => $source->facility_product_id,
+                'facility_size' => $source->facility_size,
+                'facility_status' => $status,
+                'capacity' => $source->capacity,
+                'min_capacity' => $source->min_capacity,
+                'max_capacity' => $source->max_capacity,
+            ]);
 
-            $prefix = $this->numberPrefix($product);
-            $nextSequence = $this->nextSequence($prefix);
-            $created = new Collection;
-
-            for ($offset = 0; $offset < $quantity; $offset++) {
-                $sequence = $nextSequence + $offset;
-                $facilityNumber = $prefix.'-'.str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
-                $facility = Facility::query()->create([
-                    'facility_number' => $facilityNumber,
-                    'facility_name' => trim((string) $namePrefix) !== ''
-                        ? trim((string) $namePrefix).' '.$sequence
-                        : $product->display_name.' '.$sequence,
-                    'facility_type_id' => $product->facility_type_id,
-                    'facility_product_id' => $product->facility_product_id,
-                    'facility_size' => $product->size_label ?: $product->display_name,
-                    'facility_status' => $status,
-                    'capacity' => $this->capacityLabel($product),
+            foreach ($source->prices as $price) {
+                FacilityPrice::query()->create([
+                    'facility_id' => $clone->facility_id,
+                    'rate_type' => $price->rate_type,
+                    'facility_price' => $price->facility_price,
                 ]);
-
-                foreach ($product->productRates as $rate) {
-                    if (! $rate->is_active) {
-                        continue;
-                    }
-
-                    FacilityPrice::query()->create([
-                        'facility_id' => $facility->facility_id,
-                        'rate_type' => $this->products->canonicalRateType($rate),
-                        'facility_price' => $rate->amount,
-                    ]);
-                }
-
-                $created->push($facility);
             }
 
-            return $created;
-        });
+            foreach ($source->facilityAmenities as $facilityAmenity) {
+                $clone->facilityAmenities()->create([
+                    'amenity_id' => $facilityAmenity->amenity_id,
+                    'amenity_quantity' => $facilityAmenity->amenity_quantity,
+                ]);
+            }
+
+            return $clone->fresh([
+                'facilityType',
+                'facilityProduct',
+                'prices',
+                'facilityAmenities',
+            ]);
+        }, attempts: 3);
+    }
+
+    public function suggestedCloneNumber(Facility $source): string
+    {
+        $product = $source->facilityProduct;
+
+        if ($product === null) {
+            throw new InvalidArgumentException(
+                'The source facility has no normalized product configuration.',
+            );
+        }
+
+        $prefix = $this->numberPrefix($product);
+
+        return $prefix.'-'.str_pad(
+            (string) $this->nextSequence($prefix),
+            3,
+            '0',
+            STR_PAD_LEFT,
+        );
     }
 
     public function updateIdentity(
