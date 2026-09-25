@@ -838,18 +838,58 @@ new class extends Component {
             <p class="text-sm text-blue-800 dark:text-blue-200">{{ $transferForm['label'] }}</p>
             <form wire:submit.prevent="saveTransfer" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
-                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">New facility</label>
-                    <select wire:model="transferForm.new_facility_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                        <option value="">Select matching facility</option>
-                        @foreach ($transferFacilities as $facility)
-                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} - {{ $facility->capacity_label }}</option>
+                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product</label>
+                    <select wire:model="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
+                        <option value="">Choose upgrade product</option>
+                        @foreach ($transferProducts as $product)
+                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </select>
+                    <p class="mt-1 text-xs text-zinc-500">Exact unit is assigned automatically; cheaper transfers are rejected.</p>
                 </div>
-                <flux:button type="submit" variant="primary">Save Transfer</flux:button>
+                <flux:button type="submit" variant="primary">Auto-assign Transfer</flux:button>
                 <flux:button type="button" wire:click="cancelTransfer">Cancel</flux:button>
             </form>
         </div>
+    @endif
+
+    @if ($cancelDetailForm['booking_details_id'] !== '')
+        <flux:card>
+            <flux:heading size="lg">Cancel facility</flux:heading>
+            <flux:text class="mt-1">{{ $cancelDetailForm['label'] }}</flux:text>
+            @error('cancelDetail') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            <form wire:submit="saveCancelDetail" class="mt-4 space-y-4">
+                <flux:textarea wire:model="cancelDetailForm.reason" label="Cancellation reason *" rows="3" />
+                <p class="text-xs text-zinc-500">Only this facility is cancelled. Paid value stays within this booking as transaction credit.</p>
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="cancelCancelDetail">Close</flux:button>
+                    <flux:button type="submit" variant="danger">Cancel Facility</flux:button>
+                </div>
+            </form>
+        </flux:card>
+    @endif
+
+    @if ($occupantForm['booking_details_id'] !== '')
+        <flux:card>
+            <flux:heading size="lg">Edit room occupants</flux:heading>
+            <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
+            @error('occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            <form wire:submit="saveOccupants" class="mt-4 space-y-4">
+                @forelse ($occupantForm['occupants'] as $index => $occupant)
+                    <div class="grid gap-3 md:grid-cols-3">
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" label="Last name *" />
+                    </div>
+                @empty
+                    <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>
+                @endforelse
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="cancelOccupants">Close</flux:button>
+                    <flux:button type="submit" variant="primary">Save Occupants</flux:button>
+                </div>
+            </form>
+        </flux:card>
     @endif
 
     <x-staff-table-shell
@@ -961,6 +1001,8 @@ new class extends Component {
                                     <flux:button size="sm" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:button>
                                     <flux:button size="sm" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:button>
                                     <flux:button size="sm" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:button>
+                                    <flux:button size="sm" variant="ghost" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:button>
+                                    <flux:button size="sm" variant="danger" wire:click="openCancelDetail({{ $booking->booking_details_id }})">Cancel Facility</flux:button>
                                 @endif
                             </div>
                         </td>
