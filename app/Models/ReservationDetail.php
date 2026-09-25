@@ -36,6 +36,10 @@ class ReservationDetail extends Model
         'rate_type',
         'check_in_date',
         'check_out_date',
+        'status',
+        'cancellation_reason',
+        'cancelled_at',
+        'cancelled_by_user_id',
         'discount_id',
         'base_price',
         'discount_rate',
@@ -49,6 +53,7 @@ class ReservationDetail extends Model
         return [
             'check_in_date' => 'date',
             'check_out_date' => 'date',
+            'cancelled_at' => 'datetime',
             'guest_count' => 'integer',
             'capacity_policy' => FacilityCapacityPolicy::class,
             'included_guest_count_snapshot' => 'integer',
@@ -82,6 +87,12 @@ class ReservationDetail extends Model
     public function facilityProduct(): BelongsTo
     {
         return $this->belongsTo(FacilityProduct::class, 'facility_product_id', 'facility_product_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id', 'user_id');
     }
 
     /** @return BelongsTo<Discount, $this> */
