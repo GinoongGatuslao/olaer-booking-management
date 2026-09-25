@@ -131,7 +131,7 @@ class FacilityAssignmentService
                 'amount_due' => $totalPrice,
                 'no_of_extra_guests' => $expectedExtraGuests,
                 'total_guest_count' => $lockedIntent->party_count,
-                'user_id' => null,
+                'user_id' => filled($guestData['user_id'] ?? null) ? (int) $guestData['user_id'] : null,
                 'status' => 'Active',
             ]);
 
