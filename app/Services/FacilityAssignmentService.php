@@ -16,6 +16,7 @@ use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
+use App\Models\TransactionAdjustment;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -33,6 +34,7 @@ class FacilityAssignmentService
         private readonly DecimalMoneyService $money,
         private readonly GuestConfirmationEmailService $confirmationEmail,
         private readonly GcashReferenceIntegrityService $gcashReferences,
+        private readonly EntranceSlipWorkflowService $entranceSlips,
     ) {}
 
     /** @param array<string, mixed> $guestData */
@@ -200,6 +202,7 @@ class FacilityAssignmentService
                 'details.discount',
                 'extraGuests',
                 'payments.modeOfPayment',
+                'entranceSlip.details.entranceFee',
             ]);
         }, attempts: 3);
 
@@ -448,12 +451,32 @@ class FacilityAssignmentService
             $expectedExtraGuests = collect($assignments)->sum(
                 fn (array $assignment): int => $assignment['paid_extra_guest_count'],
             );
-            $totalPrice = $this->money->add(...collect($assignments)->pluck('quote.total_price')->all());
+            $facilityTotal = $this->money->add(...collect($assignments)->pluck('quote.total_price')->all());
+            $walkIn = (bool) ($guestData['walk_in'] ?? false);
+            $admissionTotal = '0.00';
+
+            if ($walkIn) {
+                $entranceData = $guestData['entrance'] ?? [];
+                $entranceGuestCount = (int) ($entranceData['adult_count'] ?? 0)
+                    + (int) ($entranceData['children_count'] ?? 0)
+                    + (int) ($entranceData['pwd_sc_count'] ?? 0);
+
+                if ($entranceGuestCount !== (int) $lockedIntent->party_count) {
+                    throw new InvalidArgumentException(
+                        'Walk-In entrance categories must equal the booking party count.',
+                    );
+                }
+
+                $admissionQuote = $this->entranceSlips->quote($entranceData);
+                $admissionTotal = $this->money->normalize((string) $admissionQuote['amount_due']);
+            }
+
+            $coreTotal = $this->money->add($facilityTotal, $admissionTotal);
             $paymentAmount = $this->money->normalize((string) ($guestData['payment_amount'] ?? '0.00'));
 
-            if (! $this->money->equals($paymentAmount, $totalPrice)) {
+            if (! $this->money->equals($paymentAmount, $coreTotal)) {
                 throw new InvalidArgumentException(
-                    'A staff-created booking requires full payment of the core facility charges.',
+                    'A staff-created booking requires full payment of all core facility and admission charges.',
                 );
             }
 
@@ -481,7 +504,6 @@ class FacilityAssignmentService
                 'address_id' => $address->address_id,
             ]);
 
-            $walkIn = (bool) ($guestData['walk_in'] ?? false);
             $status = $walkIn ? 'Checked-in' : 'Booked';
 
             $booking = Booking::query()->create([
@@ -490,7 +512,7 @@ class FacilityAssignmentService
                 'booking_date' => today()->toDateString(),
                 'no_of_extra_guests' => $expectedExtraGuests,
                 'total_guest_count' => $lockedIntent->party_count,
-                'total_price' => $totalPrice,
+                'total_price' => $facilityTotal,
                 'amount_due' => '0.00',
                 'user_id' => $userId,
                 'reservation_id' => null,
@@ -532,6 +554,30 @@ class FacilityAssignmentService
                     );
                     $roomIndex++;
                 }
+            }
+
+            if ($walkIn) {
+                $entranceData = $guestData['entrance'] ?? [];
+                $slip = $this->entranceSlips->issueSettledWalkIn([
+                    ...$entranceData,
+                    'user_id' => $userId,
+                    'guest_id' => $guest->guest_id,
+                ]);
+
+                $booking->update([
+                    'entrance_slip_id' => $slip->entrance_slip_id,
+                    'total_price' => $coreTotal,
+                ]);
+
+                TransactionAdjustment::query()->create([
+                    'reservation_id' => null,
+                    'booking_id' => $booking->booking_id,
+                    'entrance_slip_id' => null,
+                    'direction' => 'Debit',
+                    'amount' => $admissionTotal,
+                    'reason' => 'Walk-In entrance/admission charges settled with the booking core payment.',
+                    'created_by_user_id' => $userId,
+                ]);
             }
 
             Payment::query()->create([
