@@ -82,7 +82,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_type',
             'damage_type',
             'fine_charge',
-            'usage',
         ];
 
         $sortField = in_array($this->sortField, $allowedSorts, true)
@@ -174,9 +173,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_charge' => $query
                 ->orderBy('tbl_fine.fine_charge', $direction)
                 ->orderBy('tbl_fine.fine_id'),
-            'usage' => $query
-                ->orderBy('guest_fines_count', $direction)
-                ->orderBy('tbl_fine.fine_id'),
             default => $query
                 ->orderByRaw(
                     "CASE
@@ -251,7 +247,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_type',
             'damage_type',
             'fine_charge',
-            'usage',
         ];
 
         if (! in_array($field, $allowedSorts, true)) {
@@ -746,55 +741,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     <table class="w-full min-w-[68rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_name')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Fine {{ $this->sortIcon('fine_name') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_type')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Type {{ $this->sortIcon('fine_type') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('damage_type')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Damage Type {{ $this->sortIcon('damage_type') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_charge')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Charge {{ $this->sortIcon('fine_charge') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('usage')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Usage {{ $this->sortIcon('usage') }}
-                                    </button>
-                                </th>
 
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
@@ -828,11 +774,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                                     <td class="px-5 py-4 font-semibold">
                                         ₱{{ number_format((float) $fine->fine_charge, 2) }}
-                                    </td>
-
-                                    <td class="px-5 py-4">
-                                        {{ $fine->guest_fines_count }}
-                                        guest fine{{ (int) $fine->guest_fines_count === 1 ? '' : 's' }}
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
