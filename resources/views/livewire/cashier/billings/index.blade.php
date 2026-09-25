@@ -1,6 +1,6 @@
 <?php
 
-use App\Services\BillingStatementService;
+use App\Services\GuestTransactionHistoryService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -11,118 +11,70 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
 {
     use WithPagination;
 
-    #[Url(as: 'q', except: '')]
-    public string $search = '';
+    #[Url(as: 'q', except: '')] public string $search = '';
+    #[Url(as: 'from', except: '')] public string $fromDate = '';
+    #[Url(as: 'to', except: '')] public string $toDate = '';
+    #[Url(as: 'payment_status', except: 'all')] public string $paymentStatus = 'all';
+    #[Url(as: 'transaction_type', except: 'all')] public string $transactionType = 'all';
+    #[Url(as: 'sort', except: 'date')] public string $sortField = 'date';
+    #[Url(as: 'direction', except: 'desc')] public string $sortDirection = 'desc';
+    #[Url(as: 'per_page', except: 10)] public int $perPage = 10;
 
-    #[Url(as: 'from', except: '')]
-    public string $fromDate = '';
-
-    #[Url(as: 'to', except: '')]
-    public string $toDate = '';
-
-    #[Url(as: 'payment_status', except: 'all')]
-    public string $paymentStatus = 'all';
-
-    #[Url(as: 'transaction_type', except: 'all')]
-    public string $transactionType = 'all';
-
-    #[Url(as: 'sort', except: 'date')]
-    public string $sortField = 'date';
-
-    #[Url(as: 'direction', except: 'desc')]
-    public string $sortDirection = 'desc';
-
-    #[Url(as: 'per_page', except: 10)]
-    public int $perPage = 10;
-
-    public ?int $selectedBookingId = null;
+    public ?string $selectedType = null;
+    public ?int $selectedId = null;
     public ?string $errorMessage = null;
-
-    public function mount(): void
-    {
-        $bookingId = request()->integer('booking');
-
-        if ($bookingId > 0) {
-            $this->selectBooking($bookingId);
-        }
-    }
 
     public function with(): array
     {
-        $billingData = app(
-            BillingStatementService::class,
-        )->paginatedRecords(
-            $this->filters(),
-            $this->perPage,
-            $this->sortField,
-            $this->sortDirection,
-        );
-
         return [
-            'records' => $billingData['rows'],
-            'billingSummary' => $billingData,
+            'records' => app(GuestTransactionHistoryService::class)->paginated(
+                $this->filters(),
+                $this->perPage,
+                $this->sortField,
+                $this->sortDirection,
+            ),
             'statement' => $this->selectedStatement(),
         ];
     }
 
-    public function updatedSearch(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedFromDate(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedToDate(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedPaymentStatus(): void
-    {
-        $this->resetPage();
-    }
-
-    public function updatedTransactionType(): void
-    {
-        $this->resetPage();
-    }
+    public function updatedSearch(): void { $this->resetPage(); }
+    public function updatedFromDate(): void { $this->resetPage(); }
+    public function updatedToDate(): void { $this->resetPage(); }
+    public function updatedPaymentStatus(): void { $this->resetPage(); }
+    public function updatedTransactionType(): void { $this->resetPage(); }
 
     public function updatedPerPage(): void
     {
         if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
             $this->perPage = 10;
         }
-
         $this->resetPage();
+    }
+
+    public function selectTransaction(string $type, int $id): void
+    {
+        if (! in_array($type, ['reservation', 'booking'], true)) {
+            return;
+        }
+
+        $this->selectedType = $type;
+        $this->selectedId = $id;
+        $this->errorMessage = null;
     }
 
     public function sortBy(string $field): void
     {
-        $allowed = [
-            'date',
-            'transaction_type',
-            'guest_name',
-            'amount',
-            'amount_due',
-            'payment_status',
-        ];
-
-        if (! in_array($field, $allowed, true)) {
+        if (! in_array($field, [
+            'date', 'transaction_type', 'guest_name', 'amount', 'amount_due', 'payment_status',
+        ], true)) {
             return;
         }
 
         if ($this->sortField === $field) {
-            $this->sortDirection =
-                $this->sortDirection === 'asc'
-                    ? 'desc'
-                    : 'asc';
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
         } else {
             $this->sortField = $field;
-            $this->sortDirection =
-                $field === 'date' ? 'desc' : 'asc';
+            $this->sortDirection = $field === 'date' ? 'desc' : 'asc';
         }
 
         $this->resetPage();
@@ -130,28 +82,17 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
 
     public function sortIndicator(string $field): string
     {
-        if ($this->sortField !== $field) {
-            return '↕';
-        }
-
-        return $this->sortDirection === 'asc'
-            ? '↑'
-            : '↓';
-    }
-
-    public function selectBooking(int $bookingId): void
-    {
-        $this->selectedBookingId = $bookingId;
-        $this->errorMessage = null;
+        return $this->sortField !== $field
+            ? '↕'
+            : ($this->sortDirection === 'asc' ? '↑' : '↓');
     }
 
     public function clearFilters(): void
     {
-        $this->search = '';
-        $this->fromDate = '';
-        $this->toDate = '';
-        $this->paymentStatus = 'all';
-        $this->transactionType = 'all';
+        $this->reset([
+            'search', 'fromDate', 'toDate', 'paymentStatus',
+            'transactionType', 'selectedType', 'selectedId', 'errorMessage',
+        ]);
         $this->sortField = 'date';
         $this->sortDirection = 'desc';
         $this->perPage = 10;
@@ -160,14 +101,18 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
 
     public function selectedStatement(): ?array
     {
-        if ($this->selectedBookingId === null) {
+        if ($this->selectedType === null || $this->selectedId === null) {
             return null;
         }
 
         try {
-            return app(BillingStatementService::class)->statementForBooking($this->selectedBookingId);
-        } catch (Throwable $exception) {
+            return app(GuestTransactionHistoryService::class)->statement(
+                $this->selectedType,
+                $this->selectedId,
+            );
+        } catch (\Throwable $exception) {
             $this->errorMessage = $exception->getMessage();
+
             return null;
         }
     }
@@ -185,458 +130,238 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
 
     public function money(mixed $amount): string
     {
-        return '₱' . number_format((float) $amount, 2);
+        return '₱'.number_format((float) $amount, 2);
     }
 };
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-            <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Billing Statements</h1>
-            <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                Review itemized charges while using the booking-wide balance as the settlement source of truth.
-            </p>
-        </div>
+    <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Billing Statement</h1>
+        <p class="mt-1 text-sm text-zinc-500">
+            Search a guest or reference, choose a historical Reservation or Booking, then review its authoritative detailed statement.
+        </p>
     </div>
 
     @if ($errorMessage)
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-            {{ $errorMessage }}
-        </div>
+        <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{{ $errorMessage }}</div>
     @endif
 
-    <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
-            <flux:input
-                label="Search"
-                placeholder="Guest, booking ref, billing ref, description"
-                wire:model.live.debounce.300ms="search"
-                clearable
-                class="xl:col-span-2"
-            />
-
-            <flux:input
-                type="date"
-                label="From"
-                wire:model.live="fromDate"
-            />
-
-            <flux:input
-                type="date"
-                label="To"
-                wire:model.live="toDate"
-            />
-
-            <flux:select
-                label="Transaction Type"
-                wire:model.live="transactionType"
-            >
-                <option value="all">All transactions</option>
+    <flux:card>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
+            <flux:input wire:model.live.debounce.300ms="search" label="Guest / Reference" placeholder="Name, email, phone, R-ref or B-ref" clearable class="xl:col-span-2" />
+            <flux:input wire:model.live="fromDate" type="date" label="From" />
+            <flux:input wire:model.live="toDate" type="date" label="To" />
+            <flux:select wire:model.live="transactionType" label="Transaction">
+                <option value="all">Reservations & Bookings</option>
+                <option value="reservation">Reservations</option>
                 <option value="booking">Bookings</option>
-                <option value="amenity_request">Amenity Requests</option>
-                <option value="fine">Fines</option>
             </flux:select>
-
-            <flux:select
-                label="Payment Status"
-                wire:model.live="paymentStatus"
-            >
-                <option value="all">All statuses</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
+            <flux:select wire:model.live="paymentStatus" label="Balance">
+                <option value="all">All</option>
+                <option value="paid">Paid / settled</option>
+                <option value="unpaid">Outstanding</option>
             </flux:select>
-
-            <flux:select
-                label="Rows"
-                wire:model.live="perPage"
-            >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
+            <flux:select wire:model.live="perPage" label="Rows">
+                @foreach ([10, 25, 50, 100] as $size)<option value="{{ $size }}">{{ $size }}</option>@endforeach
             </flux:select>
         </div>
-
         <div class="mt-4 flex justify-end">
-            <flux:button
-                type="button"
-                variant="ghost"
-                wire:click="clearFilters"
-            >
-                Clear Filters
-            </flux:button>
+            <flux:button type="button" variant="ghost" wire:click="clearFilters">Clear filters</flux:button>
         </div>
-    </div>
+    </flux:card>
 
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Records</p>
-            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['count'] }}</p>
-        </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Booking Charges</p>
-            <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_amount']) }}</p>
-        </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding Balance</p>
-            <p class="mt-1 text-xl font-semibold">{{ $this->money($billingSummary['total_due']) }}</p>
-        </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Paid Bookings</p>
-            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['paid_count'] }}</p>
-        </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">Outstanding Bookings</p>
-            <p class="mt-1 text-xl font-semibold">{{ $billingSummary['unpaid_count'] }}</p>
-        </div>
-    </div>
-
-    <div class="grid gap-6 xl:grid-cols-2">
-        <div class="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div class="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <h2 class="font-semibold text-zinc-900 dark:text-zinc-50">Billing Records</h2>
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <flux:card class="overflow-hidden p-0">
+            <div class="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                <flux:heading size="lg">Historical transactions</flux:heading>
             </div>
-
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                    <thead class="bg-zinc-50 dark:bg-zinc-950/60">
-                        <tr class="text-left text-xs font-medium uppercase tracking-wide text-zinc-500">
-                            <th class="px-4 py-3">
-                                <button wire:click="sortBy('date')" class="font-medium">
-                                    Date {{ $this->sortIndicator('date') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3">
-                                <button wire:click="sortBy('transaction_type')" class="font-medium">
-                                    Type {{ $this->sortIndicator('transaction_type') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3">
-                                <button wire:click="sortBy('guest_name')" class="font-medium">
-                                    Guest {{ $this->sortIndicator('guest_name') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3">Description</th>
-                            <th class="px-4 py-3 text-right">
-                                <button wire:click="sortBy('amount')" class="font-medium">
-                                    Amount {{ $this->sortIndicator('amount') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3 text-right">
-                                <button wire:click="sortBy('amount_due')" class="font-medium">
-                                    Booking Due {{ $this->sortIndicator('amount_due') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3">
-                                <button wire:click="sortBy('payment_status')" class="font-medium">
-                                    Status {{ $this->sortIndicator('payment_status') }}
-                                </button>
-                            </th>
-                            <th class="px-4 py-3">Actions</th>
+                    <thead class="bg-zinc-50 text-xs uppercase text-zinc-500 dark:bg-zinc-950/60">
+                        <tr>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('date')">Date {{ $this->sortIndicator('date') }}</button></th>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('transaction_type')">Type {{ $this->sortIndicator('transaction_type') }}</button></th>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('guest_name')">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
+                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount')">Total {{ $this->sortIndicator('amount') }}</button></th>
+                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount_due')">Due {{ $this->sortIndicator('amount_due') }}</button></th>
+                            <th class="px-4 py-3 text-left">Status</th>
+                            <th class="px-4 py-3 text-right">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         @forelse ($records as $record)
-                            <tr
-                                wire:key="billing-record-{{ $record['transaction_type'] }}-{{ $record['reference_no'] }}"
-                                class="align-top"
-                            >
-                                <td class="whitespace-nowrap px-4 py-3">{{ $record['date'] ?? 'N/A' }}</td>
-                                <td class="whitespace-nowrap px-4 py-3">{{ $record['transaction_type'] }}</td>
+                            @php($selected = $selectedType === $record->transaction_type && $selectedId === (int) $record->transaction_id)
+                            <tr wire:key="history-{{ $record->transaction_type }}-{{ $record->transaction_id }}" @class([
+                                'transition-colors',
+                                'bg-emerald-50 dark:bg-emerald-950/30' => $selected,
+                            ])>
+                                <td class="whitespace-nowrap px-4 py-3">{{ $record->transaction_date }}</td>
                                 <td class="px-4 py-3">
-                                    <div class="font-medium text-zinc-900 dark:text-zinc-50">{{ $record['guest_name'] }}</div>
-                                    <div class="text-xs text-zinc-500">{{ $record['booking_ref_no'] }}</div>
+                                    <div class="font-medium capitalize">{{ $record->transaction_type }}</div>
+                                    <div class="text-xs text-zinc-500">{{ $record->reference_no }}</div>
                                 </td>
-                                <td class="px-4 py-3">{{ $record['description'] }}</td>
-                                <td class="whitespace-nowrap px-4 py-3 text-right">{{ $this->money($record['amount']) }}</td>
-                                <td class="whitespace-nowrap px-4 py-3 text-right">{{ $this->money($record['amount_due']) }}</td>
                                 <td class="px-4 py-3">
-                                    <span @class([
-                                        'rounded-full px-2 py-1 text-xs font-medium',
-                                        'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' => $record['payment_status'] === 'Paid',
-                                        'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' => $record['payment_status'] !== 'Paid',
-                                    ])>
-                                        {{ $record['payment_status'] }}
-                                    </span>
+                                    <div class="font-medium">{{ $record->first_name }} {{ $record->last_name }}</div>
+                                    <div class="text-xs text-zinc-500">{{ $record->contact_no }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-right">{{ $this->money($record->total_price) }}</td>
+                                <td class="px-4 py-3 text-right">{{ $this->money($record->amount_due) }}</td>
+                                <td class="px-4 py-3">
+                                    <div>{{ $record->status }}</div>
+                                    <div class="text-xs {{ (float) $record->amount_due <= 0 ? 'text-green-600' : 'text-amber-600' }}">
+                                        {{ (float) $record->amount_due <= 0 ? 'Settled' : 'Outstanding' }}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
-                                    @if (($record['booking_id'] ?? 0) > 0)
-                                        <div class="flex flex-wrap justify-end gap-2">
-                                            @if (Route::has('cashier.bookings.show'))
-                                                <flux:button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    href="{{ route('cashier.bookings.show', $record['booking_id']) }}"
-                                                    wire:navigate
-                                                >
-                                                    Booking
-                                                </flux:button>
-                                            @endif
-
-                                            @if (
-                                                (float) $record['amount_due'] > 0
-                                                && Route::has('cashier.payments.index')
-                                            )
-                                                <flux:button
-                                                    size="sm"
-                                                    variant="primary"
-                                                    href="{{ route('cashier.payments.index', ['booking' => $record['booking_id']]) }}"
-                                                    wire:navigate
-                                                >
-                                                    Payment
-                                                </flux:button>
-                                            @endif
-
-                                            <flux:button
-                                                size="sm"
-                                                variant="ghost"
-                                                wire:click="selectBooking({{ $record['booking_id'] }})"
-                                            >
-                                                Statement
-                                            </flux:button>
-                                        </div>
-                                    @endif
+                                    <flux:button type="button" size="sm" variant="{{ $selected ? 'primary' : 'ghost' }}" wire:click="selectTransaction('{{ $record->transaction_type }}', {{ $record->transaction_id }})">
+                                        Statement
+                                    </flux:button>
                                 </td>
                             </tr>
                         @empty
-                            <tr>
-                                <td colspan="8" class="px-4 py-10 text-center text-zinc-500">
-                                    No billing record matches the selected filters.
-                                </td>
-                            </tr>
+                            <tr><td colspan="7" class="px-4 py-10 text-center text-zinc-500">No historical transaction matches the filters.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
+            <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">{{ $records->links() }}</div>
+        </flux:card>
 
-            <div class="flex flex-col gap-3 border-t border-zinc-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
-                <p class="text-sm text-zinc-500">
-                    Showing
-                    {{ $records->firstItem() ?? 0 }}
-                    to
-                    {{ $records->lastItem() ?? 0 }}
-                    of
-                    {{ $records->total() }}
-                    billing records
-                </p>
-
-                {{ $records->links() }}
-            </div>
-        </div>
-
-        <div class="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div class="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                <h2 class="font-semibold text-zinc-900 dark:text-zinc-50">Printable Billing Statement</h2>
-                @if ($statement)
-                    <flux:button
-                        href="{{ route('print.billing', $statement['booking']) }}"
-                        target="_blank"
-                        rel="noopener"
-                        variant="primary"
-                    >
-                        Print
-                    </flux:button>
-                @endif
-            </div>
-
+        <flux:card class="min-w-0">
             @if (! $statement)
-                <div class="p-8 text-center text-sm text-zinc-500">
-                    Select a billing record to preview the statement.
-                </div>
+                <div class="py-16 text-center text-sm text-zinc-500">Select a transaction to view its detailed statement.</div>
             @else
-                <div id="billing-statement" class="space-y-6 p-5 text-sm">
-                    <div class="text-center">
-                        <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-50">Olaer Spring Resort</h3>
-                        <p class="text-zinc-600 dark:text-zinc-400">Billing Statement</p>
-                        <p class="text-xs text-zinc-500">Generated: {{ $statement['generated_at'] }}</p>
+                <div class="space-y-6">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500">{{ $statement['transaction_type'] }}</p>
+                            <flux:heading size="xl">{{ $statement['reference_no'] }}</flux:heading>
+                            <p class="mt-1 text-sm text-zinc-500">{{ $statement['guest_name'] }} · {{ $statement['guest_contact'] }}</p>
+                        </div>
+                        <flux:badge color="{{ $statement['ledger']['balance'] === '0.00' ? 'green' : 'amber' }}">{{ $statement['transaction_status'] }}</flux:badge>
                     </div>
 
-                    <div class="grid gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-2">
-                        <div>
-                            <div class="text-xs uppercase text-zinc-500">Booking Reference</div>
-                            <div class="font-semibold">{{ $statement['booking']->b_ref_no }}</div>
-                        </div>
-                        <div>
-                            <div class="text-xs uppercase text-zinc-500">Payment Status</div>
-                            <div class="font-semibold">{{ $statement['payment_status'] }}</div>
-                        </div>
-                        <div>
-                            <div class="text-xs uppercase text-zinc-500">Guest</div>
-                            <div class="font-semibold">{{ $statement['guest_name'] }}</div>
-                            <div class="text-xs text-zinc-500">{{ $statement['guest_contact'] }} / {{ $statement['guest_email'] }}</div>
-                        </div>
-                        <div>
-                            <div class="text-xs uppercase text-zinc-500">Booking Date</div>
-                            <div class="font-semibold">{{ optional($statement['booking']->booking_date)->toDateString() }}</div>
-                        </div>
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <div class="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"><p class="text-xs text-zinc-500">Charges</p><p class="font-semibold">{{ $this->money($statement['ledger']['charges']) }}</p></div>
+                        <div class="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"><p class="text-xs text-zinc-500">Discounts</p><p class="font-semibold">{{ $this->money($statement['ledger']['discounts']) }}</p></div>
+                        <div class="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800"><p class="text-xs text-zinc-500">Balance</p><p class="font-semibold">{{ $this->money($statement['ledger']['balance']) }}</p></div>
                     </div>
 
                     <section>
-                        <h4 class="mb-2 font-semibold">Facilities</h4>
-                        <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-                            <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-                                <thead class="bg-zinc-50 dark:bg-zinc-950/60">
-                                    <tr class="text-left text-xs uppercase text-zinc-500">
-                                        <th class="px-3 py-2">Facility</th>
-                                        <th class="px-3 py-2">Rate</th>
-                                        <th class="px-3 py-2">Dates</th>
-                                        <th class="px-3 py-2 text-right">Base</th>
-                                        <th class="px-3 py-2 text-right">Discount</th>
-                                        <th class="px-3 py-2 text-right">Extra</th>
-                                        <th class="px-3 py-2 text-right">Line Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @foreach ($statement['facility_lines'] as $line)
-                                        <tr>
-                                            <td class="px-3 py-2">
-                                                <div class="font-medium">{{ $line['facility'] }}</div>
-                                                <div class="text-xs text-zinc-500">{{ $line['facility_type'] }} / {{ $line['status'] }}</div>
-                                            </td>
-                                            <td class="px-3 py-2">{{ $line['rate_type'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['check_in_date'] }} to {{ $line['check_out_date'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['base_price']) }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['discount_amount']) }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['extra_guest_fee']) }}</td>
-                                            <td class="px-3 py-2 text-right">
-                                                @if ($line['has_snapshot'])
-                                                    {{ $this->money($line['line_total']) }}
-                                                @else
-                                                    <span class="text-zinc-500">Use recorded booking total</span>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        <h3 class="mb-2 font-semibold">Facilities</h3>
+                        <div class="space-y-2">
+                            @forelse ($statement['facility_lines'] as $line)
+                                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="font-medium">{{ $line['facility'] }}</p>
+                                            <p class="text-xs text-zinc-500">{{ $line['facility_type'] }} · {{ $line['rate_type'] }} · {{ $line['check_in_date'] }} to {{ $line['check_out_date'] }} · {{ $line['status'] }}</p>
+                                        </div>
+                                        <span class="font-semibold">{{ $this->money($line['line_total']) }}</span>
+                                    </div>
+                                    @if (($line['occupants'] ?? collect())->isNotEmpty())
+                                        <p class="mt-2 text-xs text-zinc-500">Room occupants: {{ $line['occupants']->map(fn ($o) => trim($o->first_name.' '.$o->last_name))->join(', ') }}</p>
+                                    @endif
+                                </div>
+                            @empty
+                                <p class="text-sm text-zinc-500">No facility lines.</p>
+                            @endforelse
                         </div>
                     </section>
+
+                    @if (($statement['entrance_slip'] ?? null) !== null)
+                        <section>
+                            <h3 class="mb-2 font-semibold">Entrance charges</h3>
+                            <div class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                Entrance Slip #{{ $statement['entrance_slip']->entrance_slip_id }}
+                                · {{ $this->money($statement['entrance_slip']->total_price) }}
+                                · {{ $statement['entrance_slip']->status }}
+                            </div>
+                        </section>
+                    @endif
+
+                    @if (($statement['amenity_lines'] ?? collect())->isNotEmpty())
+                        <section>
+                            <h3 class="mb-2 font-semibold">Amenities</h3>
+                            <div class="space-y-2">
+                                @foreach ($statement['amenity_lines'] as $line)
+                                    <div class="flex justify-between gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                        <span>{{ $line['amenity'] }} × {{ $line['quantity'] }} · {{ $line['request_status'] }}</span>
+                                        <span class="font-medium">{{ $this->money($line['line_total']) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </section>
+                    @endif
+
+                    @if (($statement['fine_lines'] ?? collect())->isNotEmpty())
+                        <section>
+                            <h3 class="mb-2 font-semibold">Posted fines</h3>
+                            <div class="space-y-2">
+                                @foreach ($statement['fine_lines'] as $line)
+                                    <div class="flex justify-between gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                        <span>{{ $line['description'] }} × {{ $line['quantity'] }}</span>
+                                        <span class="font-medium">{{ $this->money($line['total_charge']) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </section>
+                    @endif
 
                     <section>
-                        <h4 class="mb-2 font-semibold">Amenity Requests</h4>
-                        <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-                            <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-                                <thead class="bg-zinc-50 dark:bg-zinc-950/60">
-                                    <tr class="text-left text-xs uppercase text-zinc-500">
-                                        <th class="px-3 py-2">Amenity</th>
-                                        <th class="px-3 py-2">Facility</th>
-                                        <th class="px-3 py-2">Status</th>
-                                        <th class="px-3 py-2 text-right">Qty</th>
-                                        <th class="px-3 py-2 text-right">Unit</th>
-                                        <th class="px-3 py-2 text-right">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @forelse ($statement['amenity_lines'] as $line)
-                                        <tr>
-                                            <td class="px-3 py-2">{{ $line['amenity'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['facility'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['request_status'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $line['quantity'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['unit_price']) }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['line_total']) }}</td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="6" class="px-3 py-4 text-center text-zinc-500">No amenity requests.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
+                        <h3 class="mb-2 font-semibold">Payments / GCash</h3>
+                        <div class="space-y-2">
+                            @forelse ($statement['payment_lines'] as $line)
+                                <div class="flex justify-between gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                    <div>
+                                        <p class="font-medium">{{ $line['payment_ref_no'] }} · {{ $line['mode'] }}</p>
+                                        <p class="text-xs text-zinc-500">{{ $line['reference_number'] ? 'Ref '.$line['reference_number'].' · ' : '' }}{{ $line['status'] ?? 'Verified' }}</p>
+                                    </div>
+                                    <span class="font-semibold">{{ $this->money($line['amount_paid']) }}</span>
+                                </div>
+                            @empty
+                                <p class="text-sm text-zinc-500">No payments recorded.</p>
+                            @endforelse
                         </div>
                     </section>
 
-                    <section>
-                        <h4 class="mb-2 font-semibold">Fines</h4>
-                        <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-                            <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-                                <thead class="bg-zinc-50 dark:bg-zinc-950/60">
-                                    <tr class="text-left text-xs uppercase text-zinc-500">
-                                        <th class="px-3 py-2">Fine</th>
-                                        <th class="px-3 py-2">Facility</th>
-                                        <th class="px-3 py-2">Checked</th>
-                                        <th class="px-3 py-2 text-right">Qty</th>
-                                        <th class="px-3 py-2 text-right">Charge</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @forelse ($statement['fine_lines'] as $line)
-                                        <tr>
-                                            <td class="px-3 py-2">
-                                                <div>{{ $line['description'] }}</div>
-                                                <div class="text-xs text-zinc-500">Reported by: {{ $line['reported_by'] }}</div>
-                                            </td>
-                                            <td class="px-3 py-2">{{ $line['facility'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['date_checked'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $line['quantity'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['total_charge']) }}</td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="5" class="px-3 py-4 text-center text-zinc-500">No fines.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                    @if ($statement['credits']->isNotEmpty())
+                        <section>
+                            <h3 class="mb-2 font-semibold">Transaction credits</h3>
+                            <div class="space-y-2">
+                                @foreach ($statement['credits'] as $credit)
+                                    <div class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                        <div class="flex justify-between gap-3"><span>{{ $credit->reason }}</span><span class="font-medium">{{ $this->money($credit->original_amount) }}</span></div>
+                                        <p class="mt-1 text-xs text-zinc-500">Remaining {{ $this->money($credit->remaining_amount) }} · {{ $credit->status }} · {{ $credit->allocations->count() }} allocation(s)</p>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </section>
+                    @endif
 
-                    <section>
-                        <h4 class="mb-2 font-semibold">Payments</h4>
-                        <div class="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-                            <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-                                <thead class="bg-zinc-50 dark:bg-zinc-950/60">
-                                    <tr class="text-left text-xs uppercase text-zinc-500">
-                                        <th class="px-3 py-2">Payment Ref</th>
-                                        <th class="px-3 py-2">Mode</th>
-                                        <th class="px-3 py-2">Date</th>
-                                        <th class="px-3 py-2">Received By</th>
-                                        <th class="px-3 py-2 text-right">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @forelse ($statement['payment_lines'] as $line)
-                                        <tr>
-                                            <td class="px-3 py-2">
-                                                <div>{{ $line['payment_ref_no'] }}</div>
-                                                @if ($line['reference_number'])
-                                                    <div class="text-xs text-zinc-500">Ref: {{ $line['reference_number'] }}</div>
-                                                @endif
-                                            </td>
-                                            <td class="px-3 py-2">{{ $line['mode'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['date_paid'] }}</td>
-                                            <td class="px-3 py-2">{{ $line['received_by'] }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $this->money($line['amount_paid']) }}</td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="5" class="px-3 py-4 text-center text-zinc-500">No payments recorded.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                    @if ($statement['adjustments']->isNotEmpty())
+                        <section>
+                            <h3 class="mb-2 font-semibold">Adjustments</h3>
+                            <div class="space-y-2">
+                                @foreach ($statement['adjustments'] as $adjustment)
+                                    <div class="flex justify-between gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+                                        <span>{{ $adjustment->direction }} · {{ $adjustment->reason }}</span>
+                                        <span class="font-medium">{{ $this->money($adjustment->amount) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </section>
+                    @endif
 
-                    <div class="ml-auto max-w-sm rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                        <div class="flex justify-between py-1">
-                            <span>Recorded Total</span>
-                            <span class="font-medium">{{ $this->money($statement['total_price']) }}</span>
-                        </div>
-                        <div class="flex justify-between py-1">
-                            <span>Total Paid</span>
-                            <span class="font-medium">{{ $this->money($statement['total_paid']) }}</span>
-                        </div>
-                        <div class="flex justify-between border-t border-zinc-200 py-2 text-base font-bold dark:border-zinc-800">
-                            <span>Amount Due</span>
-                            <span>{{ $this->money($statement['amount_due']) }}</span>
-                        </div>
+                    <div class="rounded-xl border-2 border-zinc-300 p-4 dark:border-zinc-700">
+                        <div class="flex justify-between py-1"><span>Final transaction total</span><span class="font-semibold">{{ $this->money($statement['ledger']['total']) }}</span></div>
+                        <div class="flex justify-between py-1"><span>Verified settled payments</span><span>{{ $this->money($statement['ledger']['verified_payments']) }}</span></div>
+                        <div class="flex justify-between py-1"><span>Applied transaction credits</span><span>{{ $this->money($statement['ledger']['applied_credits']) }}</span></div>
+                        <div class="mt-2 flex justify-between border-t border-zinc-200 pt-3 text-lg font-bold dark:border-zinc-800"><span>Balance</span><span>{{ $this->money($statement['ledger']['balance']) }}</span></div>
                     </div>
-
-                    <p class="text-xs text-zinc-500">
-                        Note: Booking total and amount due are the source of truth. Facility and amenity line prices use saved snapshots for new records after this module is installed. Older records without snapshots use available fallback values.
-                    </p>
                 </div>
             @endif
-        </div>
+        </flux:card>
     </div>
 </div>
