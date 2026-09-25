@@ -6,6 +6,7 @@ use App\Models\Amenity;
 use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
+use App\Models\BookingRoomOccupant;
 use App\Models\DamageType;
 use App\Models\Discount;
 use App\Models\EntranceFee;
@@ -22,6 +23,7 @@ use App\Models\Payment;
 use App\Models\ProductRate;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
+use App\Models\ReservationRoomOccupant;
 use App\Models\User;
 use App\Observers\AuditObserver;
 use Illuminate\Database\Eloquent\Model;
@@ -47,8 +49,10 @@ class AuditObserverRegistry
         DamageType::class,
         Reservation::class,
         ReservationDetail::class,
+        ReservationRoomOccupant::class,
         Booking::class,
         BookingDetail::class,
+        BookingRoomOccupant::class,
         EntranceSlip::class,
         Payment::class,
         AmenityRequest::class,
