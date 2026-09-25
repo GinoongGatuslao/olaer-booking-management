@@ -138,6 +138,31 @@ class FacilityAssignmentService
         return $reservation;
     }
 
+    /** @return numeric-string */
+    public function quoteIntentTotal(FacilityRequirementIntent $intent): string
+    {
+        return DB::transaction(function () use ($intent): string {
+            $lockedIntent = FacilityRequirementIntent::query()
+                ->with('groups.facilityProduct.productRates')
+                ->whereKey($intent->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedIntent->status !== 'Draft' || $lockedIntent->expires_at->isPast()) {
+                throw new InvalidArgumentException('This facility plan can no longer be quoted.');
+            }
+
+            $assignments = $this->allocate(
+                $lockedIntent,
+                $this->lockCandidateFacilities($lockedIntent),
+            );
+
+            return $this->money->add(
+                ...collect($assignments)->pluck('quote.total_price')->all(),
+            );
+        }, attempts: 3);
+    }
+
     /** @param array<string, mixed> $guestData */
     public function createPendingBooking(
         FacilityRequirementIntent $intent,
