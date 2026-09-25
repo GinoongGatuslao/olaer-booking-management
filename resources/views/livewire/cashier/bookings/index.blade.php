@@ -3,12 +3,14 @@
 use App\Models\BookingDetail;
 use App\Models\Discount;
 use App\Models\Facility;
+use App\Models\FacilityProduct;
 use App\Models\ModeOfPayment;
 use App\Models\ProductRate;
 use App\Services\BookingQuoteService;
 use App\Services\BookingWorkflowService;
 use App\Services\FacilityOccupancyService;
 use App\Services\FacilityProductConfigurationService;
+use App\Services\RoomOccupantService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -72,7 +74,19 @@ new class extends Component {
     public array $transferForm = [
         'booking_details_id' => '',
         'label' => '',
-        'new_facility_id' => '',
+        'facility_product_id' => '',
+    ];
+
+    public array $cancelDetailForm = [
+        'booking_details_id' => '',
+        'label' => '',
+        'reason' => '',
+    ];
+
+    public array $occupantForm = [
+        'booking_details_id' => '',
+        'label' => '',
+        'occupants' => [],
     ];
 
     public function mount(): void
@@ -92,7 +106,7 @@ new class extends Component {
             'rateTypes' => $this->rateTypes(),
             'discounts' => $this->discounts(),
             'paymentModes' => ModeOfPayment::query()->orderBy('mode_of_payment')->get(),
-            'transferFacilities' => $this->transferFacilities(),
+            'transferProducts' => $this->transferProducts(),
             'currentQuote' => $this->currentQuote(),
             'selectedOccupancy' => $this->selectedOccupancy(),
         ];
@@ -307,7 +321,7 @@ new class extends Component {
         $this->transferForm = [
             'booking_details_id' => (string) $bookingDetailsId,
             'label' => $detail->booking->b_ref_no . ' - ' . $detail->facility->facility_name,
-            'new_facility_id' => '',
+            'facility_product_id' => (string) ($detail->facility_product_id ?? ''),
         ];
     }
 
@@ -316,7 +330,7 @@ new class extends Component {
         $this->transferForm = [
             'booking_details_id' => '',
             'label' => '',
-            'new_facility_id' => '',
+            'facility_product_id' => '',
         ];
     }
 
@@ -324,13 +338,13 @@ new class extends Component {
     {
         $validated = $this->validate([
             'transferForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
-            'transferForm.new_facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
+            'transferForm.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
         ]);
 
         try {
-            $bookingWorkflow->transferBookingDetail(
+            $bookingWorkflow->transferBookingDetailToProduct(
                 (int) $validated['transferForm']['booking_details_id'],
-                (int) $validated['transferForm']['new_facility_id']
+                (int) $validated['transferForm']['facility_product_id']
             );
 
             $this->cancelTransfer();
@@ -385,6 +399,86 @@ new class extends Component {
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
             'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
         ];
+    }
+
+    public function openCancelDetail(int $bookingDetailsId): void
+    {
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->findOrFail($bookingDetailsId);
+        $this->cancelDetailForm = [
+            'booking_details_id' => (string) $bookingDetailsId,
+            'label' => $detail->booking?->b_ref_no.' - '.$detail->facility?->facility_name,
+            'reason' => '',
+        ];
+    }
+
+    public function cancelCancelDetail(): void
+    {
+        $this->cancelDetailForm = [
+            'booking_details_id' => '',
+            'label' => '',
+            'reason' => '',
+        ];
+    }
+
+    public function saveCancelDetail(BookingWorkflowService $workflow): void
+    {
+        $validated = $this->validate([
+            'cancelDetailForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
+            'cancelDetailForm.reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        try {
+            $workflow->cancelBookingDetail(
+                (int) $validated['cancelDetailForm']['booking_details_id'],
+                $validated['cancelDetailForm']['reason'],
+                (int) Auth::id(),
+            );
+            $this->cancelCancelDetail();
+            session()->flash('success', 'Facility cancelled. Paid value remains as same-transaction credit.');
+        } catch (\Throwable $exception) {
+            $this->addError('cancelDetail', $exception->getMessage());
+        }
+    }
+
+    public function openOccupants(int $bookingDetailsId): void
+    {
+        $detail = BookingDetail::query()
+            ->with(['booking', 'facility', 'roomOccupants'])
+            ->findOrFail($bookingDetailsId);
+
+        $this->occupantForm = [
+            'booking_details_id' => (string) $bookingDetailsId,
+            'label' => $detail->booking?->b_ref_no.' - '.$detail->facility?->facility_name,
+            'occupants' => $detail->roomOccupants->map(fn ($occupant): array => [
+                'first_name' => $occupant->first_name,
+                'middle_name' => $occupant->middle_name ?? '',
+                'last_name' => $occupant->last_name,
+            ])->all(),
+        ];
+    }
+
+    public function cancelOccupants(): void
+    {
+        $this->occupantForm = [
+            'booking_details_id' => '',
+            'label' => '',
+            'occupants' => [],
+        ];
+    }
+
+    public function saveOccupants(RoomOccupantService $occupants): void
+    {
+        try {
+            $occupants->replaceBookingOccupants(
+                (int) $this->occupantForm['booking_details_id'],
+                $this->occupantForm['occupants'],
+                (int) Auth::id(),
+            );
+            $this->cancelOccupants();
+            session()->flash('success', 'Room occupant names updated and audited.');
+        } catch (\Throwable $exception) {
+            $this->addError('occupants', $exception->getMessage());
+        }
     }
 
     private function resetCreateForm(): void
@@ -508,99 +602,25 @@ new class extends Component {
             ->get();
     }
 
-    private function transferFacilities()
+    private function transferProducts()
     {
         if ($this->transferForm['booking_details_id'] === '') {
             return collect();
         }
 
-        $detail = BookingDetail::query()->with('facility')->find((int) $this->transferForm['booking_details_id']);
+        $detail = BookingDetail::query()
+            ->with('facility')
+            ->find((int) $this->transferForm['booking_details_id']);
 
         if (! $detail || ! $detail->facility) {
             return collect();
         }
 
-        return Facility::query()
-            ->with('facilityProduct')
+        return FacilityProduct::query()
             ->where('facility_type_id', $detail->facility->facility_type_id)
-            ->where('facility_id', '!=', $detail->facility_id)
-            ->whereIn('facility_status', ['Available', 'available'])
-            ->orderBy('facility_name')
-            ->get()
-            ->each(function (Facility $facility): void {
-                $maximum = $facility->facilityProduct?->strict_maximum;
-                $recommended = $facility->facilityProduct?->suggested_maximum;
-                $facility->setAttribute(
-                    'capacity_label',
-                    $maximum
-                        ? "Maximum {$maximum} guests"
-                        : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
-                );
-            });
-    }
-
-    private function rateTypes()
-    {
-        if ($this->form['facility_id'] === '') {
-            return collect();
-        }
-
-        $products = app(FacilityProductConfigurationService::class);
-
-        try {
-            $facility = $products->configuredFacility((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return collect();
-        }
-
-        return $facility->facilityProduct->productRates
-            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
-            ->map(fn (ProductRate $rate): array => [
-                'rate_type' => $products->canonicalRateType($rate),
-                'display_name' => $rate->display_name,
-                'amount' => $rate->amount,
-            ])
-            ->sortBy('rate_type')
-            ->values();
-    }
-
-    private function discounts()
-    {
-        return Discount::query()
-            ->where('status', 'Active')
-            ->orderBy('discount_name')
+            ->where('is_active', true)
+            ->orderBy('display_name')
             ->get();
-    }
-
-    private function selectedOccupancy(): ?array
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->forFacilityId(
-                    (int) $this->form['facility_id'],
-                    max(1, (int) $this->form['total_guest_count']),
-                );
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function strictMaximum(): ?int
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->strictMaximum((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return null;
-        }
     }
 
     private function currentQuote(): ?array
