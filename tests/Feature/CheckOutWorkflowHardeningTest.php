@@ -26,7 +26,7 @@ class CheckOutWorkflowHardeningTest extends TestCase
         );
 
         $cashierId = $this->createUser('Cashier');
-        $managerId = $this->createUser('Manager');
+        $managerId = $this->createUser('Admin');
         $maintenanceId = $this->createUser('Maintenance Staff');
 
         $this->createCompletedInspection(
