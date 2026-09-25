@@ -109,12 +109,6 @@ class extends Component
                 'min:0',
                 'max:5000',
             ],
-            'touristCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
             'adultDiscountId' => [
                 'nullable',
                 'integer',
@@ -163,8 +157,7 @@ class extends Component
                     (int) $validated['maleCount'],
                 'female_count' =>
                     (int) $validated['femaleCount'],
-                'tourist_count' =>
-                    (int) $validated['touristCount'],
+                'tourist_count' => 0,
                 'adult_discount_id' =>
                     $validated['adultDiscountId'] ?? null,
                 'children_discount_id' =>
@@ -219,7 +212,6 @@ class extends Component
             'pwdScCount',
             'maleCount',
             'femaleCount',
-            'touristCount',
             'adultDiscountId',
             'childrenDiscountId',
             'pwdScDiscountId',
@@ -341,13 +333,12 @@ class extends Component
                     <div>
                         <h2 class="font-semibold">Monitoring counts</h2>
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Male plus Female must equal the entrance category total. Tourist count cannot exceed that total.
+                            Male plus Female must equal the entrance category total.
                         </p>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-3">
                             <flux:input wire:model.live="maleCount" type="number" min="0" label="Male" />
                             <flux:input wire:model.live="femaleCount" type="number" min="0" label="Female" />
-                            <flux:input wire:model.live="touristCount" type="number" min="0" label="Tourist" />
                         </div>
                     </div>
 
