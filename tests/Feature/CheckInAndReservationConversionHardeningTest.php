@@ -20,7 +20,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
 
     public function test_only_cashier_can_check_in_guest(): void
     {
-        $managerId = $this->createUser('Manager');
+        $managerId = $this->createUser('Admin');
         [, $detailId] = $this->createBookingScenario(
             'Booked',
             'Booked',
@@ -134,7 +134,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
 
     public function test_only_cashier_can_convert_reservation(): void
     {
-        $managerId = $this->createUser('Manager');
+        $managerId = $this->createUser('Admin');
         $reservation = $this->createReservationScenario(
             'Paid',
             0.00,
