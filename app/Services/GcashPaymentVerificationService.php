@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Payment;
+use App\Models\Reservation;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,7 @@ class GcashPaymentVerificationService
         private readonly DecimalMoneyService $money,
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly FacilityScheduleBlockService $scheduleBlocks,
+        private readonly TransactionLedgerService $ledger,
     ) {}
 
     public function verify(
@@ -32,6 +34,7 @@ class GcashPaymentVerificationService
             $payment = Payment::query()
                 ->with([
                     'booking.details',
+                    'reservation.details',
                     'modeOfPayment',
                 ])
                 ->lockForUpdate()
@@ -54,6 +57,10 @@ class GcashPaymentVerificationService
             }
 
             $this->guardPendingGuestGcashPayment($payment);
+
+            if ($payment->reservation_id !== null) {
+                return $this->verifyReservationPayment($payment, $cashierUserId);
+            }
 
             $booking = Booking::query()
                 ->with('details')
@@ -146,6 +153,7 @@ class GcashPaymentVerificationService
             $payment = Payment::query()
                 ->with([
                     'booking.details',
+                    'reservation.details',
                     'modeOfPayment',
                 ])
                 ->lockForUpdate()
@@ -166,6 +174,17 @@ class GcashPaymentVerificationService
             }
 
             $this->guardPendingGuestGcashPayment($payment);
+
+            if ($payment->reservation_id !== null) {
+                $payment->update([
+                    'payment_status' => 'Rejected',
+                    'rejection_reason' => $reason,
+                    'verified_by_user_id' => $cashierUserId,
+                    'verified_at' => Carbon::now(),
+                ]);
+
+                return $this->freshPayment($payment);
+            }
 
             $booking = Booking::query()
                 ->with('details')
@@ -278,9 +297,12 @@ class GcashPaymentVerificationService
             );
         }
 
-        if (! $payment->booking_id) {
+        if (
+            ($payment->booking_id === null && $payment->reservation_id === null)
+            || ($payment->booking_id !== null && $payment->reservation_id !== null)
+        ) {
             throw new InvalidArgumentException(
-                'This verification workflow handles guest booking payments only.',
+                'A pending GCash payment must belong to exactly one reservation or booking.',
             );
         }
     }
@@ -288,6 +310,18 @@ class GcashPaymentVerificationService
     private function guardVerifiedStateIsConsistent(
         Payment $payment,
     ): void {
+        if ($payment->reservation_id !== null) {
+            $reservation = $payment->reservation;
+
+            if (! $reservation) {
+                throw new InvalidArgumentException(
+                    'This verified payment has no reservation and requires administrative review.',
+                );
+            }
+
+            return;
+        }
+
         $booking = $payment->booking;
 
         if (
@@ -302,11 +336,76 @@ class GcashPaymentVerificationService
         }
     }
 
+    private function verifyReservationPayment(
+        Payment $payment,
+        int $cashierUserId,
+    ): Payment {
+        $reservation = Reservation::query()
+            ->with(['details', 'payments'])
+            ->lockForUpdate()
+            ->findOrFail((int) $payment->reservation_id);
+
+        if (! in_array((string) $reservation->status, ['Active', 'Paid'], true)) {
+            throw new InvalidArgumentException(
+                'This reservation can no longer accept a GCash verification.',
+            );
+        }
+
+        $before = $this->ledger->summaryForReservation($reservation);
+        $amountPaid = $this->money->normalize((string) $payment->amount_paid);
+        $minimum = $this->money->percentage($before['total'], '0.500000');
+        $minimumShortfall = $this->money->maxZero(
+            $this->money->subtract($minimum, $before['verified_payments']),
+        );
+
+        if ($this->money->compare($amountPaid, '0.00') !== 1) {
+            throw new InvalidArgumentException('The submitted GCash payment amount is invalid.');
+        }
+
+        if ($this->money->compare($amountPaid, $minimumShortfall) === -1) {
+            throw new InvalidArgumentException(
+                'Verified reservation payments would remain below the required 50% minimum.',
+            );
+        }
+
+        if ($this->money->compare($amountPaid, $before['balance']) === 1) {
+            throw new InvalidArgumentException(
+                'The submitted GCash payment exceeds the reservation balance.',
+            );
+        }
+
+        $referenceNumber = $this->references->assertAvailable(
+            (string) $payment->reference_number,
+            (int) $payment->payment_id,
+        );
+
+        $payment->update([
+            'reference_number' => $referenceNumber,
+            'payment_status' => 'Verified',
+            'rejection_reason' => null,
+            'verified_by_user_id' => $cashierUserId,
+            'verified_at' => Carbon::now(),
+        ]);
+
+        $after = $this->ledger->summaryForReservation($reservation->fresh(['details', 'payments']));
+        $reservation->update([
+            'total_price' => $after['total'],
+            'amount_due' => $after['balance'],
+            'status' => $this->money->compare($after['balance'], '0.00') !== 1
+                ? 'Paid'
+                : 'Active',
+        ]);
+
+        return $this->freshPayment($payment);
+    }
+
     private function freshPayment(Payment $payment): Payment
     {
         return $payment->fresh([
             'booking.guest',
             'booking.details.facility',
+            'reservation.guest',
+            'reservation.details.facility',
             'modeOfPayment',
             'verifier',
         ]);
