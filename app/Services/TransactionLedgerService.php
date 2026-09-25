@@ -29,6 +29,10 @@ class TransactionLedgerService
         $discounts = '0.00';
 
         foreach ($reservation->details as $detail) {
+            if (strcasecmp((string) ($detail->status ?? ''), 'Cancelled') === 0) {
+                continue;
+            }
+
             $base = $detail->base_price ?? $detail->line_total ?? '0.00';
             $extra = $detail->extra_guest_fee ?? '0.00';
             $discount = $detail->discount_amount ?? '0.00';
@@ -45,7 +49,11 @@ class TransactionLedgerService
             $charges,
             $discounts,
             $this->appliedCredits('reservation_id', (int) $reservation->reservation_id),
-            $this->verifiedPayments($reservation->payments),
+            $this->netVerifiedPayments(
+                $this->verifiedPayments($reservation->payments),
+                'reservation_id',
+                (int) $reservation->reservation_id,
+            ),
         );
     }
 
@@ -70,6 +78,10 @@ class TransactionLedgerService
         $discounts = '0.00';
 
         foreach ($booking->details as $detail) {
+            if (strcasecmp((string) ($detail->status ?? ''), 'Cancelled') === 0) {
+                continue;
+            }
+
             $base = $detail->base_price ?? $detail->line_total ?? '0.00';
             $extra = $detail->extra_guest_fee ?? '0.00';
             $discount = $detail->discount_amount ?? '0.00';
@@ -113,6 +125,12 @@ class TransactionLedgerService
                 $this->verifiedPayments($booking->reservation->payments),
             );
         }
+
+        $payments = $this->netVerifiedPayments(
+            $payments,
+            'booking_id',
+            (int) $booking->booking_id,
+        );
 
         return $this->finish(
             $charges,
@@ -214,6 +232,27 @@ class TransactionLedgerService
             ->all();
 
         return $this->money->add(...$amounts);
+    }
+
+    /** @return numeric-string */
+    private function netVerifiedPayments(
+        string $verifiedPayments,
+        string $parentColumn,
+        int $parentId,
+    ): string {
+        $creditized = TransactionCredit::query()
+            ->where($parentColumn, $parentId)
+            ->whereNotIn('status', ['Voided'])
+            ->pluck('original_amount')
+            ->map(fn (mixed $amount): string => (string) $amount)
+            ->all();
+
+        return $this->money->maxZero(
+            $this->money->subtract(
+                $verifiedPayments,
+                $this->money->add(...$creditized),
+            ),
+        );
     }
 
     /** @return numeric-string */
