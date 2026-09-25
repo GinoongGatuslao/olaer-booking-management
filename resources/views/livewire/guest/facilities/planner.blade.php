@@ -162,9 +162,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             );
             $this->syncRoomOccupantRows();
             $this->planTotal = $assignments->quoteIntentTotal($intent);
-            if ($this->bookingMode) {
-                $this->paymentAmount = $this->planTotal;
-            }
+            $this->paymentAmount = $this->bookingMode
+                ? $this->planTotal
+                : app(\App\Services\DecimalMoneyService::class)
+                    ->percentage($this->planTotal, '0.500000');
             session()->flash('success', 'Facility plan saved. Availability and pricing were checked against current reservations and bookings.');
         } catch (\Throwable $exception) {
             $this->addError('plan', $exception->getMessage());
@@ -202,8 +203,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 'room_occupants' => $this->roomOccupants,
             ];
 
+            $proofPath = $proofStorage->store($this->proofOfPayment);
+
             if ($this->bookingMode) {
-                $proofPath = $proofStorage->store($this->proofOfPayment);
                 $booking = $assignments->createPendingBooking($intent, [
                     ...$guestData,
                     'payment_amount' => $this->paymentAmount,
@@ -218,7 +220,12 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 return;
             }
 
-            $reservation = $assignments->createReservation($intent, $guestData);
+            $reservation = $assignments->createReservation($intent, [
+                ...$guestData,
+                'payment_amount' => $this->paymentAmount,
+                'reference_number' => $this->referenceNumber,
+                'proof_of_payment_path' => $proofPath,
+            ]);
 
             session()->forget('guest.facility_plan_token');
             session()->put('guest.reservation_confirmation_id', (int) $reservation->reservation_id);
@@ -258,11 +265,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'roomOccupants.*.*.first_name' => ['required', 'string', 'max:50'],
             'roomOccupants.*.*.middle_name' => ['nullable', 'string', 'max:50'],
             'roomOccupants.*.*.last_name' => ['required', 'string', 'max:50'],
-            ...($this->bookingMode ? [
-                'paymentAmount' => ['required', 'numeric', 'min:1'],
-                'referenceNumber' => ['required', 'string', 'max:50'],
-                'proofOfPayment' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
-            ] : []),
+            'paymentAmount' => ['required', 'numeric', 'min:1'],
+            'referenceNumber' => ['required', 'string', 'max:50'],
+            'proofOfPayment' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
         ];
     }
 
@@ -456,23 +461,31 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </flux:card>
         @endif
 
-        @if ($bookingMode)
-            <flux:card>
-                <flux:heading size="lg">GCash payment verification</flux:heading>
-                <flux:text class="mt-1">Direct online booking requires full payment. The payment remains Pending until a Cashier verifies the reference and private proof.</flux:text>
-                <div class="mt-5 grid gap-4 md:grid-cols-2">
-                    <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Payment amount" readonly />
-                    <flux:input wire:model="referenceNumber" label="GCash reference number" />
-                </div>
-                <div class="mt-4">
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                        Proof of payment <span class="text-red-600">*</span>
-                    </label>
-                    <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950" />
-                    <p class="mt-1 text-xs text-zinc-500">JPG, PNG, or PDF up to 4 MB. Stored privately.</p>
-                </div>
-            </flux:card>
-        @endif
+        <flux:card>
+            <flux:heading size="lg">GCash payment verification</flux:heading>
+            <flux:text class="mt-1">
+                @if ($bookingMode)
+                    Direct online booking requires 100% payment.
+                @else
+                    Reservation requires at least 50% of the final discounted total. You may pay more, up to the full total.
+                @endif
+                The payment remains Pending until a Cashier verifies the reference and private proof.
+            </flux:text>
+            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <flux:input wire:model="paymentAmount" type="number" step="0.01" min="0.01" label="Payment amount" :readonly="$bookingMode" />
+                <flux:input wire:model="referenceNumber" label="GCash reference number" />
+            </div>
+            @if (! $bookingMode && $planTotal !== '')
+                <p class="mt-2 text-xs text-zinc-500">Minimum deposit: ₱{{ number_format((float) app(\App\Services\DecimalMoneyService::class)->percentage($planTotal, '0.500000'), 2) }} · Maximum: ₱{{ number_format((float) $planTotal, 2) }}</p>
+            @endif
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Proof of payment <span class="text-red-600">*</span>
+                </label>
+                <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950" />
+                <p class="mt-1 text-xs text-zinc-500">JPG, PNG, or PDF up to 4 MB. Stored privately.</p>
+            </div>
+        </flux:card>
 
         @if ($errors->any())
             <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
