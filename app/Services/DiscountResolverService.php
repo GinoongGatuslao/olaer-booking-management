@@ -36,15 +36,11 @@ class DiscountResolverService
 
         return Discount::query()
             ->where('status', 'Active')
+            ->whereNotNull('discount_start')
+            ->whereNotNull('discount_end')
             ->where($this->facilityApplicabilityColumn($facility), true)
-            ->where(function (Builder $query) use ($effectiveAt): void {
-                $query->whereNull('discount_start')
-                    ->orWhere('discount_start', '<=', $effectiveAt);
-            })
-            ->where(function (Builder $query) use ($effectiveAt): void {
-                $query->whereNull('discount_end')
-                    ->orWhere('discount_end', '>=', $effectiveAt);
-            })
+            ->where('discount_start', '<=', $effectiveAt)
+            ->where('discount_end', '>=', $effectiveAt)
             ->orderByDesc('discount_amount')
             ->orderBy('discount_name')
             ->first();
@@ -62,13 +58,17 @@ class DiscountResolverService
             return false;
         }
 
-        $effectiveAt = $this->effectiveDateTime($effectiveDate);
-
-        if ($discount->discount_start && $effectiveAt->lt(Carbon::parse($discount->discount_start))) {
+        if ($discount->discount_start === null || $discount->discount_end === null) {
             return false;
         }
 
-        if ($discount->discount_end && $effectiveAt->gt(Carbon::parse($discount->discount_end))) {
+        $effectiveAt = $this->effectiveDateTime($effectiveDate);
+
+        if ($effectiveAt->lt(Carbon::parse($discount->discount_start))) {
+            return false;
+        }
+
+        if ($effectiveAt->gt(Carbon::parse($discount->discount_end))) {
             return false;
         }
 
