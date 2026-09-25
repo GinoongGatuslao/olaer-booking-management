@@ -68,7 +68,7 @@ class StaffNavigationRouteRenderTest extends TestCase
                 ],
             ],
             'manager' => [
-                'Manager',
+                'Admin',
                 [
                     'admin.dashboard',
                     'admin.facilities.index',
