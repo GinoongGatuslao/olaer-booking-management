@@ -121,6 +121,76 @@ class TransactionCreditService
         }, attempts: 3);
     }
 
+    /**
+     * Apply available credit only inside the same reservation.
+     *
+     * @return numeric-string amount actually applied
+     */
+    public function applyToReservation(
+        int $reservationId,
+        string $targetType,
+        ?int $targetId,
+        string $requestedAmount,
+        int $userId,
+    ): string {
+        return DB::transaction(function () use (
+            $reservationId,
+            $targetType,
+            $targetId,
+            $requestedAmount,
+            $userId,
+        ): string {
+            Reservation::query()->lockForUpdate()->findOrFail($reservationId);
+            $remaining = $this->money->normalize($requestedAmount);
+
+            if ($this->money->compare($remaining, '0.00') !== 1) {
+                throw new InvalidArgumentException('Credit application amount must be greater than zero.');
+            }
+
+            $applied = '0.00';
+            $credits = TransactionCredit::query()
+                ->where('reservation_id', $reservationId)
+                ->where('status', 'Available')
+                ->where('remaining_amount', '>', 0)
+                ->orderBy('transaction_credit_id')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($credits as $credit) {
+                if ($this->money->compare($remaining, '0.00') !== 1) {
+                    break;
+                }
+
+                $available = $this->money->normalize((string) $credit->remaining_amount);
+                $take = $this->money->compare($available, $remaining) === 1
+                    ? $remaining
+                    : $available;
+
+                TransactionCreditAllocation::query()->create([
+                    'transaction_credit_id' => $credit->transaction_credit_id,
+                    'target_type' => $targetType,
+                    'target_id' => $targetId,
+                    'amount' => $take,
+                    'applied_by_user_id' => $userId,
+                    'applied_at' => now(),
+                ]);
+
+                $newRemaining = $this->money->subtract($available, $take);
+                $credit->update([
+                    'remaining_amount' => $newRemaining,
+                    'status' => $this->money->compare($newRemaining, '0.00') === 1
+                        ? 'Available'
+                        : 'Consumed',
+                ]);
+
+                $applied = $this->money->add($applied, $take);
+                $remaining = $this->money->subtract($remaining, $take);
+            }
+
+            return $applied;
+        }, attempts: 3);
+    }
+
     private function create(
         ?int $bookingId,
         ?int $reservationId,
