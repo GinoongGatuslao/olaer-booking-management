@@ -24,7 +24,7 @@ class AdminUserManagementRenderTest extends TestCase
     public function test_existing_user_can_be_updated_without_changing_password(): void
     {
         $role = Role::query()->create([
-            'role_name' => 'Manager',
+            'role_name' => 'Admin',
         ]);
 
         $address = Address::query()->create([
