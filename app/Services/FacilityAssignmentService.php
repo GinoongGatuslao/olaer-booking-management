@@ -3,11 +3,15 @@
 namespace App\Services;
 
 use App\Models\Address;
+use App\Models\Booking;
+use App\Models\BookingDetail;
 use App\Models\Facility;
 use App\Models\FacilityRequirementGroup;
 use App\Models\FacilityRequirementIntent;
 use App\Models\FacilityScheduleBlock;
 use App\Models\Guest;
+use App\Models\ModeOfPayment;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -25,6 +29,7 @@ class FacilityAssignmentService
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
         private readonly GuestConfirmationEmailService $confirmationEmail,
+        private readonly GcashReferenceIntegrityService $gcashReferences,
     ) {}
 
     /** @param array<string, mixed> $guestData */
@@ -131,6 +136,163 @@ class FacilityAssignmentService
         $this->confirmationEmail->sendReservationCreated($reservation);
 
         return $reservation;
+    }
+
+    /** @param array<string, mixed> $guestData */
+    public function createPendingBooking(
+        FacilityRequirementIntent $intent,
+        array $guestData,
+    ): Booking {
+        $booking = DB::transaction(function () use ($intent, $guestData): Booking {
+            $lockedIntent = FacilityRequirementIntent::query()
+                ->with('groups.facilityProduct.productRates')
+                ->whereKey($intent->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (
+                $lockedIntent->status !== 'Draft'
+                || $lockedIntent->reservation_id !== null
+                || $lockedIntent->booking_id !== null
+            ) {
+                throw new InvalidArgumentException('This facility plan has already been submitted.');
+            }
+
+            if ($lockedIntent->expires_at->isPast() || $lockedIntent->groups->isEmpty()) {
+                throw new InvalidArgumentException('This facility plan has expired or has no requirements.');
+            }
+
+            $facilities = $this->lockCandidateFacilities($lockedIntent);
+            $assignments = $this->allocate($lockedIntent, $facilities);
+            $extraGuests = $this->cleanExtraGuests($guestData['extra_guests'] ?? []);
+            $expectedExtraGuests = collect($assignments)->sum(
+                fn (array $assignment): int => $assignment['paid_extra_guest_count'],
+            );
+
+            if (count($extraGuests) !== $expectedExtraGuests) {
+                throw new InvalidArgumentException(
+                    "The selected rooms require exactly {$expectedExtraGuests} paid extra guest name(s).",
+                );
+            }
+
+            $totalPrice = $this->money->add(...collect($assignments)->pluck('quote.total_price')->all());
+            $paymentAmount = $this->money->normalize((string) ($guestData['payment_amount'] ?? '0.00'));
+
+            if (! $this->money->equals($paymentAmount, $totalPrice)) {
+                throw new InvalidArgumentException(
+                    'Direct online booking requires exact full GCash payment before submission. Staff will still verify the proof.',
+                );
+            }
+
+            $mode = ModeOfPayment::query()
+                ->whereRaw('LOWER(mode_of_payment) = ?', ['gcash'])
+                ->first();
+
+            if ($mode === null) {
+                throw new InvalidArgumentException('GCash payment mode is not configured.');
+            }
+
+            $referenceNumber = $this->gcashReferences->assertAvailable(
+                trim((string) ($guestData['reference_number'] ?? '')),
+            );
+            $proofPath = trim((string) ($guestData['proof_of_payment_path'] ?? ''));
+
+            if ($proofPath === '') {
+                throw new InvalidArgumentException('Proof of payment is required.');
+            }
+
+            $address = Address::query()->firstOrCreate([
+                'purok' => filled($guestData['purok'] ?? null) ? trim((string) $guestData['purok']) : null,
+                'province' => trim((string) ($guestData['province'] ?? '')),
+                'city' => trim((string) ($guestData['city'] ?? '')),
+                'barangay' => filled($guestData['barangay'] ?? null) ? trim((string) $guestData['barangay']) : null,
+            ]);
+            $guest = Guest::query()->create([
+                'first_name' => trim((string) ($guestData['first_name'] ?? '')),
+                'middle_name' => filled($guestData['middle_name'] ?? null) ? trim((string) $guestData['middle_name']) : null,
+                'last_name' => trim((string) ($guestData['last_name'] ?? '')),
+                'contact_no' => trim((string) ($guestData['contact_no'] ?? '')),
+                'email' => trim((string) ($guestData['email'] ?? '')),
+                'address_id' => $address->address_id,
+            ]);
+
+            $booking = Booking::query()->create([
+                'b_ref_no' => $this->newBookingReference(),
+                'guest_id' => $guest->guest_id,
+                'booking_date' => today()->toDateString(),
+                'no_of_extra_guests' => $expectedExtraGuests,
+                'total_guest_count' => $lockedIntent->party_count,
+                'total_price' => $totalPrice,
+                'amount_due' => $totalPrice,
+                'user_id' => null,
+                'reservation_id' => null,
+                'entrance_slip_id' => null,
+                'status' => 'Pending Verification',
+            ]);
+
+            $extraGuestOffset = 0;
+
+            foreach ($assignments as $assignment) {
+                $group = $assignment['group'];
+                $quote = $assignment['quote'];
+                $detail = BookingDetail::query()->create([
+                    'booking_id' => $booking->booking_id,
+                    'facility_id' => $assignment['facility']->facility_id,
+                    'rate_type' => $quote['rate_type'],
+                    'check_in_date' => $group->check_in_date->toDateString(),
+                    'check_out_date' => $group->check_out_date->toDateString(),
+                    'check_in_time' => null,
+                    'status' => 'Pending Verification',
+                    'discount_id' => $quote['discount_id'],
+                    'user_id' => null,
+                    ...$quote['detail_snapshot'],
+                ]);
+
+                $this->scheduleBlocks->acquireForBookingDetail($detail);
+
+                $detailExtraGuests = array_slice(
+                    $extraGuests,
+                    $extraGuestOffset,
+                    $assignment['paid_extra_guest_count'],
+                );
+                $this->detailGuests->createForBooking($booking, $detail, $detailExtraGuests);
+                $extraGuestOffset += $assignment['paid_extra_guest_count'];
+            }
+
+            Payment::query()->create([
+                'p_ref_no' => $this->newPaymentReference(),
+                'booking_id' => $booking->booking_id,
+                'reservation_id' => null,
+                'entrance_slip_id' => null,
+                'mode_of_payment_id' => $mode->mode_of_payment_id,
+                'reference_number' => $referenceNumber,
+                'proof_of_payment_path' => $proofPath,
+                'amount_paid' => $paymentAmount,
+                'date_paid' => today()->toDateString(),
+                'user_id' => null,
+                'payment_status' => 'Pending',
+                'verified_by_user_id' => null,
+                'verified_at' => null,
+            ]);
+
+            $lockedIntent->update([
+                'status' => 'Fulfilled',
+                'booking_id' => $booking->booking_id,
+                'fulfilled_at' => now(),
+            ]);
+
+            return $booking->fresh([
+                'guest.address',
+                'details.facility.facilityType',
+                'details.discount',
+                'extraGuests',
+                'payments.modeOfPayment',
+            ]);
+        }, attempts: 3);
+
+        $this->confirmationEmail->sendBookingSubmitted($booking);
+
+        return $booking;
     }
 
     /** @return EloquentCollection<int, Facility> */
@@ -273,6 +435,24 @@ class FacilityAssignmentService
         do {
             $reference = 'R'.now()->format('ymdHis').Str::upper(Str::random(4));
         } while (Reservation::query()->where('r_ref_no', $reference)->exists());
+
+        return $reference;
+    }
+
+    private function newBookingReference(): string
+    {
+        do {
+            $reference = 'B'.now()->format('ymdHis').Str::upper(Str::random(4));
+        } while (Booking::query()->where('b_ref_no', $reference)->exists());
+
+        return $reference;
+    }
+
+    private function newPaymentReference(): string
+    {
+        do {
+            $reference = 'P'.now()->format('ymdHis').Str::upper(Str::random(4));
+        } while (Payment::query()->where('p_ref_no', $reference)->exists());
 
         return $reference;
     }
