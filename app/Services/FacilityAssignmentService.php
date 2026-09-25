@@ -27,6 +27,7 @@ class FacilityAssignmentService
         private readonly ReservationQuoteService $quotes,
         private readonly DiscountResolverService $discounts,
         private readonly DetailExtraGuestService $detailGuests,
+        private readonly RoomOccupantService $roomOccupants,
         private readonly DecimalMoneyService $money,
         private readonly GuestConfirmationEmailService $confirmationEmail,
         private readonly GcashReferenceIntegrityService $gcashReferences,
@@ -54,14 +55,17 @@ class FacilityAssignmentService
 
             $facilities = $this->lockCandidateFacilities($lockedIntent);
             $assignments = $this->allocate($lockedIntent, $facilities);
-            $extraGuests = $this->cleanExtraGuests($guestData['extra_guests'] ?? []);
+            $roomOccupantGroups = array_values($guestData['room_occupants'] ?? []);
+            $roomAssignmentCount = collect($assignments)
+                ->filter(fn (array $assignment): bool => $this->isRoomAssignment($assignment))
+                ->count();
             $expectedExtraGuests = collect($assignments)->sum(
                 fn (array $assignment): int => $assignment['paid_extra_guest_count'],
             );
 
-            if (count($extraGuests) !== $expectedExtraGuests) {
+            if (count($roomOccupantGroups) !== $roomAssignmentCount) {
                 throw new InvalidArgumentException(
-                    "The selected rooms require exactly {$expectedExtraGuests} paid extra guest name(s).",
+                    "The selected rooms require occupant lists for exactly {$roomAssignmentCount} room(s).",
                 );
             }
 
@@ -93,7 +97,7 @@ class FacilityAssignmentService
                 'status' => 'Active',
             ]);
 
-            $extraGuestOffset = 0;
+            $roomIndex = 0;
 
             foreach ($assignments as $assignment) {
                 $group = $assignment['group'];
@@ -110,13 +114,20 @@ class FacilityAssignmentService
 
                 $this->scheduleBlocks->acquireForReservationDetail($detail);
 
-                $detailExtraGuests = array_slice(
-                    $extraGuests,
-                    $extraGuestOffset,
-                    $assignment['paid_extra_guest_count'],
-                );
-                $this->detailGuests->createForReservation($reservation, $detail, $detailExtraGuests);
-                $extraGuestOffset += $assignment['paid_extra_guest_count'];
+                if ($this->isRoomAssignment($assignment)) {
+                    $occupants = $this->roomOccupants->createForReservation(
+                        $detail,
+                        $roomOccupantGroups[$roomIndex] ?? [],
+                        $assignment['guest_count'],
+                    );
+                    $included = (int) $assignment['group']->facilityProduct->included_guest_count;
+                    $this->detailGuests->createForReservation(
+                        $reservation,
+                        $detail,
+                        array_slice($occupants, $included),
+                    );
+                    $roomIndex++;
+                }
             }
 
             $lockedIntent->update([
@@ -189,14 +200,17 @@ class FacilityAssignmentService
 
             $facilities = $this->lockCandidateFacilities($lockedIntent);
             $assignments = $this->allocate($lockedIntent, $facilities);
-            $extraGuests = $this->cleanExtraGuests($guestData['extra_guests'] ?? []);
+            $roomOccupantGroups = array_values($guestData['room_occupants'] ?? []);
+            $roomAssignmentCount = collect($assignments)
+                ->filter(fn (array $assignment): bool => $this->isRoomAssignment($assignment))
+                ->count();
             $expectedExtraGuests = collect($assignments)->sum(
                 fn (array $assignment): int => $assignment['paid_extra_guest_count'],
             );
 
-            if (count($extraGuests) !== $expectedExtraGuests) {
+            if (count($roomOccupantGroups) !== $roomAssignmentCount) {
                 throw new InvalidArgumentException(
-                    "The selected rooms require exactly {$expectedExtraGuests} paid extra guest name(s).",
+                    "The selected rooms require occupant lists for exactly {$roomAssignmentCount} room(s).",
                 );
             }
 
@@ -255,7 +269,7 @@ class FacilityAssignmentService
                 'status' => 'Pending Verification',
             ]);
 
-            $extraGuestOffset = 0;
+            $roomIndex = 0;
 
             foreach ($assignments as $assignment) {
                 $group = $assignment['group'];
@@ -275,13 +289,20 @@ class FacilityAssignmentService
 
                 $this->scheduleBlocks->acquireForBookingDetail($detail);
 
-                $detailExtraGuests = array_slice(
-                    $extraGuests,
-                    $extraGuestOffset,
-                    $assignment['paid_extra_guest_count'],
-                );
-                $this->detailGuests->createForBooking($booking, $detail, $detailExtraGuests);
-                $extraGuestOffset += $assignment['paid_extra_guest_count'];
+                if ($this->isRoomAssignment($assignment)) {
+                    $occupants = $this->roomOccupants->createForBooking(
+                        $detail,
+                        $roomOccupantGroups[$roomIndex] ?? [],
+                        $assignment['guest_count'],
+                    );
+                    $included = (int) $assignment['group']->facilityProduct->included_guest_count;
+                    $this->detailGuests->createForBooking(
+                        $booking,
+                        $detail,
+                        array_slice($occupants, $included),
+                    );
+                    $roomIndex++;
+                }
             }
 
             Payment::query()->create([
@@ -341,7 +362,7 @@ class FacilityAssignmentService
 
     /**
      * @param  EloquentCollection<int, Facility>  $facilities
-     * @return array<int, array{group: FacilityRequirementGroup, facility: Facility, quote: array<string, mixed>, paid_extra_guest_count: int}>
+     * @return array<int, array{group: FacilityRequirementGroup, facility: Facility, quote: array<string, mixed>, guest_count: int, paid_extra_guest_count: int}>
      */
     private function allocate(FacilityRequirementIntent $intent, EloquentCollection $facilities): array
     {
@@ -408,6 +429,7 @@ class FacilityAssignmentService
                     'group' => $group,
                     'facility' => $facility,
                     'quote' => $quote,
+                    'guest_count' => $guestCount,
                     'paid_extra_guest_count' => (int) $quote['extra_guest_count'],
                 ];
                 $assigned++;
@@ -437,17 +459,11 @@ class FacilityAssignmentService
         );
     }
 
-    /**
-     * @param  array<int, array<string, mixed>>  $extraGuests
-     * @return array<int, array{first_name: string, middle_name: string|null, last_name: string}>
-     */
-    private function cleanExtraGuests(array $extraGuests): array
+    /** @param array<string, mixed> $assignment */
+    private function isRoomAssignment(array $assignment): bool
     {
-        return collect($extraGuests)->map(fn (array $guest): array => [
-            'first_name' => trim((string) ($guest['first_name'] ?? '')),
-            'middle_name' => filled($guest['middle_name'] ?? null) ? trim((string) $guest['middle_name']) : null,
-            'last_name' => trim((string) ($guest['last_name'] ?? '')),
-        ])->all();
+        return $assignment['group']->facilityProduct->included_guest_count !== null
+            && $assignment['group']->facilityProduct->strict_maximum !== null;
     }
 
     private function blockKey(int $facilityId, string $date, string $slot): string
