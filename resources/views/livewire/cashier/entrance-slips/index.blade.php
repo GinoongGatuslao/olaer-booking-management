@@ -668,7 +668,6 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     <td class="px-5 py-4 text-xs text-zinc-500">
                                         M {{ $slip->no_of_Male }}
                                         · F {{ $slip->no_of_Female }}
-                                        · T {{ $slip->no_of_Tourist }}
                                     </td>
 
                                     <td class="px-5 py-4">
@@ -824,13 +823,11 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                 </div>
 
                                 <div class="flex justify-between gap-4">
-                                    <dt class="text-zinc-500">Male / Female / Tourist</dt>
+                                    <dt class="text-zinc-500">Male / Female</dt>
                                     <dd class="text-right font-medium">
                                         {{ $this->selectedSlip->no_of_Male }}
                                         /
                                         {{ $this->selectedSlip->no_of_Female }}
-                                        /
-                                        {{ $this->selectedSlip->no_of_Tourist }}
                                     </dd>
                                 </div>
                             </dl>
