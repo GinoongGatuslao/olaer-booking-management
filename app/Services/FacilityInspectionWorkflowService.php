@@ -503,7 +503,7 @@ class FacilityInspectionWorkflowService
                 'inspected_by_user_id' => $maintenanceUserId,
                 'inspection_status' => $status,
                 'remarks' => $remarks,
-                'inspected_at' => $status === 'In Progress' ? null : Carbon::now(),
+                'inspected_at' => Carbon::now(),
             ],
         );
     }
