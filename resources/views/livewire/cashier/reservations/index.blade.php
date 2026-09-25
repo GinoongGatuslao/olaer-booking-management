@@ -7,6 +7,8 @@ use App\Models\ProductRate;
 use App\Models\FacilityType;
 use App\Models\Guest;
 use App\Models\Reservation;
+use App\Models\ReservationDetail;
+use App\Models\FacilityProduct;
 use App\Services\FacilityAvailabilityService;
 use App\Services\FacilityOccupancyService;
 use App\Services\FacilityProductConfigurationService;
@@ -14,6 +16,8 @@ use App\Services\CashierReservationWorkflowService;
 use App\Services\DecimalMoneyService;
 use App\Services\ReservationQuoteService;
 use App\Services\StaffReservationCancellationService;
+use App\Services\ReservationFacilityOperationService;
+use App\Services\RoomOccupantService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -75,6 +79,14 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public ?int $cancelReservationId = null;
     public string $cancellationReason = '';
 
+    public ?int $detailActionId = null;
+    public ?string $detailAction = null;
+    public string $detailCheckInDate = '';
+    public string $detailCheckOutDate = '';
+    public string $detailFacilityProductId = '';
+    public string $detailCancellationReason = '';
+    public array $detailOccupants = [];
+
     public function mount(): void
     {
         $today = now()->toDateString();
@@ -101,6 +113,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'guest.address',
                 'details.facility.facilityType',
                 'details.discount',
+                'details.facility.facilityProduct',
+                'details.roomOccupants',
                 'extraGuests',
                 'payments.modeOfPayment',
             ]);
@@ -655,6 +669,117 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->cancelReservationId = null;
         $this->cancellationReason = '';
         session()->flash('success', 'Reservation cancelled successfully.');
+    }
+
+    public function openDetailAction(int $reservationDetailId, string $action): void
+    {
+        if (! in_array($action, ['reschedule', 'transfer', 'cancel', 'occupants'], true)) {
+            return;
+        }
+
+        $detail = ReservationDetail::query()
+            ->with(['reservation', 'facility.facilityProduct', 'roomOccupants'])
+            ->findOrFail($reservationDetailId);
+
+        if ($detail->reservation?->status !== 'Active'
+            || in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true)) {
+            session()->flash('error', 'This reservation facility is no longer editable.');
+
+            return;
+        }
+
+        $this->detailActionId = $reservationDetailId;
+        $this->detailAction = $action;
+        $this->detailCheckInDate = $detail->check_in_date?->toDateString() ?? '';
+        $this->detailCheckOutDate = $detail->check_out_date?->toDateString() ?? '';
+        $this->detailFacilityProductId = (string) ($detail->facility_product_id ?? '');
+        $this->detailCancellationReason = '';
+        $this->detailOccupants = $detail->roomOccupants
+            ->map(fn ($occupant): array => [
+                'first_name' => $occupant->first_name,
+                'middle_name' => $occupant->middle_name ?? '',
+                'last_name' => $occupant->last_name,
+            ])
+            ->all();
+    }
+
+    public function closeDetailAction(): void
+    {
+        $this->detailActionId = null;
+        $this->detailAction = null;
+        $this->detailCheckInDate = '';
+        $this->detailCheckOutDate = '';
+        $this->detailFacilityProductId = '';
+        $this->detailCancellationReason = '';
+        $this->detailOccupants = [];
+    }
+
+    public function detailTransferProducts(): Collection
+    {
+        if ($this->detailActionId === null) {
+            return collect();
+        }
+
+        $detail = ReservationDetail::query()
+            ->with('facility')
+            ->find($this->detailActionId);
+
+        if ($detail?->facility === null) {
+            return collect();
+        }
+
+        return FacilityProduct::query()
+            ->where('facility_type_id', $detail->facility->facility_type_id)
+            ->where('is_active', true)
+            ->orderBy('display_name')
+            ->get();
+    }
+
+    public function saveDetailAction(
+        ReservationFacilityOperationService $operations,
+        RoomOccupantService $occupants,
+    ): void {
+        if ($this->detailActionId === null || $this->detailAction === null) {
+            return;
+        }
+
+        try {
+            match ($this->detailAction) {
+                'reschedule' => $operations->rescheduleDetail(
+                    $this->detailActionId,
+                    $this->detailCheckInDate,
+                    $this->detailCheckOutDate,
+                    (int) Auth::id(),
+                ),
+                'transfer' => $operations->transferDetailToProduct(
+                    $this->detailActionId,
+                    (int) $this->detailFacilityProductId,
+                    (int) Auth::id(),
+                ),
+                'cancel' => $operations->cancelDetail(
+                    $this->detailActionId,
+                    $this->detailCancellationReason,
+                    (int) Auth::id(),
+                ),
+                'occupants' => $occupants->replaceReservationOccupants(
+                    $this->detailActionId,
+                    $this->detailOccupants,
+                    (int) Auth::id(),
+                ),
+                default => null,
+            };
+
+            session()->flash('success', match ($this->detailAction) {
+                'reschedule' => 'Facility schedule updated without changing the other reservation facilities.',
+                'transfer' => 'Facility upgraded/transferred and automatically reassigned.',
+                'cancel' => 'Facility cancelled. Any paid value was retained as same-transaction credit.',
+                'occupants' => 'Room occupant names updated and audited.',
+                default => 'Reservation facility updated.',
+            });
+            $this->closeDetailAction();
+        } catch (\Throwable $exception) {
+            $this->addError('detailAction', $exception->getMessage());
+        }
     }
 
     public function resetCreateForm(): void
