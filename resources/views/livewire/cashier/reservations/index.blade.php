@@ -747,7 +747,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         description="Create temporary facility holds, review guest schedules, and manage active reservations before booking conversion."
     >
         <x-slot:actions>
-            <flux:button type="button" variant="primary" wire:click="$set('showCreateForm', true)">
+            <flux:button href="{{ route('cashier.reservations.create') }}" variant="primary" wire:navigate>
                 New reservation
             </flux:button>
             <flux:button
