@@ -35,7 +35,7 @@ class CheckOutInspectionRequestHardeningTest extends TestCase
         );
 
         $managerId = $this->createUser(
-            'Manager',
+            'Admin',
             'manager_complete_role',
         );
 
