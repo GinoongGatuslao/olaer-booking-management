@@ -1,19 +1,11 @@
 <?php
 
 use App\Models\BookingDetail;
-use App\Models\Discount;
-use App\Models\Facility;
 use App\Models\FacilityProduct;
-use App\Models\ModeOfPayment;
-use App\Models\ProductRate;
-use App\Services\BookingQuoteService;
 use App\Services\BookingWorkflowService;
-use App\Services\FacilityOccupancyService;
-use App\Services\FacilityProductConfigurationService;
 use App\Services\RoomOccupantService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -39,32 +31,6 @@ new class extends Component {
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
-    public bool $showCreateForm = false;
-
-    public array $form = [
-        'first_name' => '',
-        'middle_name' => '',
-        'last_name' => '',
-        'contact_no' => '',
-        'email' => '',
-        'province' => 'Sultan Kudarat',
-        'city' => 'Tacurong City',
-        'barangay' => '',
-        'purok' => '',
-        'facility_id' => '',
-        'rate_type' => '',
-        'discount_id' => '',
-        'total_guest_count' => 1,
-        'check_in_date' => '',
-        'check_out_date' => '',
-        'check_in_time' => '12:00',
-        'mode_of_payment_id' => '',
-        'reference_number' => '',
-        'payment_amount' => '',
-    ];
-
-    public array $extraGuests = [];
-
     public array $rescheduleForm = [
         'booking_details_id' => '',
         'label' => '',
@@ -89,26 +55,13 @@ new class extends Component {
         'occupants' => [],
     ];
 
-    public function mount(): void
-    {
-        $this->form['check_in_date'] = now()->toDateString();
-        $this->form['check_out_date'] = now()->addDay()->toDateString();
-        $this->form['mode_of_payment_id'] = (string) (ModeOfPayment::query()->where('mode_of_payment', 'Cash')->value('mode_of_payment_id') ?? '');
-    }
-
     public function with(): array
     {
         return [
             'bookings' => $this->bookings(),
             'bookingStatuses' => $this->bookingStatuses(),
             'detailStatuses' => $this->detailStatuses(),
-            'facilities' => $this->facilities(),
-            'rateTypes' => $this->rateTypes(),
-            'discounts' => $this->discounts(),
-            'paymentModes' => ModeOfPayment::query()->orderBy('mode_of_payment')->get(),
             'transferProducts' => $this->transferProducts(),
-            'currentQuote' => $this->currentQuote(),
-            'selectedOccupancy' => $this->selectedOccupancy(),
         ];
     }
 
@@ -148,31 +101,6 @@ new class extends Component {
         $this->resetPage();
     }
 
-    public function updatedFormFacilityId(): void
-    {
-        $this->form['rate_type'] = '';
-        $this->form['discount_id'] = '';
-        $this->form['total_guest_count'] = 1;
-        $this->form['payment_amount'] = '';
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function updatedFormTotalGuestCount(): void
-    {
-        $this->form['payment_amount'] = '';
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function updatedFormRateType(): void
-    {
-        $this->form['payment_amount'] = '';
-    }
-
-    public function updatedFormDiscountId(): void
-    {
-        $this->form['payment_amount'] = '';
-    }
-
     public function sortBy(string $field): void
     {
         $allowed = [
@@ -210,67 +138,6 @@ new class extends Component {
         return $this->sortDirection === 'asc'
             ? '↑'
             : '↓';
-    }
-
-    public function toggleCreateForm(): void
-    {
-        $this->showCreateForm = ! $this->showCreateForm;
-    }
-
-    private function syncPaidExtraGuestRows(): void
-    {
-        $occupancy = $this->selectedOccupancy();
-
-        if ($this->form['facility_id'] !== '' && $occupancy === null) {
-            return;
-        }
-
-        $required = (int) (
-            $occupancy['paid_extra_guest_count'] ?? 0
-        );
-        $current = $this->extraGuests;
-        $rows = [];
-
-        for ($index = 0; $index < $required; $index++) {
-            $rows[$index] = $current[$index] ?? [
-                'first_name' => '',
-                'middle_name' => '',
-                'last_name' => '',
-            ];
-        }
-
-        $this->extraGuests = $rows;
-    }
-
-    public function useQuotedAmount(): void
-    {
-        $quote = $this->currentQuote();
-
-        if ($quote !== null) {
-            $this->form['payment_amount'] = $quote['total'];
-        }
-    }
-
-    public function createBooking(BookingWorkflowService $bookingWorkflow): void
-    {
-        $this->syncPaidExtraGuestRows();
-
-        $validated = $this->validate($this->createRules());
-
-        try {
-            $payload = $validated['form'];
-            $payload['extra_guests'] = $this->extraGuests;
-            $payload['user_id'] = Auth::id();
-
-            $bookingWorkflow->createBooking($payload);
-
-            $this->resetCreateForm();
-            $this->showCreateForm = false;
-            $this->resetPage();
-            session()->flash('success', 'Booking created and payment recorded successfully.');
-        } catch (Throwable $exception) {
-            $this->addError('booking', $exception->getMessage());
-        }
     }
 
     public function openReschedule(int $bookingDetailsId): void
@@ -366,41 +233,6 @@ new class extends Component {
         }
     }
 
-    private function createRules(): array
-    {
-        $guestCountRules = ['required', 'integer', 'min:1'];
-        $strictMaximum = $this->strictMaximum();
-
-        if ($strictMaximum !== null) {
-            $guestCountRules[] = 'max:'.$strictMaximum;
-        }
-
-        return [
-            'form.first_name' => ['required', 'string', 'max:50'],
-            'form.middle_name' => ['nullable', 'string', 'max:50'],
-            'form.last_name' => ['required', 'string', 'max:50'],
-            'form.contact_no' => ['required', 'string', 'max:20'],
-            'form.email' => ['nullable', 'email', 'max:100'],
-            'form.province' => ['required', 'string', 'max:50'],
-            'form.city' => ['required', 'string', 'max:50'],
-            'form.barangay' => ['nullable', 'string', 'max:50'],
-            'form.purok' => ['nullable', 'string', 'max:50'],
-            'form.facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'form.rate_type' => ['required', 'string', 'max:50'],
-            'form.discount_id' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
-            'form.total_guest_count' => $guestCountRules,
-            'form.check_in_date' => ['required', 'date', 'after_or_equal:today'],
-            'form.check_out_date' => ['required', 'date', 'after:form.check_in_date'],
-            'form.check_in_time' => ['required', 'date_format:H:i'],
-            'form.mode_of_payment_id' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
-            'form.reference_number' => ['nullable', 'string', 'max:100'],
-            'form.payment_amount' => ['required', 'numeric', 'min:0'],
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
-        ];
-    }
-
     public function openCancelDetail(int $bookingDetailsId): void
     {
         $detail = BookingDetail::query()->with(['booking', 'facility'])->findOrFail($bookingDetailsId);
@@ -479,34 +311,6 @@ new class extends Component {
         } catch (\Throwable $exception) {
             $this->addError('occupants', $exception->getMessage());
         }
-    }
-
-    private function resetCreateForm(): void
-    {
-        $this->form = [
-            'first_name' => '',
-            'middle_name' => '',
-            'last_name' => '',
-            'contact_no' => '',
-            'email' => '',
-            'province' => 'Sultan Kudarat',
-            'city' => 'Tacurong City',
-            'barangay' => '',
-            'purok' => '',
-            'facility_id' => '',
-            'rate_type' => '',
-            'discount_id' => '',
-            'total_guest_count' => 1,
-            'check_in_date' => now()->toDateString(),
-            'check_out_date' => now()->addDay()->toDateString(),
-            'check_in_time' => '12:00',
-            'mode_of_payment_id' => (string) (ModeOfPayment::query()->where('mode_of_payment', 'Cash')->value('mode_of_payment_id') ?? ''),
-            'reference_number' => '',
-            'payment_amount' => '',
-        ];
-
-        $this->extraGuests = [];
-        $this->resetErrorBag();
     }
 
     private function bookings()
@@ -593,12 +397,24 @@ new class extends Component {
             ->pluck('status');
     }
 
-    private function facilities()
+    private function transferProducts()
     {
-        return Facility::query()
-            ->with(['facilityType', 'facilityProduct'])
-            ->whereIn('facility_status', ['Available', 'available'])
-            ->orderBy('facility_name')
+        if ($this->transferForm['booking_details_id'] === '') {
+            return collect();
+        }
+
+        $detail = BookingDetail::query()
+            ->with('facility')
+            ->find((int) $this->transferForm['booking_details_id']);
+
+        if (! $detail || ! $detail->facility) {
+            return collect();
+        }
+
+        return FacilityProduct::query()
+            ->where('facility_type_id', $detail->facility->facility_type_id)
+            ->where('is_active', true)
+            ->orderBy('display_name')
             ->get();
     }
 
@@ -623,92 +439,6 @@ new class extends Component {
             ->get();
     }
 
-    private function rateTypes()
-    {
-        if ($this->form['facility_id'] === '') {
-            return collect();
-        }
-
-        $products = app(FacilityProductConfigurationService::class);
-
-        try {
-            $facility = $products->configuredFacility((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return collect();
-        }
-
-        return $facility->facilityProduct->productRates
-            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
-            ->map(fn (ProductRate $rate): array => [
-                'rate_type' => $products->canonicalRateType($rate),
-                'display_name' => $rate->display_name,
-                'amount' => $rate->amount,
-            ])
-            ->sortBy('rate_type')
-            ->values();
-    }
-
-    private function discounts()
-    {
-        return Discount::query()
-            ->where('status', 'Active')
-            ->orderBy('discount_name')
-            ->get();
-    }
-
-    private function selectedOccupancy(): ?array
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->forFacilityId(
-                    (int) $this->form['facility_id'],
-                    max(1, (int) $this->form['total_guest_count']),
-                );
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function strictMaximum(): ?int
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->strictMaximum((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function currentQuote(): ?array
-    {
-        if ($this->form['facility_id'] === '' || $this->form['rate_type'] === '') {
-            return null;
-        }
-
-        try {
-            return app(BookingQuoteService::class)->quote(
-                facilityId: (int) $this->form['facility_id'],
-                rateType: (string) $this->form['rate_type'],
-                discountId: $this->form['discount_id'] !== ''
-                    ? (int) $this->form['discount_id']
-                    : null,
-                totalGuestCount: max(
-                    1,
-                    (int) $this->form['total_guest_count'],
-                ),
-            );
-        } catch (Throwable) {
-            return null;
-        }
-    }
 };
 ?>
 
@@ -719,8 +449,8 @@ new class extends Component {
         description="Create paid facility bookings, reschedule stays, transfer facilities, and extend eligible cottage bookings."
     >
         <x-slot:actions>
-            <flux:button variant="primary" wire:click="toggleCreateForm">
-                {{ $showCreateForm ? 'Hide Form' : 'Add Booking' }}
+            <flux:button href="{{ route('cashier.bookings.create') }}" variant="primary" wire:navigate>
+                New booking
             </flux:button>
         </x-slot:actions>
     </x-staff-page-header>
@@ -746,143 +476,6 @@ new class extends Component {
     @error('extend')
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
     @enderror
-
-    @if ($showCreateForm)
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Create Paid Booking</h2>
-            <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">A booking is confirmed only after exact full payment is recorded.</p>
-
-            <form wire:submit.prevent="createBooking" class="space-y-6">
-                <div class="grid gap-4 md:grid-cols-3">
-                    <flux:input label="First name" wire:model="form.first_name" />
-                    <flux:input label="Middle name" wire:model="form.middle_name" />
-                    <flux:input label="Last name" wire:model="form.last_name" />
-                    <flux:input label="Contact number" wire:model="form.contact_no" />
-                    <flux:input label="Email" type="email" wire:model="form.email" />
-                    <flux:input label="Province" wire:model="form.province" />
-                    <flux:input label="City" wire:model="form.city" />
-                    <flux:input label="Barangay" wire:model="form.barangay" />
-                    <flux:input label="Purok" wire:model="form.purok" />
-                </div>
-
-                <div class="grid gap-4 md:grid-cols-4">
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Facility</label>
-                        <select wire:model.live="form.facility_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select facility</option>
-                            @foreach ($facilities as $facility)
-                                <option value="{{ $facility->facility_id }}">
-                                    {{ $facility->facility_name }} - {{ optional($facility->facilityType)->facility_type }} / {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('form.facility_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Rate type</label>
-                        <select wire:model.live="form.rate_type" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select rate</option>
-                            @foreach ($rateTypes as $rate)
-                                <option value="{{ $rate['rate_type'] }}">{{ $rate['display_name'] }} - ₱{{ number_format((float) $rate['amount'], 2) }}</option>
-                            @endforeach
-                        </select>
-                        @error('form.rate_type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Discount</label>
-                        <select wire:model.live="form.discount_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">No discount</option>
-                            @foreach ($discounts as $discount)
-                                <option value="{{ $discount->discount_id }}">{{ $discount->discount_name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <flux:input label="Check-in time" type="time" wire:model="form.check_in_time" />
-
-                    <flux:input label="Check-in date" type="date" wire:model.live="form.check_in_date" />
-                    <flux:input label="Check-out date" type="date" wire:model.live="form.check_out_date" />
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Mode of payment</label>
-                        <select wire:model="form.mode_of_payment_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select payment mode</option>
-                            @foreach ($paymentModes as $mode)
-                                <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
-                            @endforeach
-                        </select>
-                        @error('form.mode_of_payment_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <flux:input label="GCash reference number" wire:model="form.reference_number" />
-                    <flux:input label="Payment amount" type="number" step="0.01" wire:model="form.payment_amount" />
-                </div>
-
-                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Guest capacity</h3>
-                    <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                        Total guests includes the primary guest. Rooms include 4 guests and enforce their strict maximum; room guests above 4 cost ₱100 each. Cottage and function-hall capacities are recommendations only.
-                    </p>
-
-                    <div class="mt-4 max-w-xs">
-                        <flux:input
-                            label="Total guests"
-                            type="number"
-                            min="1"
-                            wire:model.live="form.total_guest_count"
-                        />
-                    </div>
-
-                    @if ($selectedOccupancy)
-                        <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-950">
-                            @if ($selectedOccupancy['strict_maximum'])
-                                Maximum {{ $selectedOccupancy['strict_maximum'] }} guests · Included {{ $selectedOccupancy['included_guest_count'] }} · Paid room extras {{ $selectedOccupancy['paid_extra_guest_count'] }}
-                            @else
-                                Recommended capacity: {{ $selectedOccupancy['suggested_minimum'] ? $selectedOccupancy['suggested_minimum'].'–' : '' }}{{ $selectedOccupancy['suggested_maximum'] }} guests (informational)
-                            @endif
-                        </div>
-                    @endif
-
-                    @if ($extraGuests !== [])
-                        <div class="mt-4 space-y-3">
-                            <p class="text-sm font-medium">Paid room extra guest names</p>
-                            @foreach ($extraGuests as $index => $extraGuest)
-                                <div wire:key="extra-guest-{{ $index }}" class="grid gap-3 md:grid-cols-3">
-                                    <flux:input placeholder="First name" wire:model="extraGuests.{{ $index }}.first_name" />
-                                    <flux:input placeholder="Middle name" wire:model="extraGuests.{{ $index }}.middle_name" />
-                                    <flux:input placeholder="Last name" wire:model="extraGuests.{{ $index }}.last_name" />
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
-                    <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Current quote</h3>
-                    @if ($currentQuote)
-                        <div class="mt-2 grid gap-2 text-sm md:grid-cols-4">
-                            <div>Base: <strong>₱{{ number_format((float) $currentQuote['base_price'], 2) }}</strong></div>
-                            <div>Discount: <strong>₱{{ number_format((float) $currentQuote['discount_amount'], 2) }}</strong></div>
-                            <div>Extra guest fee: <strong>₱{{ number_format((float) $currentQuote['extra_guest_fee'], 2) }}</strong></div>
-                            <div>Total: <strong>₱{{ number_format((float) $currentQuote['total'], 2) }}</strong></div>
-                        </div>
-                        <div class="mt-3">
-                            <flux:button type="button" size="sm" wire:click="useQuotedAmount">Use exact amount</flux:button>
-                        </div>
-                    @else
-                        <p class="mt-1 text-sm text-zinc-500">Select facility and rate type to compute total.</p>
-                    @endif
-                </div>
-
-                <div class="flex gap-2">
-                    <flux:button type="submit" variant="primary">Create Booking</flux:button>
-                    <flux:button type="button" wire:click="toggleCreateForm">Cancel</flux:button>
-                </div>
-            </form>
-        </div>
-    @endif
 
     @if ($rescheduleForm['booking_details_id'] !== '')
         <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
