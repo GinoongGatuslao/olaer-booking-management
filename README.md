@@ -19,6 +19,7 @@ Core rules:
 - Individual facility cancellation does not cancel the parent transaction. Eligible paid value stays as same-transaction credit only.
 - Facility transfers are upgrade-only; cheaper/downgrade transfers are rejected.
 - Direct Walk-In Booking requires full facility and admission payment before admission. Optional amenity charges may remain outstanding.
+- Amenity delivery does not require advance payment; delivered amenity charges may remain outstanding on the active Booking.
 - Inspection fines remain draft until Complete Inspection; publication, booking charge, request completion, and locking occur atomically.
 - Locked Entrance Slips are corrected by voiding the old slip and creating a replacement; locked history is never edited in place.
 - Facility creation uses Clone Facility; Facility Number is never copied from the source.
