@@ -62,6 +62,63 @@ class BatchOneMigrationFoundationTest extends TestCase
         );
     }
 
+    public function test_manager_removal_migration_stops_when_legacy_manager_accounts_exist(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $managerRole = Role::query()->create(['role_name' => 'Manager']);
+        User::factory()->create([
+            'role_id' => $managerRole->role_id,
+            'username' => 'legacy-manager',
+            'email' => 'legacy-manager@example.test',
+        ]);
+
+        $migration = require database_path(
+            'migrations/2026_09_24_000001_add_batch_one_migration_foundation.php',
+        );
+
+        try {
+            $migration->up();
+            $this->fail('Migration must stop before silently removing a Manager role that still owns accounts.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString(
+                'requires explicit reassignment',
+                $exception->getMessage(),
+            );
+            $this->assertStringContainsString(
+                'legacy-manager',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertDatabaseHas('tbl_role', [
+            'role_id' => $managerRole->role_id,
+            'role_name' => 'Manager',
+        ]);
+        $this->assertDatabaseHas('tbl_user', [
+            'username' => 'legacy-manager',
+            'role_id' => $managerRole->role_id,
+        ]);
+    }
+
+    public function test_manager_removal_migration_deletes_only_unused_legacy_manager_role(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $managerRole = Role::query()->create(['role_name' => 'Manager']);
+
+        $migration = require database_path(
+            'migrations/2026_09_24_000001_add_batch_one_migration_foundation.php',
+        );
+        $migration->up();
+
+        $this->assertDatabaseMissing('tbl_role', [
+            'role_id' => $managerRole->role_id,
+            'role_name' => 'Manager',
+        ]);
+    }
+
+
     public function test_user_management_cannot_offer_manager_role(): void
     {
         $this->seed(DatabaseSeeder::class);
