@@ -53,7 +53,7 @@ $login = function () {
         'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
         'Maintenance Staff' => 'maintenance.dashboard',
-        'Security Guard' => 'security.dashboard',
+        'Security Guard' => 'security.entrance-slips.create',
         default => 'dashboard',
     };
 
