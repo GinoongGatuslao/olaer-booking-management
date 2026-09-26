@@ -197,37 +197,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
                 Review guest-uploaded GCash proofs for reservation deposits and direct bookings before they affect settled balances.
             </p>
-            <flux:modal wire:model="showVerifyDialog" class="md:w-[30rem]">
-        <div class="space-y-5">
-            <div>
-                <flux:heading size="lg">Verify GCash payment</flux:heading>
-                <flux:text class="mt-1">
-                    Confirm that the GCash reference and uploaded proof match before applying this payment to the transaction balance.
-                </flux:text>
             </div>
-            <div class="flex justify-end gap-3">
-                <flux:button type="button" variant="ghost" wire:click="$set('showVerifyDialog', false)">Cancel</flux:button>
-                <flux:button type="button" variant="primary" wire:click="verifySelected">Verify payment</flux:button>
-            </div>
-        </div>
-    </flux:modal>
-
-    <flux:modal wire:model="showRejectDialog" class="md:w-[30rem]">
-        <div class="space-y-5">
-            <div>
-                <flux:heading size="lg">Reject GCash payment</flux:heading>
-                <flux:text class="mt-1">
-                    Reject this proof only when the amount, reference, or uploaded evidence cannot be verified.
-                </flux:text>
-            </div>
-            <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Explain why this proof is being rejected." />
-            <div class="flex justify-end gap-3">
-                <flux:button type="button" variant="ghost" wire:click="$set('showRejectDialog', false)">Cancel</flux:button>
-                <flux:button type="button" variant="danger" wire:click="rejectSelected">Reject payment</flux:button>
-            </div>
-        </div>
-    </flux:modal>
-</div>
     </div>
 
     @if (session('success'))
@@ -421,4 +391,35 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             @endif
         </aside>
     </div>
+
+    <flux:modal wire:model="showVerifyDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Verify GCash payment</flux:heading>
+                <flux:text class="mt-1">
+                    Confirm that the GCash reference and uploaded proof match before applying this payment to the transaction balance.
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showVerifyDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="verifySelected">Verify payment</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal wire:model="showRejectDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Reject GCash payment</flux:heading>
+                <flux:text class="mt-1">
+                    Reject this proof only when the amount, reference, or uploaded evidence cannot be verified.
+                </flux:text>
+            </div>
+            <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Explain why this proof is being rejected." />
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showRejectDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="danger" wire:click="rejectSelected">Reject payment</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>
