@@ -25,7 +25,7 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             'workflow_dispatch:',
             'permissions:',
             'contents: read',
-            "php-version: '8.3'",
+            "php-version: '8.4'",
             "node-version: '22'",
             'composer install --no-interaction',
             'npm ci',
@@ -34,6 +34,9 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             'php artisan route:list',
             'php artisan schedule:list',
             'php artisan test --colors=always',
+            'image: mysql:8.4',
+            'DB_CONNECTION: mysql',
+            'pdo_mysql',
         ] as $requiredFragment) {
             $this->assertStringContainsString(
                 $requiredFragment,
