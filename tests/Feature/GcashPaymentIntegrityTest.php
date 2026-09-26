@@ -177,6 +177,70 @@ class GcashPaymentIntegrityTest extends TestCase
         );
     }
 
+    public function test_reservation_verification_enforces_fifty_percent_minimum(): void
+    {
+        $payment = $this->createPendingReservationGcashPayment(
+            total: 1000.00,
+            amountPaid: 400.00,
+            referenceNumber: 'GCASH-RES-0400',
+        );
+        $cashier = $this->createUser('Cashier');
+
+        try {
+            app(GcashPaymentVerificationService::class)->verify(
+                (int) $payment->payment_id,
+                (int) $cashier->user_id,
+            );
+
+            $this->fail('Reservation verification below 50% should be rejected.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertStringContainsString(
+                'required 50% minimum',
+                $exception->getMessage(),
+            );
+        }
+
+        $this->assertDatabaseHas('tbl_payment', [
+            'payment_id' => $payment->payment_id,
+            'payment_status' => 'Pending',
+        ]);
+        $this->assertDatabaseHas('tbl_reservation', [
+            'reservation_id' => $payment->reservation_id,
+            'total_price' => 1000.00,
+            'amount_due' => 1000.00,
+            'status' => 'Active',
+        ]);
+    }
+
+    public function test_reservation_verification_accepts_fifty_percent_and_preserves_balance(): void
+    {
+        $payment = $this->createPendingReservationGcashPayment(
+            total: 1000.00,
+            amountPaid: 500.00,
+            referenceNumber: 'GCASH-RES-0500',
+        );
+        $cashier = $this->createUser('Cashier');
+
+        $verified = app(GcashPaymentVerificationService::class)->verify(
+            (int) $payment->payment_id,
+            (int) $cashier->user_id,
+        );
+
+        $this->assertSame('Verified', $verified->payment_status);
+        $this->assertDatabaseHas('tbl_reservation', [
+            'reservation_id' => $payment->reservation_id,
+            'total_price' => 1000.00,
+            'amount_due' => 500.00,
+            'status' => 'Active',
+        ]);
+        $this->assertDatabaseHas('tbl_payment', [
+            'payment_id' => $payment->payment_id,
+            'amount_paid' => 500.00,
+            'payment_status' => 'Verified',
+            'verified_by_user_id' => $cashier->user_id,
+        ]);
+    }
+
     public function test_duplicate_gcash_reference_is_rejected_with_friendly_message(): void
     {
         $payment = $this->createPendingGcashPayment(
@@ -272,6 +336,87 @@ class GcashPaymentIntegrityTest extends TestCase
                 ),
             'proof_of_payment_path' =>
                 'gcash-proofs/test-proof.png',
+            'amount_paid' => $amountPaid,
+            'date_paid' => now()->toDateString(),
+            'user_id' => null,
+            'payment_status' => 'Pending',
+            'rejection_reason' => null,
+            'verified_by_user_id' => null,
+            'verified_at' => null,
+        ]);
+    }
+
+    private function createPendingReservationGcashPayment(
+        float $total,
+        float $amountPaid,
+        string $referenceNumber,
+    ): Payment {
+        $guestId = $this->createGuest();
+        $facilityId = $this->createFacility();
+
+        $reservation = [
+            'r_ref_no' => 'R'.strtoupper(substr(md5(uniqid('', true)), 0, 12)),
+            'guest_id' => $guestId,
+            'reservation_date' => now()->toDateString(),
+            'total_price' => $total,
+            'amount_due' => $total,
+            'no_of_extra_guests' => 0,
+            'user_id' => null,
+            'status' => 'Active',
+            'cancellation_reason' => null,
+            'cancelled_at' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('tbl_reservation', 'total_guest_count')) {
+            $reservation['total_guest_count'] = 4;
+        }
+
+        $reservationId = DB::table('tbl_reservation')->insertGetId($reservation);
+
+        DB::table('tbl_reservation_details')->insert([
+            'reservation_id' => $reservationId,
+            'facility_id' => $facilityId,
+            'facility_product_id' => null,
+            'guest_count' => 4,
+            'capacity_policy' => 'strict',
+            'included_guest_count_snapshot' => 4,
+            'strict_maximum_snapshot' => 10,
+            'suggested_minimum_snapshot' => null,
+            'suggested_maximum_snapshot' => null,
+            'schedule_policy' => 'overnight',
+            'rate_code' => 'OVERNIGHT',
+            'unit_rate' => $total,
+            'rate_type' => 'Overnight',
+            'check_in_date' => now()->addDays(10)->toDateString(),
+            'check_out_date' => now()->addDays(11)->toDateString(),
+            'discount_id' => null,
+            'base_price' => $total,
+            'discount_rate' => 0,
+            'discount_amount' => 0,
+            'extra_guest_fee' => 0,
+            'line_total' => $total,
+            'status' => 'Reserved',
+            'cancellation_reason' => null,
+            'cancelled_at' => null,
+            'cancelled_by_user_id' => null,
+        ]);
+
+        $mode = ModeOfPayment::query()->firstOrCreate([
+            'mode_of_payment' => 'GCash',
+        ]);
+
+        return Payment::query()->create([
+            'p_ref_no' => 'P'.strtoupper(substr(md5(uniqid('', true)), 0, 12)),
+            'booking_id' => null,
+            'reservation_id' => $reservationId,
+            'entrance_slip_id' => null,
+            'mode_of_payment_id' => $mode->mode_of_payment_id,
+            'reference_number' => strtoupper(
+                preg_replace('/\s+/', '', trim($referenceNumber)) ?? '',
+            ),
+            'proof_of_payment_path' => 'gcash-proofs/test-reservation-proof.png',
             'amount_paid' => $amountPaid,
             'date_paid' => now()->toDateString(),
             'user_id' => null,
