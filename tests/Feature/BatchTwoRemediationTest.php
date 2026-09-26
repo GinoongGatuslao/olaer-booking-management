@@ -11,6 +11,7 @@ use App\Models\Address;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Facility;
+use App\Models\FacilityPrice;
 use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Models\Guest;
