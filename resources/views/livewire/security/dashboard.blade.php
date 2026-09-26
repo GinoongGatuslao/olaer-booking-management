@@ -94,7 +94,7 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
         <x-dashboard-stat-card
             label="Admitted guests today"
             :value="$this->overview['admitted_guests_today']"
-            :description="'Tourists included: '.$this->overview['tourists_today']"
+            description="Paid entrance slips only."
             tone="info"
         />
     </div>
@@ -133,11 +133,7 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
                     <p class="text-xs uppercase tracking-wide text-zinc-500">Female</p>
                     <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['female'] }}</p>
                 </div>
-
-                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <p class="text-xs uppercase tracking-wide text-zinc-500">Tourists</p>
-                    <p class="mt-1 text-2xl font-semibold">{{ $this->admittedBreakdown['tourist'] }}</p>
-                </div>
+ 
             </div>
         </flux:card>
 
@@ -232,7 +228,6 @@ new #[Layout('layouts.app')] #[Title('Security Dashboard - Olaer Spring Resort')
                                 <br>
                                 M {{ $slip->no_of_Male }}
                                 · F {{ $slip->no_of_Female }}
-                                · T {{ $slip->no_of_Tourist }}
                             </td>
 
                             <td class="px-2 py-3 font-medium">
