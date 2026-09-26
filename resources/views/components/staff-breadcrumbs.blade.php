@@ -6,7 +6,7 @@
         'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
         'Maintenance Staff' => 'maintenance.dashboard',
-        'Security Guard' => 'security.dashboard',
+        'Security Guard' => 'security.entrance-slips.create',
         default => 'dashboard',
     };
 
@@ -43,7 +43,6 @@
         'maintenance.notifications.index' => ['Workspace', 'Notifications'],
         'maintenance.action-center' => ['Workspace', 'Action Center'],
 
-        'security.dashboard' => ['Dashboard'],
         'security.entrance-slips.create' => ['Entrance Operations', 'Create Entrance Slip'],
 
         'profile.edit' => ['Account', 'Profile'],
