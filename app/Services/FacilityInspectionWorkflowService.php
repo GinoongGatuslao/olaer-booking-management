@@ -321,6 +321,8 @@ class FacilityInspectionWorkflowService
                 $remarks,
             );
 
+            $publishedTotal = '0.00';
+
             foreach ($drafts as $draft) {
                 $fine = $draft->fine;
 
@@ -369,7 +371,26 @@ class FacilityInspectionWorkflowService
                     'published_at' => now(),
                     'updated_by_user_id' => $maintenanceUserId,
                 ]);
+
+                $publishedTotal = $this->money->add(
+                    $publishedTotal,
+                    (string) $draft->total_charge,
+                );
             }
+
+            // Increment the persisted parent first so legacy transactions that
+            // predate immutable detail snapshots keep their historical core
+            // total while the ledger still recomputes normalized bookings.
+            $booking->update([
+                'total_price' => $this->money->add(
+                    (string) $booking->total_price,
+                    $publishedTotal,
+                ),
+                'amount_due' => $this->money->add(
+                    (string) $booking->amount_due,
+                    $publishedTotal,
+                ),
+            ]);
 
             $summary = $this->ledger->summaryForBooking(
                 $booking->fresh([
