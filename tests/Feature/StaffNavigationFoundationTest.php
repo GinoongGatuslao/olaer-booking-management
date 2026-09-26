@@ -44,7 +44,6 @@ class StaffNavigationFoundationTest extends TestCase
             'maintenance.create-amenity-request.index',
             'maintenance.notifications.index',
             'maintenance.action-center',
-            'security.dashboard',
             'security.entrance-slips.create',
             'guest.home',
             'profile.edit',
