@@ -169,10 +169,6 @@ Volt::route('/maintenance/create-amenity-request', 'maintenance.amenity-requests
     ->name('maintenance.create-amenity-request.index');
 
 // Security Guard Routes
-Volt::route('/security/dashboard', 'security.dashboard')
-    ->middleware(['auth', 'active', 'role:Security Guard'])
-    ->name('security.dashboard');
-
 Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
     ->middleware(['auth', 'active', 'role:Security Guard'])
     ->name('security.entrance-slips.create');
