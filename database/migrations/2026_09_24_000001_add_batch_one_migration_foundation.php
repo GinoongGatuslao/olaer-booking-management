@@ -81,7 +81,7 @@ return new class extends Migration
                 ))
                 ->implode(', ');
 
-            throw new \\RuntimeException(
+            throw new \RuntimeException(
                 'Manager role removal requires explicit reassignment before migration. '
                 .'Reassign these account(s) to an approved role, then rerun migration: '
                 .$identities
@@ -139,7 +139,7 @@ return new class extends Migration
             }
 
             if ($max === null || $max < 1) {
-                throw new \\RuntimeException(
+                throw new \RuntimeException(
                     "Unable to derive a numeric maximum capacity for facility ID {$facility->facility_id}."
                 );
             }
@@ -147,7 +147,7 @@ return new class extends Migration
             $min ??= $max;
 
             if ($min < 1 || $min > $max) {
-                throw new \\RuntimeException(
+                throw new \RuntimeException(
                     "Invalid numeric capacity range for facility ID {$facility->facility_id}."
                 );
             }
