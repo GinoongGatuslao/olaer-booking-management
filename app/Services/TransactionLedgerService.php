@@ -25,6 +25,13 @@ class TransactionLedgerService
 
         $reservation->loadMissing(['details', 'payments']);
 
+        if (! $this->hasCompleteReservationSnapshots($reservation)) {
+            return $this->legacyParentSummary(
+                (string) $reservation->total_price,
+                (string) $reservation->amount_due,
+            );
+        }
+
         $charges = '0.00';
         $discounts = '0.00';
 
@@ -73,6 +80,13 @@ class TransactionLedgerService
             'payments',
             'reservation.payments',
         ]);
+
+        if (! $this->hasCompleteBookingSnapshots($booking)) {
+            return $this->legacyParentSummary(
+                (string) $booking->total_price,
+                (string) $booking->amount_due,
+            );
+        }
 
         $charges = '0.00';
         $discounts = '0.00';
@@ -196,6 +210,71 @@ class TransactionLedgerService
     public function balanceFor(string $targetType, Model|int $target): string
     {
         return $this->summaryFor($targetType, $target)['balance'];
+    }
+
+    private function hasCompleteReservationSnapshots(Reservation $reservation): bool
+    {
+        $details = $reservation->details
+            ->reject(fn ($detail): bool => strcasecmp((string) ($detail->status ?? ''), 'Cancelled') === 0);
+
+        if ($details->isEmpty()) {
+            return false;
+        }
+
+        return $details->every(fn ($detail): bool =>
+            $detail->base_price !== null
+            && $detail->discount_amount !== null
+            && $detail->extra_guest_fee !== null
+            && $detail->line_total !== null
+        );
+    }
+
+    private function hasCompleteBookingSnapshots(Booking $booking): bool
+    {
+        $details = $booking->details
+            ->reject(fn ($detail): bool => strcasecmp((string) ($detail->status ?? ''), 'Cancelled') === 0);
+
+        if ($details->isEmpty()) {
+            return false;
+        }
+
+        return $details->every(fn ($detail): bool =>
+            $detail->base_price !== null
+            && $detail->discount_amount !== null
+            && $detail->extra_guest_fee !== null
+            && $detail->line_total !== null
+        );
+    }
+
+    /**
+     * Legacy rows may predate immutable detail snapshots and complete payment
+     * history. In that case the persisted parent total/balance is the only
+     * trustworthy historical source; infer the already-settled portion rather
+     * than repricing from today's master data.
+     *
+     * @return array{charges: string, discounts: string, total: string, applied_credits: string, verified_payments: string, balance: string}
+     */
+    private function legacyParentSummary(string $totalPrice, string $amountDue): array
+    {
+        $total = $this->money->maxZero($this->money->normalize($totalPrice));
+        $balance = $this->money->maxZero($this->money->normalize($amountDue));
+
+        if ($this->money->compare($balance, $total) === 1) {
+            $total = $balance;
+        }
+
+        $settled = $this->money->maxZero(
+            $this->money->subtract($total, $balance),
+        );
+
+        return [
+            'charges' => $total,
+            'discounts' => '0.00',
+            'total' => $total,
+            'applied_credits' => '0.00',
+            'verified_payments' => $settled,
+            'balance' => $balance,
+        ];
     }
 
     /** @return array{0: string, 1: string} */
