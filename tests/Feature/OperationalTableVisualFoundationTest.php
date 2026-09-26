@@ -111,7 +111,7 @@ class OperationalTableVisualFoundationTest extends TestCase
                 'pagination' =>
                     '$reservations->links()',
                 'workflowAction' =>
-                    'wire:click="beginReschedule({{ $reservation->reservation_id }})"',
+                    'wire:click="openDetailAction({{ $detail->reservation_details_id }}, \'reschedule\')"',
                 'statusPresentation' =>
                     '<x-status-badge',
             ],
@@ -192,7 +192,7 @@ class OperationalTableVisualFoundationTest extends TestCase
                 'pagination' =>
                     '$requests->links()',
                 'workflowAction' =>
-                    'wire:confirm="Accept this amenity request for delivery?"',
+                    'wire:click="requestAction(\'accept\', {{ $request->amenity_request_id }})"',
                 'statusPresentation' =>
                     '<x-status-badge',
             ],
@@ -351,8 +351,9 @@ class OperationalTableVisualFoundationTest extends TestCase
                 "\$selectedInspectionRequest->status === 'Completed'",
                 '$selectedInspection !== null',
                 '$selectedBookingAmountDue <= 0',
+                'wire:click="requestCheckOut"',
                 'wire:click="confirmCheckOut"',
-                'wire:confirm="Confirm this facility check-out?"',
+                'showCheckOutDialog',
                 'CheckOutInspectionRequestService $inspectionRequestService',
                 '$inspectionRequestService->requestInspection(',
                 'CheckOutWorkflowService $checkOutWorkflow',
@@ -392,7 +393,8 @@ class OperationalTableVisualFoundationTest extends TestCase
                 'View',
                 'assigned_to_user_id',
                 'Auth::id()',
-                'wire:click="markNoDamage"',
+                'wire:click="requestCompletion(\'no_damage\')"',
+                'showCompletionDialog',
                 'wire:click="addFine"',
             ] as $requiredContent
         ) {
