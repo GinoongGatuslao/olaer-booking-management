@@ -418,27 +418,6 @@ new class extends Component {
             ->get();
     }
 
-    private function transferProducts()
-    {
-        if ($this->transferForm['booking_details_id'] === '') {
-            return collect();
-        }
-
-        $detail = BookingDetail::query()
-            ->with('facility')
-            ->find((int) $this->transferForm['booking_details_id']);
-
-        if (! $detail || ! $detail->facility) {
-            return collect();
-        }
-
-        return FacilityProduct::query()
-            ->where('facility_type_id', $detail->facility->facility_type_id)
-            ->where('is_active', true)
-            ->orderBy('display_name')
-            ->get();
-    }
-
 };
 ?>
 
