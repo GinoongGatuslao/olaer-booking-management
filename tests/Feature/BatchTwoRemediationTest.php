@@ -11,7 +11,6 @@ use App\Models\Address;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Facility;
-use App\Models\FacilityPrice;
 use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Models\Guest;
@@ -226,64 +225,54 @@ class BatchTwoRemediationTest extends TestCase
 
     public function test_cashier_cottage_component_uses_canonical_rate_values(): void
     {
-        [$product, $dayFacility] = $this->productAndFacility(FacilityProductCode::CottageSmall, 'Cottage', [
+        [$product] = $this->productAndFacility(FacilityProductCode::CottageSmall, 'Cottage', [
             FacilityRateCode::Day->value => '300.00',
             FacilityRateCode::Night->value => '200.00',
             FacilityRateCode::Both->value => '500.00',
         ], suffix: 'CashierCanonical');
-        $nightFacility = $this->facility($product, 'Cottage', 'Cashier Night');
-        $bothFacility = $this->facility($product, 'Cottage', 'Cashier Both');
-        $invalidFacility = $this->facility($product, 'Cottage', 'Cashier Invalid');
         $cashier = $this->cashier();
-        $cashModeId = DB::table('tbl_mode_of_payment')->insertGetId(['mode_of_payment' => 'Cash']);
         $this->actingAs($cashier);
 
-        FacilityPrice::query()
-            ->whereIn('facility_id', [$dayFacility->facility_id, $nightFacility->facility_id, $bothFacility->facility_id, $invalidFacility->facility_id])
-            ->delete();
+        $date = now()->addDays(10)->toDateString();
 
-        foreach ([$dayFacility, $nightFacility, $bothFacility, $invalidFacility] as $facility) {
-            FacilityPrice::query()->create([
-                'facility_id' => $facility->facility_id,
-                'rate_type' => 'Day Rate',
-                'facility_price' => '300.00',
-            ]);
-            FacilityPrice::query()->create([
-                'facility_id' => $facility->facility_id,
-                'rate_type' => 'Night Rate',
-                'facility_price' => '200.00',
-            ]);
-        }
+        $component = Volt::test('cashier.bookings.create')
+            ->set('partyCount', 4)
+            ->set('groups.0.facility_product_id', (string) $product->facility_product_id)
+            ->set('groups.0.quantity', 1)
+            ->set('groups.0.estimated_users', 4)
+            ->set('groups.0.check_in_date', $date)
+            ->set('groups.0.check_out_date', $date)
+            ->call('updatedGroups')
+            ->assertSeeHtml('value="DAY"')
+            ->assertSeeHtml('value="NIGHT"')
+            ->assertSeeHtml('value="BOTH"')
+            ->assertDontSeeHtml('value="Day Rate"')
+            ->assertDontSeeHtml('value="Night Rate"');
 
         foreach ([
-            [FacilityRateCode::Day, $dayFacility, '300.00'],
-            [FacilityRateCode::Night, $nightFacility, '200.00'],
-            [FacilityRateCode::Both, $bothFacility, '500.00'],
-        ] as $index => [$rateCode, $facility, $amount]) {
-            Volt::test('cashier.bookings.index')
-                ->set('showCreateForm', true)
-                ->set('form', $this->cashierBookingForm($facility, $rateCode, $amount, $cashModeId, $index))
-                ->assertSeeHtml('value="Day"')
-                ->assertSeeHtml('value="Night"')
-                ->assertSeeHtml('value="Both"')
-                ->assertDontSeeHtml('value="Day Rate"')
-                ->call('createBooking')
-                ->assertHasNoErrors();
-
-            $detail = BookingDetail::query()->where('facility_id', $facility->facility_id)->sole();
-
-            $this->assertSame($rateCode, $detail->rate_code);
-            $this->assertSame(app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode), $detail->rate_type);
+            FacilityRateCode::Day => '300.00',
+            FacilityRateCode::Night => '200.00',
+            FacilityRateCode::Both => '500.00',
+        ] as $rateCode => $amount) {
+            $component
+                ->set('groups.0.rate_code', $rateCode->value)
+                ->call('savePlan')
+                ->assertHasNoErrors('plan')
+                ->assertSet('planTotal', $amount);
         }
 
         $bookingCount = Booking::query()->count();
 
-        Volt::test('cashier.bookings.index')
-            ->set('form', $this->cashierBookingForm($invalidFacility, FacilityRateCode::Day, '300.00', $cashModeId, 9))
-            ->set('form.rate_type', 'DayFoo')
-            ->set('form.payment_amount', '300.00')
-            ->call('createBooking')
-            ->assertHasErrors('booking');
+        Volt::test('cashier.bookings.create')
+            ->set('partyCount', 4)
+            ->set('groups.0.facility_product_id', (string) $product->facility_product_id)
+            ->set('groups.0.quantity', 1)
+            ->set('groups.0.estimated_users', 4)
+            ->set('groups.0.rate_code', 'DayFoo')
+            ->set('groups.0.check_in_date', $date)
+            ->set('groups.0.check_out_date', $date)
+            ->call('savePlan')
+            ->assertHasErrors('plan');
 
         $this->assertSame($bookingCount, Booking::query()->count());
     }
@@ -1291,37 +1280,6 @@ class BatchTwoRemediationTest extends TestCase
             'discount_id' => null,
             'total_guest_count' => $guests,
             'extra_guests' => $extraGuests,
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function cashierBookingForm(
-        Facility $facility,
-        FacilityRateCode $rateCode,
-        string $amount,
-        int $cashModeId,
-        int $dayOffset,
-    ): array {
-        return [
-            'first_name' => 'Cashier',
-            'middle_name' => '',
-            'last_name' => 'Cottage Guest',
-            'contact_no' => '09171234567',
-            'email' => "cashier-cottage-{$dayOffset}@example.test",
-            'province' => 'Sultan Kudarat',
-            'city' => 'Tacurong City',
-            'barangay' => '',
-            'purok' => '',
-            'facility_id' => (string) $facility->facility_id,
-            'rate_type' => app(FacilityProductConfigurationService::class)->canonicalRateType($rateCode),
-            'discount_id' => '',
-            'total_guest_count' => 4,
-            'check_in_date' => now()->addDays($dayOffset + 10)->toDateString(),
-            'check_out_date' => now()->addDays($dayOffset + 11)->toDateString(),
-            'check_in_time' => '12:00',
-            'mode_of_payment_id' => (string) $cashModeId,
-            'reference_number' => '',
-            'payment_amount' => $amount,
         ];
     }
 
