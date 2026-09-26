@@ -249,8 +249,9 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                                 </td>
                                 <td class="px-3 py-3">
                                     @php($transaction = $payment->booking ?? $payment->reservation)
+                                    @php($facilityNames = ($transaction?->details ?? collect())->map(fn ($detail) => $detail->facility?->facility_name)->filter()->unique()->implode(', '))
                                     <div class="font-medium text-zinc-950 dark:text-white">{{ $payment->booking?->b_ref_no ?? $payment->reservation?->r_ref_no }}</div>
-                                    <div class="text-xs text-zinc-500">{{ $payment->booking ? 'Booking' : 'Reservation' }} · {{ optional($transaction?->details->first()?->facility)->facility_name }}</div>
+                                    <div class="text-xs text-zinc-500">{{ $payment->booking ? 'Booking' : 'Reservation' }} · {{ $facilityNames !== '' ? $facilityNames : 'No facility assigned' }}</div>
                                 </td>
                                 <td class="px-3 py-3">
                                     @php($guest = ($payment->booking ?? $payment->reservation)?->guest)
