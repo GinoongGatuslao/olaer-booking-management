@@ -101,6 +101,11 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         return $this->sortDirection === 'asc' ? '↑' : '↓';
     }
 
+    public function selectBooking(int $bookingId): void
+    {
+        $this->selectTransaction('booking', $bookingId);
+    }
+
     public function selectTransaction(string $type, int $id): void
     {
         if (! in_array($type, ['reservation', 'booking'], true)) {
