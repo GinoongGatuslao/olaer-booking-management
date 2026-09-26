@@ -211,6 +211,20 @@ class PaymentWorkflowService
         string $amountDue,
         string $amountPaid,
     ): void {
+        if ($targetType === 'booking') {
+            $this->guardBookingIsPayable($target);
+        } elseif ($targetType === 'reservation') {
+            $this->guardReservationIsPayable($target);
+        } elseif ($targetType === 'entrance_slip') {
+            $this->guardEntranceSlipIsPayable(
+                $target,
+                $amountDue,
+                $amountPaid,
+            );
+
+            return;
+        }
+
         if ($this->money->compare($amountDue, '0.00') !== 1) {
             throw new InvalidArgumentException(
                 'This record has no unpaid balance.',
@@ -220,26 +234,6 @@ class PaymentWorkflowService
         if ($this->money->compare($amountPaid, $amountDue) === 1) {
             throw new InvalidArgumentException(
                 'Payment amount cannot be greater than the unpaid balance.',
-            );
-        }
-
-        if ($targetType === 'booking') {
-            $this->guardBookingIsPayable($target);
-
-            return;
-        }
-
-        if ($targetType === 'reservation') {
-            $this->guardReservationIsPayable($target);
-
-            return;
-        }
-
-        if ($targetType === 'entrance_slip') {
-            $this->guardEntranceSlipIsPayable(
-                $target,
-                $amountDue,
-                $amountPaid,
             );
         }
     }
@@ -300,17 +294,6 @@ class PaymentWorkflowService
             );
         }
 
-        $totalPrice = $this->money->normalize((string) $target->getAttribute('total_price'));
-
-        if (
-            $this->money->compare($totalPrice, '0.00') !== 1
-            || ! $this->money->equals($amountDue, $totalPrice)
-        ) {
-            throw new InvalidArgumentException(
-                'This entrance slip has an inconsistent balance and must be reviewed before payment.',
-            );
-        }
-
         $verifiedPaymentExists = $target->payments()
             ->whereRaw(
                 'LOWER(payment_status) = ?',
@@ -321,6 +304,17 @@ class PaymentWorkflowService
         if ($verifiedPaymentExists) {
             throw new InvalidArgumentException(
                 'This entrance slip already has a verified payment.',
+            );
+        }
+
+        $totalPrice = $this->money->normalize((string) $target->getAttribute('total_price'));
+
+        if (
+            $this->money->compare($totalPrice, '0.00') !== 1
+            || ! $this->money->equals($amountDue, $totalPrice)
+        ) {
+            throw new InvalidArgumentException(
+                'This entrance slip has an inconsistent balance and must be reviewed before payment.',
             );
         }
 
