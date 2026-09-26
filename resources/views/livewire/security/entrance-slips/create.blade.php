@@ -292,12 +292,6 @@ class extends Component
             </p>
         </div>
 
-        <a
-            href="{{ route('security.dashboard') }}"
-            class="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white"
-        >
-            Back to dashboard
-        </a>
     </div>
 
     @if (session('success'))
