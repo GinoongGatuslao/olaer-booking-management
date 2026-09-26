@@ -243,7 +243,6 @@ class BatchTwoRemediationTest extends TestCase
             ->set('groups.0.estimated_users', 4)
             ->set('groups.0.check_in_date', $date)
             ->set('groups.0.check_out_date', $date)
-            ->call('updatedGroups')
             ->assertSeeHtml('value="DAY"')
             ->assertSeeHtml('value="NIGHT"')
             ->assertSeeHtml('value="BOTH"')
