@@ -245,7 +245,7 @@ return new class extends Migration
         Schema::create('tbl_inspection_draft_fines', function (Blueprint $table) {
             $table->id('inspection_draft_fine_id');
             $table->foreignId('facility_inspection_request_id')
-                ->constrained('tbl_facility_inspection_requests', 'facility_inspection_request_id')
+                ->constrained('tbl_facility_inspection_request', 'facility_inspection_request_id')
                 ->cascadeOnUpdate()->cascadeOnDelete();
             $table->foreignId('booking_details_id')
                 ->constrained('tbl_booking_details', 'booking_details_id')
