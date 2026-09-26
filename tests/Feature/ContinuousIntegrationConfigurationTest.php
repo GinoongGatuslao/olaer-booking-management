@@ -111,4 +111,17 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             $phpunit,
         );
     }
+
+    public function test_application_timezone_defaults_to_philippine_time(): void
+    {
+        $this->assertSame('Asia/Manila', config('app.timezone'));
+
+        $env = file_get_contents(base_path('.env.example'));
+
+        $this->assertIsString($env);
+        $this->assertStringContainsString(
+            'APP_TIMEZONE=Asia/Manila',
+            $env,
+        );
+    }
 }
