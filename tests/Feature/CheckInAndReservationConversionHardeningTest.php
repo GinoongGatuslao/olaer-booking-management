@@ -212,6 +212,24 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             withExtraGuest: true,
         );
 
+        foreach ([
+            ['Ada', null, 'Lovelace'],
+            ['Grace', null, 'Hopper'],
+            ['Alan', null, 'Turing'],
+            ['Edsger', null, 'Dijkstra'],
+            ['Barbara', null, 'Liskov'],
+        ] as $index => [$firstName, $middleName, $lastName]) {
+            DB::table('tbl_reservation_room_occupants')->insert([
+                'reservation_details_id' => $reservation['detail_id'],
+                'position' => $index + 1,
+                'first_name' => $firstName,
+                'middle_name' => $middleName,
+                'last_name' => $lastName,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
         $booking = app(
             ReservationToBookingWorkflowService::class,
         )->convert($reservation['reservation_id'], [
@@ -257,6 +275,24 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
             'booking_id' => $booking->booking_id,
             'first_name' => 'Extra',
             'last_name' => 'Guest',
+        ]);
+
+        $bookingDetailId = DB::table('tbl_booking_details')
+            ->where('booking_id', $booking->booking_id)
+            ->value('booking_details_id');
+
+        $this->assertDatabaseCount('tbl_booking_room_occupants', 5);
+        $this->assertDatabaseHas('tbl_booking_room_occupants', [
+            'booking_details_id' => $bookingDetailId,
+            'position' => 1,
+            'first_name' => 'Ada',
+            'last_name' => 'Lovelace',
+        ]);
+        $this->assertDatabaseHas('tbl_booking_room_occupants', [
+            'booking_details_id' => $bookingDetailId,
+            'position' => 5,
+            'first_name' => 'Barbara',
+            'last_name' => 'Liskov',
         ]);
 
         $this->assertDatabaseHas('tbl_payment', [
@@ -461,6 +497,7 @@ class CheckInAndReservationConversionHardeningTest extends TestCase
 
         return [
             'reservation_id' => $reservationId,
+            'detail_id' => $detailId,
             'guest_id' => $guestId,
             'facility_id' => $facilityId,
             'discount_id' => $discountId,
