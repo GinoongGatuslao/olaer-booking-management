@@ -623,6 +623,70 @@ new class extends Component {
             ->get();
     }
 
+    private function rateTypes()
+    {
+        if ($this->form['facility_id'] === '') {
+            return collect();
+        }
+
+        $products = app(FacilityProductConfigurationService::class);
+
+        try {
+            $facility = $products->configuredFacility((int) $this->form['facility_id']);
+        } catch (Throwable) {
+            return collect();
+        }
+
+        return $facility->facilityProduct->productRates
+            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
+            ->map(fn (ProductRate $rate): array => [
+                'rate_type' => $products->canonicalRateType($rate),
+                'display_name' => $rate->display_name,
+                'amount' => $rate->amount,
+            ])
+            ->sortBy('rate_type')
+            ->values();
+    }
+
+    private function discounts()
+    {
+        return Discount::query()
+            ->where('status', 'Active')
+            ->orderBy('discount_name')
+            ->get();
+    }
+
+    private function selectedOccupancy(): ?array
+    {
+        if ($this->form['facility_id'] === '') {
+            return null;
+        }
+
+        try {
+            return app(FacilityOccupancyService::class)
+                ->forFacilityId(
+                    (int) $this->form['facility_id'],
+                    max(1, (int) $this->form['total_guest_count']),
+                );
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function strictMaximum(): ?int
+    {
+        if ($this->form['facility_id'] === '') {
+            return null;
+        }
+
+        try {
+            return app(FacilityOccupancyService::class)
+                ->strictMaximum((int) $this->form['facility_id']);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function currentQuote(): ?array
     {
         if ($this->form['facility_id'] === '' || $this->form['rate_type'] === '') {
