@@ -156,7 +156,7 @@
             </flux:toast.group>
         @endpersist
 
-        @if (session('success') || session('error'))
+        @if (request()->hasSession() && (session('success') || session('error')))
             <div
                 x-data="{ show: true }"
                 x-init="setTimeout(() => show = false, 6000)"
