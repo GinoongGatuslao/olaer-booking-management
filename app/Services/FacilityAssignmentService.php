@@ -202,7 +202,6 @@ class FacilityAssignmentService
                 'details.discount',
                 'extraGuests',
                 'payments.modeOfPayment',
-                'entranceSlip.details.entranceFee',
             ]);
         }, attempts: 3);
 
@@ -617,6 +616,7 @@ class FacilityAssignmentService
                 'details.roomOccupants',
                 'extraGuests',
                 'payments.modeOfPayment',
+                'entranceSlip.details.entranceFee',
             ]);
         }, attempts: 3);
     }
