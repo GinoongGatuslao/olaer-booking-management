@@ -7,6 +7,7 @@ Validate the exact release commit before promotion.
 ### Environment
 
 - production `APP_ENV`, `APP_KEY`, `APP_URL`;
+- `APP_TIMEZONE=Asia/Manila` so resort transaction dates and times follow Philippine local time;
 - database credentials and MySQL version;
 - queue connection/worker;
 - scheduler;
