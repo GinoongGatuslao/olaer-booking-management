@@ -250,10 +250,10 @@ class BatchTwoRemediationTest extends TestCase
             ->assertDontSeeHtml('value="Night Rate"');
 
         foreach ([
-            FacilityRateCode::Day => '300.00',
-            FacilityRateCode::Night => '200.00',
-            FacilityRateCode::Both => '500.00',
-        ] as $rateCode => $amount) {
+            [FacilityRateCode::Day, '300.00'],
+            [FacilityRateCode::Night, '200.00'],
+            [FacilityRateCode::Both, '500.00'],
+        ] as [$rateCode, $amount]) {
             $component
                 ->set('groups.0.rate_code', $rateCode->value)
                 ->call('savePlan')
