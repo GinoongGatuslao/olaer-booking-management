@@ -113,12 +113,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         ->orWhere('status', 'like', $like)
                         ->orWhereHas('role', function (Builder $query) use ($like): void {
                             $query->where('role_name', 'like', $like);
-                        })
-                        ->orWhereHas('address', function (Builder $query) use ($like): void {
-                            $query->where('province', 'like', $like)
-                                ->orWhere('city', 'like', $like)
-                                ->orWhere('barangay', 'like', $like)
-                                ->orWhere('purok', 'like', $like);
                         });
                 });
             });
