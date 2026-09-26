@@ -13,6 +13,7 @@ use App\Models\Guest;
 use App\Models\ModeOfPayment;
 use App\Models\User;
 use App\Services\PaymentWorkflowService;
+use App\Services\TransactionCreditService;
 use App\Services\TransactionLedgerService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -120,4 +121,100 @@ class BatchTwoLedgerConsolidationTest extends TestCase
         $this->assertSame('1000.00', $summary['verified_payments']);
         $this->assertSame('6500.00', $summary['balance']);
     }
+
+    public function test_transaction_credit_cannot_cross_booking_boundaries(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $address = Address::query()->create([
+            'province' => 'South Cotabato',
+            'city' => 'General Santos City',
+            'barangay' => 'Dadiangas',
+            'purok' => 'Credit Scope',
+        ]);
+        $guest = Guest::query()->create([
+            'first_name' => 'Credit',
+            'middle_name' => null,
+            'last_name' => 'Scope',
+            'contact_no' => '09123456789',
+            'email' => 'credit-scope@example.test',
+            'address_id' => $address->address_id,
+        ]);
+        $cashier = User::query()->where('username', 'cashier')->firstOrFail();
+
+        $first = Booking::query()->create([
+            'b_ref_no' => 'B-CREDIT-001',
+            'guest_id' => $guest->guest_id,
+            'booking_date' => now()->toDateString(),
+            'no_of_extra_guests' => 0,
+            'total_guest_count' => 1,
+            'total_price' => '500.00',
+            'amount_due' => '0.00',
+            'user_id' => $cashier->user_id,
+            'reservation_id' => null,
+            'entrance_slip_id' => null,
+            'status' => 'Booked',
+        ]);
+        $second = Booking::query()->create([
+            'b_ref_no' => 'B-CREDIT-002',
+            'guest_id' => $guest->guest_id,
+            'booking_date' => now()->toDateString(),
+            'no_of_extra_guests' => 0,
+            'total_guest_count' => 1,
+            'total_price' => '500.00',
+            'amount_due' => '500.00',
+            'user_id' => $cashier->user_id,
+            'reservation_id' => null,
+            'entrance_slip_id' => null,
+            'status' => 'Booked',
+        ]);
+
+        $credits = app(TransactionCreditService::class);
+        $credit = $credits->createForBooking(
+            $first,
+            'regression_test',
+            null,
+            '500.00',
+            'Same-transaction-only credit regression.',
+            (int) $cashier->user_id,
+        );
+
+        $this->assertSame(
+            '0.00',
+            $credits->applyToBooking(
+                (int) $second->booking_id,
+                'booking_balance',
+                (int) $second->booking_id,
+                '500.00',
+                (int) $cashier->user_id,
+            ),
+        );
+
+        $credit->refresh();
+        $this->assertSame('500.00', $credit->remaining_amount);
+        $this->assertSame('Available', $credit->status);
+        $this->assertDatabaseCount('tbl_transaction_credit_allocations', 0);
+
+        $this->assertSame(
+            '500.00',
+            $credits->applyToBooking(
+                (int) $first->booking_id,
+                'booking_balance',
+                (int) $first->booking_id,
+                '500.00',
+                (int) $cashier->user_id,
+            ),
+        );
+
+        $credit->refresh();
+        $this->assertSame('0.00', $credit->remaining_amount);
+        $this->assertSame('Consumed', $credit->status);
+        $this->assertDatabaseHas('tbl_transaction_credit_allocations', [
+            'transaction_credit_id' => $credit->transaction_credit_id,
+            'target_type' => 'booking_balance',
+            'target_id' => $first->booking_id,
+            'amount' => 500.00,
+        ]);
+    }
+
 }
