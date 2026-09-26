@@ -35,14 +35,14 @@ $login = function () {
         ]);
     }
 
-    request()->session()->regenerate();
+    session()->regenerate();
 
     $user = Auth::user()->loadMissing('role');
 
     if ($user->status !== 'Active') {
         Auth::guard('web')->logout();
-        request()->session()->invalidate();
-        request()->session()->regenerateToken();
+        session()->invalidate();
+        session()->regenerateToken();
 
         throw ValidationException::withMessages([
             'username' => 'Your account is inactive. Please contact the administrator.',
