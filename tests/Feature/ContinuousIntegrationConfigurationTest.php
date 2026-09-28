@@ -27,6 +27,7 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             'contents: read',
             "php-version: '8.4'",
             "node-version: '22'",
+            'composer validate --no-check-publish --strict',
             'composer install --no-interaction',
             'npm ci',
             'npm run build',
