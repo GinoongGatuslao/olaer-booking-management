@@ -50,9 +50,9 @@ class AdminAmenityPaginationTest extends TestCase
             ->assertSet('showEditor', true)
             ->set('amenityPrice', '999.00')
             ->call('cancelEdit')
-            ->assertSet('showEditor', false);
+            ->assertSet('showEditor', false)
+            ->assertSee('Amenity edit cancelled. No changes were saved.');
 
         $this->assertEquals(100, $amenity->fresh()->amenity_price);
-        $this->assertSame('Amenity edit cancelled. No changes were saved.', session('success'));
     }
 }

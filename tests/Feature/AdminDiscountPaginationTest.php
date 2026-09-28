@@ -51,9 +51,9 @@ class AdminDiscountPaginationTest extends TestCase
             ->assertSee('Discount percentage')
             ->set('discountName', 'Unsaved Promo')
             ->call('cancelEdit')
-            ->assertSet('showEditor', false);
+            ->assertSet('showEditor', false)
+            ->assertSee('Discount edit cancelled. No changes were saved.');
 
         $this->assertSame('Day Promo', $discount->fresh()->discount_name);
-        $this->assertSame('Discount edit cancelled. No changes were saved.', session('success'));
     }
 }
