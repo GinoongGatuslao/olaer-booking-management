@@ -30,6 +30,7 @@ class RequiredFieldMarkerVisualTest extends TestCase
             'resources/views/livewire/cashier/reservations/create.blade.php',
             'resources/views/livewire/cashier/bookings/create.blade.php',
             'resources/views/livewire/admin/facilities/create.blade.php',
+            'resources/views/livewire/security/entrance-slips/create.blade.php',
         ] as $relativePath) {
             $content = file_get_contents(base_path($relativePath));
 
