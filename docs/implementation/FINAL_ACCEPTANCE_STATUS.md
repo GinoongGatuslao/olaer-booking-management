@@ -49,7 +49,8 @@ The Laravel CI workflow runs:
    - Composer install;
    - frontend install/build;
    - fresh MySQL migration and the same populated-record upgrade coverage regression;
-   - full Laravel test suite.
+   - full Laravel test suite;
+   - isolated seeded MySQL contention test with two competing transactions.
 
 A branch is not considered release-ready when either job is red.
 

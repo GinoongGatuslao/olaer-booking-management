@@ -17,8 +17,8 @@ class BatchThreeMySqlConcurrencyTest extends TestCase
 {
     public function test_overlapping_mysql_transactions_serialize_and_only_one_owner_wins(): void
     {
-        if (DB::getDriverName() !== 'mysql') {
-            $this->markTestSkipped('MySQL concurrency evidence runs only on the disposable MySQL validation database.');
+        if (DB::getDriverName() !== 'mysql' || getenv('OLAER_RUN_MYSQL_CONCURRENCY_TEST') !== '1') {
+            $this->markTestSkipped('MySQL concurrency evidence runs only in its dedicated validation step.');
         }
 
         $database = (string) DB::connection()->getDatabaseName();

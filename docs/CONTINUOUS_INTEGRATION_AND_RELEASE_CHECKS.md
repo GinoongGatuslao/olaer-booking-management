@@ -21,6 +21,8 @@ A separate `mysql:8.4` service runs:
 ```bash
 php artisan migrate:fresh --force --no-interaction
 php artisan test
+php artisan migrate:fresh --seed --force --no-interaction
+OLAER_RUN_MYSQL_CONCURRENCY_TEST=1 php artisan test --filter=test_overlapping_mysql_transactions_serialize_and_only_one_owner_wins
 ```
 
 This is mandatory because availability locking and migration behavior must not be accepted from SQLite-only confidence.

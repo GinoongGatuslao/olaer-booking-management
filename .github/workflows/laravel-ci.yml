@@ -93,7 +93,7 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_DATABASE: olaer_ci
+          MYSQL_DATABASE: olaer_batch3_validation_ci
           MYSQL_USER: olaer
           MYSQL_PASSWORD: secret
           MYSQL_ROOT_PASSWORD: root
@@ -115,7 +115,7 @@ jobs:
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
-      DB_DATABASE: olaer_ci
+      DB_DATABASE: olaer_batch3_validation_ci
       DB_USERNAME: olaer
       DB_PASSWORD: secret
 
@@ -160,3 +160,8 @@ jobs:
 
       - name: Run Laravel test suite on MySQL 8.4
         run: php artisan test --colors=always
+
+      - name: Verify competing MySQL transactions on disposable seeded data
+        run: |
+          php artisan migrate:fresh --seed --force --no-interaction
+          OLAER_RUN_MYSQL_CONCURRENCY_TEST=1 php artisan test --colors=always --filter=test_overlapping_mysql_transactions_serialize_and_only_one_owner_wins
