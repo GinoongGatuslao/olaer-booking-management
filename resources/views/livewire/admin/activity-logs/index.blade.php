@@ -737,14 +737,14 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                                 </p>
 
                                 @if ($log->user_agent)
-                                    <flux:button type="button" size="sm" variant="ghost" class="mt-2" wire:click="showDetails({{ $log->activity_log_id }})">
+                                    <flux:button type="button" size="sm" variant="ghost" icon="information-circle" class="mt-2" wire:click="showDetails({{ $log->activity_log_id }})">
                                         User agent
                                     </flux:button>
                                 @endif
                             </td>
 
                             <td class="px-4 py-4">
-                                <flux:button type="button" size="sm" variant="ghost" wire:click="showDetails({{ $log->activity_log_id }})">
+                                <flux:button type="button" size="sm" variant="ghost" icon="eye" wire:click="showDetails({{ $log->activity_log_id }})">
                                     View details
                                 </flux:button>
                             </td>

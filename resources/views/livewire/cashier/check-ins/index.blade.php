@@ -479,32 +479,29 @@ new class extends Component {
                             </flux:badge>
                         </td>
                         <td class="px-4 py-4 text-right">
-                            <div class="flex flex-wrap justify-end gap-2">
-                                @if (Route::has('cashier.bookings.show'))
-                                    <flux:button
-                                        href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
-                                        wire:navigate
-                                        size="sm"
-                                        variant="ghost"
-                                    >
-                                        Booking
-                                    </flux:button>
-                                @endif
+                            <div class="flex justify-end">
+                                <x-table-actions label="Actions for booking {{ $detail->booking->b_ref_no }}">
+                                    @if (Route::has('cashier.bookings.show'))
+                                        <flux:menu.item
+                                            icon="eye"
+                                            href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
+                                            wire:navigate
+                                        >
+                                            View booking
+                                        </flux:menu.item>
+                                    @endif
 
-                                @if ($statusFilter === 'eligible')
-                                    <flux:button
-                                        type="button"
-                                        size="sm"
-                                        variant="primary"
-                                        wire:click="selectCheckIn({{ $detail->booking_details_id }})"
-                                    >
-                                        Check-in
-                                    </flux:button>
-                                @else
-                                    <span class="self-center text-xs text-brand-text-muted dark:text-zinc-400">
-                                        Checked in at {{ $detail->check_in_time ?? 'recorded' }}
-                                    </span>
-                                @endif
+                                    @if ($statusFilter === 'eligible')
+                                        <flux:menu.item
+                                            icon="check-circle"
+                                            wire:click="selectCheckIn({{ $detail->booking_details_id }})"
+                                        >
+                                            Check-in
+                                        </flux:menu.item>
+                                    @else
+                                        <flux:menu.item icon="check" disabled>Checked in at {{ $detail->check_in_time ?? 'recorded' }}</flux:menu.item>
+                                    @endif
+                                </x-table-actions>
                             </div>
                         </td>
                     </tr>

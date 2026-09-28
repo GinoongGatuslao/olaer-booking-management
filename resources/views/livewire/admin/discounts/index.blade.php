@@ -716,6 +716,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                             size="sm"
                                             variant="ghost"
                                             wire:click="startEditing({{ $discount->discount_id }})"
+                                            icon="pencil-square"
                                         >
                                             Edit
                                         </flux:button>

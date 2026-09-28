@@ -721,24 +721,16 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                     <td class="px-5 py-4">{{ $user->contact_no }}</td>
 
                                     <td class="px-5 py-4 text-right">
-                                        <div class="flex justify-end gap-2">
-                                            <flux:button
-                                                wire:click="startEditingUser({{ $user->user_id }})"
-                                                size="sm"
-                                                variant="ghost"
-                                            >
-                                                Edit
-                                            </flux:button>
-
-                                            <flux:button
+                                        <x-table-actions label="Actions for {{ $user->username }}">
+                                            <flux:menu.item icon="pencil-square" wire:click="startEditingUser({{ $user->user_id }})">Edit account</flux:menu.item>
+                                            <flux:menu.item
+                                                icon="{{ $user->status === 'Active' ? 'lock-closed' : 'lock-open' }}"
                                                 wire:click="requestStatusChange({{ $user->user_id }})"
-                                                size="sm"
-                                                variant="ghost"
                                                 :disabled="(int) $user->user_id === (int) auth()->id()"
                                             >
                                                 {{ $user->status === 'Active' ? 'Deactivate' : 'Activate' }}
-                                            </flux:button>
-                                        </div>
+                                            </flux:menu.item>
+                                        </x-table-actions>
                                     </td>
                                 </tr>
                             @empty

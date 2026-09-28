@@ -104,6 +104,41 @@ class PublicWebsiteFoundationTest extends TestCase
             ->assertSee(route('guest.bookings.create'), false);
     }
 
+    public function test_gallery_loops_without_a_scrollbar_and_keeps_accessible_controls(): void
+    {
+        $response = $this->get(route('guest.home'));
+
+        $response
+            ->assertOk()
+            ->assertSee('aria-roledescription="carousel"', false)
+            ->assertSee('Previous photo')
+            ->assertSee('Next photo')
+            ->assertSee('Pause slideshow');
+
+        $this->assertSame(
+            5,
+            substr_count($response->getContent(), 'aria-roledescription="slide"'),
+        );
+        $this->assertStringNotContainsString(
+            'overflow-x-auto scroll-smooth',
+            $response->getContent(),
+        );
+
+        foreach ([
+            'aerial-pools.webp',
+            'entrance-night.webp',
+            'resort-grounds.webp',
+            'olaer-sign.webp',
+            'family-spring.webp',
+        ] as $photo) {
+            $response->assertSee('images/olaer/'.$photo);
+            $this->assertSame(
+                3,
+                substr_count($response->getContent(), 'images/olaer/'.$photo),
+            );
+        }
+    }
+
     public function test_reservation_and_direct_booking_share_the_authoritative_planner(): void
     {
         $routes = file_get_contents(base_path('routes/web.php'));

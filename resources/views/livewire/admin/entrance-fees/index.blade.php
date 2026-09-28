@@ -91,7 +91,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
                     <tr wire:key="entrance-fee-{{ $fee->entrance_fee_id }}">
                         <td class="px-5 py-4 font-medium">{{ $fee->entrance_fee_name }}</td>
                         <td class="px-5 py-4 font-semibold">₱{{ number_format((float) $fee->entrance_fee_price, 2) }}</td>
-                        <td class="px-5 py-4 text-right"><flux:button type="button" wire:click="edit({{ $fee->entrance_fee_id }})" variant="ghost" size="sm">Edit rate</flux:button></td>
+                        <td class="px-5 py-4 text-right"><flux:button type="button" wire:click="edit({{ $fee->entrance_fee_id }})" icon="pencil-square" variant="ghost" size="sm">Edit rate</flux:button></td>
                     </tr>
                 @empty
                     <tr><td colspan="3" class="px-5 py-12 text-center text-zinc-500">No entrance fee categories configured.</td></tr>

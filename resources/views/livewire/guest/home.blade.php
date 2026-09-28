@@ -135,27 +135,27 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
 ?>
 
 <div class="overflow-hidden bg-public-cream text-public-ink dark:bg-zinc-950 dark:text-zinc-100">
-    <section class="relative isolate min-h-[44rem] overflow-hidden bg-public-forest-deep text-white">
+    <section class="relative isolate min-h-[48rem] overflow-hidden bg-public-forest-deep text-white">
         <img
             src="{{ asset('images/olaer/hero-spring.webp') }}"
             alt=""
-            class="absolute inset-0 -z-20 size-full object-cover object-center"
+            class="public-hero-image absolute inset-0 -z-20 size-full object-cover object-center"
             width="1920"
             height="1440"
             loading="eager"
             fetchpriority="high"
             decoding="async"
         >
-        <div class="absolute inset-0 -z-10 bg-linear-to-r from-public-forest-deep via-public-forest-deep/75 to-public-forest-deep/10"></div>
+        <div class="absolute inset-0 -z-10 bg-linear-to-r from-public-forest-deep/95 via-public-forest-deep/60 to-public-forest-deep/10"></div>
         <div class="absolute inset-0 -z-10 bg-linear-to-t from-public-forest-deep/85 via-transparent to-black/10"></div>
 
-        <div class="mx-auto flex min-h-[44rem] max-w-[90rem] items-end px-4 pb-28 pt-20 sm:px-6 lg:px-8 lg:pb-32">
-            <div class="max-w-3xl">
+        <div class="mx-auto flex min-h-[48rem] max-w-[90rem] items-center px-4 pb-32 pt-24 sm:px-6 lg:px-8">
+            <div class="public-hero-panel relative max-w-3xl overflow-hidden rounded-[2rem] border border-white/20 bg-public-forest-deep/45 p-6 shadow-public-soft backdrop-blur-xl sm:p-10 lg:p-12">
                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-public-sand sm:text-sm">
                     Purok Olaer · General Santos City
                 </p>
-                <h1 class="mt-5 max-w-3xl font-public-display text-5xl font-semibold leading-[0.98] tracking-[-0.035em] sm:text-6xl lg:text-8xl">
-                    GenSan’s refreshing spring escape.
+                <h1 class="mt-5 max-w-3xl font-public-display text-5xl font-semibold leading-[1.02] tracking-[-0.035em] sm:text-6xl lg:text-7xl">
+                    GenSan’s <span class="italic text-public-spring-light">refreshing</span> spring escape.
                 </h1>
                 <p class="mt-6 max-w-2xl text-base leading-7 text-white/80 sm:text-lg sm:leading-8">
                     Step away from the rush and settle into a relaxed resort day surrounded by water, greenery, and the people who matter most.
@@ -164,6 +164,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                     <flux:button
                         href="{{ route('guest.reservations.create') }}"
+                        icon:trailing="arrow-right"
                         variant="primary"
                         class="!rounded-full !bg-white !px-6 !py-3 !font-semibold !text-public-forest hover:!bg-public-cream"
                     >
@@ -171,12 +172,17 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                     </flux:button>
                     <a
                         href="#experience"
-                        class="inline-flex min-h-11 items-center justify-center rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:border-white hover:bg-white/10"
+                        class="inline-flex min-h-11 items-center justify-center rounded-full border border-white/40 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white hover:bg-white/20"
                     >
                         Explore the Resort
                     </a>
                 </div>
             </div>
+        </div>
+
+        <div class="public-floating-card absolute bottom-28 right-[max(2rem,calc((100vw-90rem)/2))] hidden max-w-52 rounded-2xl border border-white/25 bg-public-forest-deep/55 p-5 text-white shadow-public-card backdrop-blur-xl xl:block">
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-sand">Come as you are</p>
+            <p class="mt-2 font-public-display text-2xl leading-tight">A refreshing pause, close to home.</p>
         </div>
 
         <div class="absolute inset-x-0 bottom-0 border-t border-white/15 bg-public-forest-deep/65 backdrop-blur-md">
@@ -197,10 +203,10 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         </div>
     </section>
 
-    <section id="experience" class="scroll-mt-8 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section id="experience" class="public-reveal scroll-mt-24 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto grid max-w-[90rem] items-center gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
             <div class="relative mx-auto w-full max-w-xl lg:mx-0">
-                <div class="overflow-hidden rounded-[2.5rem] bg-public-forest shadow-public-soft">
+                <div class="public-hover-lift public-reveal-item overflow-hidden rounded-[2.5rem] bg-public-forest shadow-public-soft">
                     <img
                         src="{{ asset('images/olaer/spring-day.webp') }}"
                         alt="The clear spring pools and green surroundings at Olaer Spring Resort"
@@ -211,7 +217,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         decoding="async"
                     >
                 </div>
-                <div class="absolute -bottom-7 -end-3 max-w-56 rounded-3xl bg-public-forest p-5 text-white shadow-public-card sm:end-8">
+                <div class="absolute -bottom-7 -end-3 max-w-56 rounded-3xl border border-white/25 bg-public-forest/85 p-5 text-white shadow-public-card backdrop-blur-lg sm:end-8">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-sand">A local escape</p>
                     <p class="mt-2 font-public-display text-2xl leading-tight">Close to home. Far from the rush.</p>
                 </div>
@@ -244,7 +250,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         </div>
     </section>
 
-    <section id="facilities" class="scroll-mt-8 bg-public-forest px-4 py-20 text-white sm:px-6 lg:px-8 lg:py-28">
+    <section id="facilities" class="public-reveal scroll-mt-24 bg-public-forest px-4 py-20 text-white sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto max-w-[90rem]">
             <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
                 <div class="max-w-3xl">
@@ -254,7 +260,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                     </h2>
                 </div>
                 <p class="max-w-xl text-sm leading-7 text-white/65">
-                    Rates below come directly from the resort system. Final availability and total depend on your dates, rate type, and selected facility.
+                    Rates below come directly from the resort system. Final availability and total depend on your dates, rate type, and selected facilities.
                 </p>
             </div>
 
@@ -262,7 +268,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 @forelse ($facilityTypes as $facilityType)
                     <article
                         wire:key="public-facility-type-{{ $facilityType['id'] }}"
-                        class="flex min-h-80 flex-col rounded-[2rem] border border-white/15 bg-white/7 p-6 shadow-public-card backdrop-blur-sm sm:p-7"
+                        class="public-hover-lift public-reveal-item flex min-h-80 flex-col rounded-[2rem] border border-white/20 bg-white/10 p-6 shadow-public-card backdrop-blur-md sm:p-7"
                     >
                         <div class="flex items-start justify-between gap-4">
                             <div>
@@ -313,7 +319,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 @endforelse
             </div>
 
-            <div class="mt-8 flex flex-col gap-4 rounded-[2rem] bg-public-cream p-6 text-public-ink sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div class="mt-8 flex flex-col gap-4 rounded-[2rem] border border-white/30 bg-public-cream/95 p-6 text-public-ink shadow-public-card backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:p-8">
                 <div>
                     <h3 class="font-public-display text-3xl font-semibold text-public-forest">Ready to choose your date?</h3>
                     <p class="mt-2 text-sm leading-6 text-public-muted">Create a temporary facility hold and complete payment verification with the cashier.</p>
@@ -329,9 +335,9 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         </div>
     </section>
 
-    <section class="px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section class="public-reveal px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto grid max-w-[90rem] gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <div class="rounded-[2.5rem] bg-white p-7 shadow-public-card sm:p-10 dark:bg-zinc-900">
+            <div class="public-reveal-item rounded-[2.5rem] border border-white/70 bg-white/80 p-7 shadow-public-card backdrop-blur-lg sm:p-10 dark:border-white/10 dark:bg-zinc-900/80">
                 <p class="text-xs font-semibold uppercase tracking-[0.22em] text-public-terracotta">Entrance fees</p>
                 <h2 class="mt-4 font-public-display text-4xl font-semibold text-public-forest sm:text-5xl dark:text-white">
                     Plan the whole visit.
@@ -358,7 +364,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
             </div>
 
             <div class="grid gap-5">
-                <article class="rounded-[2.5rem] bg-public-spring-light p-7 sm:p-9 dark:bg-public-forest">
+                <article class="public-hover-lift public-reveal-item rounded-[2.5rem] bg-public-spring-light p-7 sm:p-9 dark:bg-public-forest">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-terracotta dark:text-public-sand">Recommended</p>
                     <h2 class="mt-3 font-public-display text-3xl font-semibold text-public-forest dark:text-white">Reserve first, finalize with the cashier.</h2>
                     <p class="mt-4 text-sm leading-7 text-public-muted dark:text-white/70">
@@ -372,7 +378,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                     </a>
                 </article>
 
-                <article class="rounded-[2.5rem] border border-public-forest/15 p-7 sm:p-9 dark:border-white/15">
+                <article class="public-hover-lift public-reveal-item rounded-[2.5rem] border border-public-forest/15 bg-white/50 p-7 backdrop-blur-sm sm:p-9 dark:border-white/15 dark:bg-white/5">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-terracotta">Direct booking</p>
                     <h2 class="mt-3 font-public-display text-3xl font-semibold text-public-forest dark:text-white">Already ready to pay in full?</h2>
                     <p class="mt-4 text-sm leading-7 text-public-muted dark:text-zinc-300">
@@ -389,7 +395,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         </div>
     </section>
 
-    <section id="gallery" class="scroll-mt-8 bg-public-cream-muted px-4 py-20 sm:px-6 lg:px-8 lg:py-28 dark:bg-zinc-900">
+    <section id="gallery" class="public-reveal scroll-mt-24 bg-public-cream-muted px-4 py-20 sm:px-6 lg:px-8 lg:py-28 dark:bg-zinc-900">
         <div class="mx-auto max-w-[90rem]">
             <div class="max-w-3xl">
                 <p class="text-xs font-semibold uppercase tracking-[0.22em] text-public-terracotta">Around Olaer</p>
@@ -398,67 +404,185 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 </h2>
             </div>
 
-            <div class="mt-12 grid auto-rows-[14rem] gap-4 sm:grid-cols-2 sm:auto-rows-[20rem] lg:grid-cols-4">
-                <figure class="overflow-hidden rounded-[2rem] sm:row-span-2">
-                    <img
-                        src="{{ asset('images/olaer/aerial-pools.webp') }}"
-                        alt="Aerial view of Olaer Spring Resort pools and cottages"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1492"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="overflow-hidden rounded-[2rem] lg:col-span-2">
-                    <img
-                        src="{{ asset('images/olaer/entrance-night.webp') }}"
-                        alt="The illuminated Olaer Swimming Resort sign at night"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1080"
-                        height="1080"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="overflow-hidden rounded-[2rem] sm:row-span-2">
-                    <img
-                        src="{{ asset('images/olaer/resort-grounds.webp') }}"
-                        alt="A bright view across the spring pools and palm-lined resort grounds"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1190"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="overflow-hidden rounded-[2rem]">
-                    <img
-                        src="{{ asset('images/olaer/olaer-sign.webp') }}"
-                        alt="Visitors posing by the colorful Olaer Swimming Resort sign"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="overflow-hidden rounded-[2rem]">
-                    <img
-                        src="{{ asset('images/olaer/family-spring.webp') }}"
-                        alt="Families enjoying the spring pools and landscaped resort grounds"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
+            @php
+                $galleryPhotos = [
+                    ['file' => 'aerial-pools.webp', 'alt' => 'Aerial view of Olaer Spring Resort pools and cottages', 'width' => 1200, 'height' => 1492],
+                    ['file' => 'entrance-night.webp', 'alt' => 'The illuminated Olaer Swimming Resort sign at night', 'width' => 1080, 'height' => 1080],
+                    ['file' => 'resort-grounds.webp', 'alt' => 'A bright view across the spring pools and palm-lined resort grounds', 'width' => 1190, 'height' => 1600],
+                    ['file' => 'olaer-sign.webp', 'alt' => 'Visitors posing by the colorful Olaer Swimming Resort sign', 'width' => 1200, 'height' => 1600],
+                    ['file' => 'family-spring.webp', 'alt' => 'Families enjoying the spring pools and landscaped resort grounds', 'width' => 1200, 'height' => 1600],
+                ];
+            @endphp
+
+            <div
+                class="mt-12"
+                role="region"
+                aria-roledescription="carousel"
+                aria-label="Resort photo gallery"
+                x-data="{
+                    current: 0,
+                    visible: false,
+                    hovered: false,
+                    focused: false,
+                    paused: false,
+                    offset: 0,
+                    period: 0,
+                    step: 0,
+                    frame: null,
+                    touchX: 0,
+                    motion: window.matchMedia('(prefers-reduced-motion: reduce)'),
+                    init() {
+                        this.observer = new IntersectionObserver(([entry]) => {
+                            this.visible = entry.isIntersecting
+                            this.sync()
+                        }, { threshold: 0.1 })
+                        this.observer.observe(this.$el)
+                        this.resizeObserver = new ResizeObserver(() => this.measure())
+                        this.resizeObserver.observe(this.$refs.window)
+                        this.resizeObserver.observe(this.$refs.sequence.firstElementChild)
+                        this.onMotionChange = () => { this.sync(); this.draw() }
+                        this.onVisibilityChange = () => this.sync()
+                        this.motion.addEventListener('change', this.onMotionChange)
+                        document.addEventListener('visibilitychange', this.onVisibilityChange)
+                        this.measure()
+                    },
+                    destroy() {
+                        cancelAnimationFrame(this.frame)
+                        this.observer.disconnect()
+                        this.resizeObserver.disconnect()
+                        this.motion.removeEventListener('change', this.onMotionChange)
+                        document.removeEventListener('visibilitychange', this.onVisibilityChange)
+                    },
+                    sync() {
+                        cancelAnimationFrame(this.frame)
+                        this.frame = null
+                        this.lastTime = null
+                        if (this.visible && !this.hovered && !this.focused && !this.paused && !this.motion.matches && !document.hidden) {
+                            this.frame = requestAnimationFrame(time => this.tick(time))
+                        }
+                    },
+                    tick(time) {
+                        if (this.lastTime !== null) this.offset += Math.min(time - this.lastTime, 50) * 0.045
+                        this.lastTime = time
+                        this.draw()
+                        this.frame = requestAnimationFrame(next => this.tick(next))
+                    },
+                    measure() {
+                        const progress = this.step ? (this.offset + this.viewport / 2 - (this.period + this.cardWidth / 2)) / this.step : 0
+                        this.viewport = this.$refs.window.clientWidth
+                        this.cardWidth = this.$refs.sequence.firstElementChild.offsetWidth
+                        this.step = this.cardWidth + (parseFloat(getComputedStyle(this.$refs.sequence).columnGap) || 0)
+                        this.period = this.$refs.sequence.offsetWidth
+                        this.offset = this.period + this.cardWidth / 2 + progress * this.step - this.viewport / 2
+                        this.slides = Array.from(this.$refs.belt.querySelectorAll('figure'))
+                        this.centers = this.slides.map(slide => slide.offsetLeft + slide.offsetWidth / 2)
+                        this.draw()
+                    },
+                    draw() {
+                        if (!this.period) return
+                        const position = this.period + ((this.offset % this.period) + this.period) % this.period
+                        this.$refs.belt.style.transform = `translate3d(${-position}px, 0, 0)`
+                        const center = position + this.viewport / 2
+                        this.slides.forEach((slide, index) => {
+                            const proximity = Math.max(0, 1 - Math.abs(this.centers[index] - center) / (this.step * 1.4))
+                            const emphasis = proximity * proximity * (3 - 2 * proximity)
+                            slide.style.transform = `scale(${0.86 + 0.14 * emphasis})`
+                            slide.style.opacity = String(0.6 + 0.4 * emphasis)
+                        })
+                        const count = this.$refs.sequence.children.length
+                        this.current = ((Math.round((center - this.period - this.cardWidth / 2) / this.step) % count) + count) % count
+                    },
+                    move(direction) {
+                        this.paused = true
+                        this.sync()
+                        if (this.motion.matches) {
+                            this.offset += direction * this.step
+                            this.draw()
+                            return
+                        }
+                        const start = this.offset
+                        const began = performance.now()
+                        const animate = time => {
+                            const progress = Math.min((time - began) / 700, 1)
+                            this.offset = start + direction * this.step * (1 - (1 - progress) ** 3)
+                            this.draw()
+                            this.frame = progress < 1 ? requestAnimationFrame(animate) : null
+                        }
+                        this.frame = requestAnimationFrame(animate)
+                    }
+                }"
+            >
+                <div
+                    x-ref="window"
+                    class="public-gallery-window relative left-1/2 w-screen -translate-x-1/2 overflow-hidden py-3"
+                    aria-label="Resort photos"
+                    tabindex="0"
+                    @mouseenter="hovered = true; sync()"
+                    @mouseleave="hovered = false; sync()"
+                    @focusin="focused = true; sync()"
+                    @focusout="focused = false; sync()"
+                    @keydown.arrow-left.prevent="move(-1)"
+                    @keydown.arrow-right.prevent="move(1)"
+                    @touchstart="touchX = $event.touches[0].clientX"
+                    @touchend="if (Math.abs(touchX - $event.changedTouches[0].clientX) > 40) move(touchX > $event.changedTouches[0].clientX ? 1 : -1)"
+                >
+                    <div x-ref="belt" class="relative flex w-max" style="transform: translate3d(-33.333333%, 0, 0)">
+                        @for ($copy = 0; $copy < 3; $copy++)
+                            <div
+                                @if ($copy === 1) x-ref="sequence" @else aria-hidden="true" inert @endif
+                                class="flex shrink-0 gap-4 pr-4 sm:gap-5 sm:pr-5"
+                            >
+                                @foreach ($galleryPhotos as $photo)
+                                    <figure
+                                        wire:key="public-gallery-photo-{{ $copy }}-{{ $loop->index }}"
+                                        class="aspect-[3/2] w-[86vw] shrink-0 overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card sm:w-[70vw] lg:w-[min(52vw,44rem)]"
+                                        @if ($copy === 1)
+                                            role="group"
+                                            aria-roledescription="slide"
+                                            aria-label="Photo {{ $loop->iteration }} of 5"
+                                        @endif
+                                    >
+                                        <img
+                                            src="{{ asset('images/olaer/'.$photo['file']) }}"
+                                            alt="{{ $copy === 1 ? $photo['alt'] : '' }}"
+                                            class="size-full object-cover"
+                                            width="{{ $photo['width'] }}"
+                                            height="{{ $photo['height'] }}"
+                                            loading="lazy"
+                                            decoding="async"
+                                        >
+                                    </figure>
+                                @endforeach
+                            </div>
+                        @endfor
+                    </div>
+                </div>
+
+                <div class="mt-5 flex items-center justify-between gap-4">
+                    <div class="flex items-baseline gap-2 text-public-forest dark:text-white">
+                        <span class="font-public-display text-2xl" x-text="String(current + 1).padStart(2, '0')">01</span>
+                        <span class="text-sm text-public-muted dark:text-white/60">/ 05</span>
+                        <span class="sr-only" role="status" :aria-live="paused || motion.matches ? 'polite' : 'off'" x-text="'Photo ' + (current + 1) + ' of 5'">Photo 1 of 5</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" aria-label="Previous photo" @click="move(-1)" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                            <flux:icon.chevron-left class="size-5" />
+                        </button>
+                        <button type="button" aria-label="Next photo" @click="move(1)" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                            <flux:icon.chevron-right class="size-5" />
+                        </button>
+                        <button type="button" :aria-label="paused ? 'Play slideshow' : 'Pause slideshow'" @click="paused = !paused; sync()" class="ml-2 inline-flex size-11 items-center justify-center rounded-full bg-public-forest text-white transition hover:bg-public-forest-deep motion-reduce:hidden" title="Toggle slideshow">
+                            <flux:icon.pause x-show="!paused" class="size-5" />
+                            <flux:icon.play x-show="paused" class="size-5" />
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <section id="visit" class="scroll-mt-8 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+    <section id="visit" class="public-reveal scroll-mt-24 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto grid max-w-[90rem] overflow-hidden rounded-[2.5rem] bg-public-forest-deep text-white shadow-public-soft lg:grid-cols-[1.05fr_0.95fr]">
             <div class="p-7 sm:p-10 lg:p-14">
                 <p class="text-xs font-semibold uppercase tracking-[0.22em] text-public-sand">Plan your visit</p>
@@ -534,7 +658,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         </div>
     </section>
 
-    <section class="px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
+    <section class="public-reveal px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
         <div class="mx-auto flex max-w-[90rem] flex-col items-center rounded-[2.5rem] border border-public-forest/15 px-6 py-14 text-center sm:px-10 lg:py-20 dark:border-white/15">
             <p class="text-xs font-semibold uppercase tracking-[0.22em] text-public-terracotta">Make time for Olaer</p>
             <h2 class="mt-4 max-w-4xl font-public-display text-4xl font-semibold leading-tight text-public-forest sm:text-5xl lg:text-6xl dark:text-white">

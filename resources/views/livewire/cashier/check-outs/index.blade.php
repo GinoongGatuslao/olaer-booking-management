@@ -878,26 +878,25 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             </flux:badge>
                         </td>
                         <td class="px-4 py-4 text-right">
-                            <div class="flex flex-wrap justify-end gap-2">
-                                @if (Route::has('cashier.bookings.show'))
-                                    <flux:button
-                                        href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
-                                        wire:navigate
-                                        size="sm"
-                                        variant="ghost"
-                                    >
-                                        Booking
-                                    </flux:button>
-                                @endif
+                            <div class="flex justify-end">
+                                <x-table-actions label="Actions for booking {{ $detail->booking->b_ref_no }}">
+                                    @if (Route::has('cashier.bookings.show'))
+                                        <flux:menu.item
+                                            icon="eye"
+                                            href="{{ route('cashier.bookings.show', $detail->booking_id) }}"
+                                            wire:navigate
+                                        >
+                                            View booking
+                                        </flux:menu.item>
+                                    @endif
 
-                                <flux:button
-                                    type="button"
-                                    size="sm"
-                                    variant="primary"
-                                    wire:click="selectCheckOut({{ $detail->booking_details_id }})"
-                                >
-                                    View
-                                </flux:button>
+                                    <flux:menu.item
+                                        icon="clipboard-document-check"
+                                        wire:click="selectCheckOut({{ $detail->booking_details_id }})"
+                                    >
+                                        View check-out
+                                    </flux:menu.item>
+                                </x-table-actions>
                             </div>
                         </td>
                     </tr>

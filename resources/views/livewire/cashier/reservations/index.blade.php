@@ -587,14 +587,15 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                 </div>
                                             </div>
                                             @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
-                                                <div class="flex flex-wrap gap-1">
-                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:button>
-                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'transfer')">Transfer</flux:button>
+                                                <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
+                                                    <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
+                                                    <flux:menu.item icon="arrows-right-left" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'transfer')">Transfer</flux:menu.item>
                                                     @if ($detail->roomOccupants->isNotEmpty())
-                                                        <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:button>
+                                                        <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
                                                     @endif
-                                                    <flux:button size="sm" type="button" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel Facility</flux:button>
-                                                </div>
+                                                    <flux:menu.separator />
+                                                    <flux:menu.item icon="x-circle" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel facility</flux:menu.item>
+                                                </x-table-actions>
                                             @endif
                                         </div>
                                     </div>
@@ -611,7 +612,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         </td>
                         <td class="px-4 py-3 text-right">
                             @if ($reservation->status === 'Active')
-                                <flux:button size="sm" variant="danger" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
+                                <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
                                     Cancel Entire Reservation
                                 </flux:button>
                             @else

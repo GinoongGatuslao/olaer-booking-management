@@ -923,6 +923,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                     size="sm"
                                     variant="primary"
                                     wire:click="requestAction('accept', {{ $request->amenity_request_id }})"
+                                    icon="check-circle"
                                 >
                                     Accept
                                 </flux:button>
@@ -934,6 +935,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                     size="sm"
                                     variant="primary"
                                     wire:click="requestAction('deliver', {{ $request->amenity_request_id }})"
+                                    icon="truck"
                                 >
                                     Mark Delivered
                                 </flux:button>

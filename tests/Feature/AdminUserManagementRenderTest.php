@@ -49,6 +49,8 @@ class AdminUserManagementRenderTest extends TestCase
         $oldPassword = $user->password;
 
         Livewire::test('admin.users.index')
+            ->assertSee('Actions for oldname')
+            ->assertSee('Edit account')
             ->call('startEditingUser', $user->user_id)
             ->assertSet('showEditor', true)
             ->set('firstName', 'New')

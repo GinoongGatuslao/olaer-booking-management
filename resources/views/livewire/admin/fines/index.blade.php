@@ -812,6 +812,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                                         <flux:button
                                             type="button"
                                             wire:click="startEditingFine({{ $fine->fine_id }})"
+                                            icon="pencil-square"
                                             size="sm"
                                             variant="ghost"
                                         >

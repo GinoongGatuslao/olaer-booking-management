@@ -265,7 +265,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                                     </span>
                                 </td>
                                 <td class="px-3 py-3 text-right">
-                                    <flux:button size="sm" variant="subtle" wire:click="selectPayment({{ $payment->payment_id }})">Review</flux:button>
+                                    <flux:button size="sm" variant="subtle" icon="magnifying-glass" wire:click="selectPayment({{ $payment->payment_id }})">Review</flux:button>
                                 </td>
                             </tr>
                         @empty

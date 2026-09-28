@@ -7,7 +7,7 @@
     ];
 @endphp
 
-<header class="relative z-40 border-b border-public-forest/10 bg-public-cream">
+<header class="sticky top-0 z-40 border-b border-public-forest/10 bg-public-cream/90 shadow-sm backdrop-blur-xl">
     <div class="mx-auto flex min-h-20 max-w-[90rem] items-center justify-between gap-5 px-4 sm:px-6 lg:px-8">
         <x-public-brand
             compact
@@ -45,12 +45,12 @@
         </div>
 
         <details class="group relative lg:hidden">
-            <summary class="flex cursor-pointer list-none items-center gap-2 rounded-full border border-public-forest/20 bg-white/70 px-4 py-2.5 text-sm font-semibold text-public-forest marker:content-none [&::-webkit-details-marker]:hidden">
+            <summary class="flex cursor-pointer list-none items-center gap-2 rounded-full border border-public-forest/20 bg-white/70 px-4 py-2.5 text-sm font-semibold text-public-forest marker:content-none backdrop-blur-sm [&::-webkit-details-marker]:hidden">
                 <flux:icon.bars-3 class="size-5" />
                 Menu
             </summary>
 
-            <div class="absolute end-0 top-[calc(100%+0.75rem)] w-[min(21rem,calc(100vw-2rem))] rounded-3xl border border-public-forest/10 bg-public-cream p-3 shadow-public-soft">
+            <div class="absolute end-0 top-[calc(100%+0.75rem)] w-[min(21rem,calc(100vw-2rem))] rounded-3xl border border-public-forest/10 bg-public-cream/95 p-3 shadow-public-soft backdrop-blur-xl">
                 <nav aria-label="Mobile navigation" class="grid">
                     <a
                         href="{{ route('guest.home') }}"

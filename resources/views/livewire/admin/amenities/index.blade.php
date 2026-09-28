@@ -514,6 +514,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                                         <flux:button
                                             type="button"
                                             wire:click="startEditing({{ $amenity->amenity_id }})"
+                                            icon="pencil-square"
                                             size="sm"
                                             variant="ghost"
                                         >
