@@ -642,7 +642,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->slips as $slip)
-                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}">
+                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}" class="{{ $selectedSlipId === (int) $slip->entrance_slip_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $this->formatSlipNumber($slip) }}
                                     </td>

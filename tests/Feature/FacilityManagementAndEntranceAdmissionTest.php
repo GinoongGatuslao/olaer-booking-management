@@ -20,6 +20,7 @@ use App\Services\FacilityManagementService;
 use App\Services\PaymentWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class FacilityManagementAndEntranceAdmissionTest extends TestCase
@@ -80,6 +81,27 @@ class FacilityManagementAndEntranceAdmissionTest extends TestCase
             'rate_type' => 'Overnight',
             'facility_price' => '1500.00',
         ]);
+    }
+
+    public function test_cancelling_facility_edit_preserves_record_and_notifies_operator(): void
+    {
+        $type = FacilityType::query()->create(['facility_type' => 'Cottage']);
+        $facility = Facility::query()->create([
+            'facility_number' => 'COT-001',
+            'facility_name' => 'Original Cottage',
+            'facility_type_id' => $type->facility_type_id,
+            'facility_size' => 'Small',
+            'facility_status' => 'Available',
+            'capacity' => '4-6',
+        ]);
+
+        Livewire::test('admin.facilities.edit', ['facility' => $facility])
+            ->set('facilityName', 'Unsaved Change')
+            ->call('cancel')
+            ->assertRedirect(route('admin.facilities.index'));
+
+        $this->assertSame('Original Cottage', $facility->fresh()->facility_name);
+        $this->assertSame('Facility edit cancelled. No changes were saved.', session('success'));
     }
 
     public function test_entrance_slip_is_editable_by_creator_until_payment_and_cashier_admission(): void

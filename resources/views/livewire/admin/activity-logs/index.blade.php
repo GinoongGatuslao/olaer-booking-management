@@ -691,7 +691,7 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
 
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($this->logs as $log)
-                        <tr wire:key="activity-log-{{ $log->activity_log_id }}" class="align-top">
+                        <tr wire:key="activity-log-{{ $log->activity_log_id }}" class="align-top {{ $selectedLogId === (int) $log->activity_log_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                             <td class="whitespace-nowrap px-4 py-4">
                                 <p class="font-medium">{{ $log->created_at?->format('M d, Y') }}</p>
                                 <p class="text-xs text-zinc-500">{{ $log->created_at?->format('h:i:s A') }}</p>

@@ -242,7 +242,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         @forelse ($payments as $payment)
-                            <tr class="align-top hover:bg-zinc-50 dark:hover:bg-zinc-950/60">
+                            <tr class="align-top {{ $selectedPaymentId === (int) $payment->payment_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-950/60' }}">
                                 <td class="px-3 py-3">
                                     <div class="font-medium text-zinc-950 dark:text-white">{{ $payment->p_ref_no }}</div>
                                     <div class="text-xs text-zinc-500">GCash ref: {{ $payment->reference_number }}</div>

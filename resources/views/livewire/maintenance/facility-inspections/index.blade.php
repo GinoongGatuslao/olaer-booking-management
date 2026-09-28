@@ -1647,7 +1647,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                 @forelse ($inspectionRequests as $request)
                     <tr
                         wire:key="inspection-request-{{ $request->facility_inspection_request_id }}"
-                        class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                        class="align-top text-brand-text transition-colors dark:text-zinc-200 {{ $selectedRequestId === (int) $request->facility_inspection_request_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : 'hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/60' }}"
                     >
                         <td class="px-4 py-4 font-medium">
                             #{{ $request->facility_inspection_request_id }}
