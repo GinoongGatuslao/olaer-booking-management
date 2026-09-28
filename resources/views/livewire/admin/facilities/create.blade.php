@@ -101,7 +101,7 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
 
     <flux:card>
         <form wire:submit="save" class="space-y-5">
-            <flux:select wire:model.live="sourceFacilityId" label="Source facility *">
+            <x-required-select wire:model.live="sourceFacilityId" name="sourceFacilityId" label="Source facility">
                 <option value="">Choose facility to clone</option>
                 @foreach ($this->facilities as $facility)
                     <option value="{{ $facility->facility_id }}">
@@ -109,7 +109,7 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
                         ({{ $facility->facilityProduct?->display_name ?? $facility->facilityType?->facility_type }})
                     </option>
                 @endforeach
-            </flux:select>
+            </x-required-select>
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <flux:input
@@ -124,10 +124,10 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
                 />
             </div>
 
-            <flux:select wire:model="status" label="Initial status *">
+            <x-required-select wire:model="status" name="status" label="Initial status">
                 <option>Available</option>
                 <option>Unavailable</option>
-            </flux:select>
+            </x-required-select>
 
             <div class="flex justify-end gap-3">
                 <flux:button href="{{ route('admin.facilities.index') }}" wire:navigate variant="ghost">
