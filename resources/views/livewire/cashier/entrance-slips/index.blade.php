@@ -696,25 +696,25 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
-                                        <div class="flex justify-end gap-2">
-                                            @if (Route::has('print.entrance-slip'))
-                                                <flux:button
-                                                    href="{{ route('print.entrance-slip', $slip) }}"
-                                                    target="_blank"
-                                                    size="sm"
-                                                    variant="ghost"
-                                                >
-                                                    Print
-                                                </flux:button>
-                                            @endif
+                                        <div class="flex justify-end">
+                                            <x-table-actions label="Actions for entrance slip {{ $this->formatSlipNumber($slip) }}">
+                                                @if (Route::has('print.entrance-slip'))
+                                                    <flux:menu.item
+                                                        icon="printer"
+                                                        href="{{ route('print.entrance-slip', $slip) }}"
+                                                        target="_blank"
+                                                    >
+                                                        Print
+                                                    </flux:menu.item>
+                                                @endif
 
-                                            <flux:button
-                                                wire:click="selectSlip({{ $slip->entrance_slip_id }})"
-                                                size="sm"
-                                                variant="{{ $slip->status === 'Unpaid' ? 'primary' : 'ghost' }}"
-                                            >
-                                                {{ $slip->status === 'Unpaid' ? 'Pay' : 'View' }}
-                                            </flux:button>
+                                                <flux:menu.item
+                                                    icon="{{ $slip->status === 'Unpaid' ? 'banknotes' : 'eye' }}"
+                                                    wire:click="selectSlip({{ $slip->entrance_slip_id }})"
+                                                >
+                                                    {{ $slip->status === 'Unpaid' ? 'Pay' : 'View' }}
+                                                </flux:menu.item>
+                                            </x-table-actions>
                                         </div>
                                     </td>
                                 </tr>

@@ -1412,7 +1412,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                                         <td class="px-3 py-2">₱{{ number_format((float) $draftFine->total_charge, 2) }}</td>
                                         <td class="px-3 py-2 text-right">
                                             @if ($draftFine->status === 'Draft' && $this->canRecordFine())
-                                                <flux:button type="button" size="sm" variant="ghost" wire:click="removeDraftFine({{ $draftFine->inspection_draft_fine_id }})">
+                                                <flux:button type="button" size="sm" variant="ghost" icon="trash" wire:click="removeDraftFine({{ $draftFine->inspection_draft_fine_id }})">
                                                     Remove
                                                 </flux:button>
                                             @else
@@ -1713,6 +1713,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                                 @if ($request->status === 'Pending')
                                     <flux:button
                                         type="button"
+                                        icon="clipboard-document-check"
                                         wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
                                         size="sm"
                                         variant="primary"
@@ -1726,6 +1727,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                                 )
                                     <flux:button
                                         type="button"
+                                        icon="arrow-path"
                                         wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
                                         size="sm"
                                         variant="primary"
@@ -1739,6 +1741,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                                 @else
                                     <flux:button
                                         type="button"
+                                        icon="eye"
                                         wire:click="selectRequest({{ $request->facility_inspection_request_id }})"
                                         size="sm"
                                         variant="ghost"

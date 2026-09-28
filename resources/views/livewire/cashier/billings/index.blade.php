@@ -264,6 +264,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                                         size="sm"
                                         variant="{{ $selected ? 'primary' : 'ghost' }}"
                                         wire:click="selectTransaction('{{ $record->transaction_type }}', {{ $record->transaction_id }})"
+                                        icon="document-text"
                                     >
                                         Statement
                                     </flux:button>

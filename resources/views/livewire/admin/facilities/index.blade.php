@@ -171,7 +171,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             <td class="px-5 py-4">{{ $facility->facilityProduct?->display_name ?? $facility->facility_size }}</td>
                             <td class="px-5 py-4">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum '.$facility->max_capacity : 'Recommended '.$facility->min_capacity.'–'.$facility->max_capacity }}</td>
                             <td class="px-5 py-4"><flux:badge color="{{ $this->statusColor($facility->facility_status) }}">{{ $facility->facility_status }}</flux:badge></td>
-                            <td class="px-5 py-4 text-right"><flux:button href="{{ route('admin.facilities.edit', $facility) }}" wire:navigate size="sm" variant="ghost">Edit</flux:button></td>
+                            <td class="px-5 py-4 text-right"><flux:button href="{{ route('admin.facilities.edit', $facility) }}" wire:navigate icon="pencil-square" size="sm" variant="ghost">Edit</flux:button></td>
                         </tr>
                     @empty
                         <tr><td colspan="7" class="px-5 py-12 text-center text-zinc-500">No facility matches the filters.</td></tr>

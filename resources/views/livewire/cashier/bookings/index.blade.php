@@ -621,25 +621,28 @@ new class extends Component {
                             <x-status-badge :status="(string) $booking->status" />
                         </td>
                         <td class="px-5 py-4">
-                            <div class="flex flex-wrap justify-end gap-2">
-                                @if (Route::has('cashier.bookings.show'))
-                                    <flux:button
-                                        size="sm"
-                                        variant="primary"
-                                        href="{{ route('cashier.bookings.show', $booking->booking_id) }}"
-                                        wire:navigate
-                                    >
-                                        View
-                                    </flux:button>
-                                @endif
+                            <div class="flex justify-end">
+                                <x-table-actions label="Actions for booking {{ $booking->b_ref_no }}">
+                                    @if (Route::has('cashier.bookings.show'))
+                                        <flux:menu.item
+                                            icon="eye"
+                                            href="{{ route('cashier.bookings.show', $booking->booking_id) }}"
+                                            wire:navigate
+                                        >
+                                            View booking
+                                        </flux:menu.item>
+                                    @endif
 
-                                @if ($booking->booking_details_id)
-                                    <flux:button size="sm" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:button>
-                                    <flux:button size="sm" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:button>
-                                    <flux:button size="sm" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:button>
-                                    <flux:button size="sm" variant="ghost" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:button>
-                                    <flux:button size="sm" variant="danger" wire:click="openCancelDetail({{ $booking->booking_details_id }})">Cancel Facility</flux:button>
-                                @endif
+                                    @if ($booking->booking_details_id)
+                                        <flux:menu.separator />
+                                        <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:menu.item>
+                                        <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:menu.item>
+                                        <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
+                                        <flux:menu.item icon="user-group" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:menu.item>
+                                        <flux:menu.separator />
+                                        <flux:menu.item icon="x-circle" variant="danger" wire:click="openCancelDetail({{ $booking->booking_details_id }})">Cancel facility</flux:menu.item>
+                                    @endif
+                                </x-table-actions>
                             </div>
                         </td>
                     </tr>

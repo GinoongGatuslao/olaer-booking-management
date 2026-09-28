@@ -1065,6 +1065,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
                             <td class="px-5 py-4 text-right">
                                 <flux:button
+                                    icon="banknotes"
                                     wire:click="selectPayable(
                                         '{{ $targetType }}',
                                         {{ $targetType === 'booking'
@@ -1279,25 +1280,25 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                             </td>
 
                             <td class="px-5 py-4 text-right">
-                                <div class="flex justify-end gap-2">
-                                    @if ($payment->booking_id && Route::has('cashier.bookings.show'))
-                                        <flux:button
-                                            href="{{ route('cashier.bookings.show', $payment->booking_id) }}"
-                                            wire:navigate
-                                            size="sm"
-                                            variant="ghost"
-                                        >
-                                            Booking
-                                        </flux:button>
-                                    @endif
+                                <div class="flex justify-end">
+                                    <x-table-actions label="Actions for payment {{ $payment->p_ref_no }}">
+                                        @if ($payment->booking_id && Route::has('cashier.bookings.show'))
+                                            <flux:menu.item
+                                                icon="eye"
+                                                href="{{ route('cashier.bookings.show', $payment->booking_id) }}"
+                                                wire:navigate
+                                            >
+                                                View booking
+                                            </flux:menu.item>
+                                        @endif
 
-                                    <flux:button
-                                        wire:click="viewReceipt({{ $payment->payment_id }})"
-                                        size="sm"
-                                        variant="primary"
-                                    >
-                                        Receipt
-                                    </flux:button>
+                                        <flux:menu.item
+                                            icon="receipt-percent"
+                                            wire:click="viewReceipt({{ $payment->payment_id }})"
+                                        >
+                                            View receipt
+                                        </flux:menu.item>
+                                    </x-table-actions>
                                 </div>
                             </td>
                         </tr>

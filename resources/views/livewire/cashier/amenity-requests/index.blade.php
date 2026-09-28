@@ -1142,37 +1142,38 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                             </td>
 
                             <td class="px-4 py-4 text-right">
-                                <div class="flex flex-wrap justify-end gap-2">
-                                    @if ($request->booking_id && Route::has('cashier.bookings.show'))
-                                        <flux:button
-                                            href="{{ route('cashier.bookings.show', $request->booking_id) }}"
-                                            wire:navigate
-                                            size="sm"
-                                            variant="ghost"
-                                        >
-                                            Booking
-                                        </flux:button>
-                                    @endif
+                                @if (($request->booking_id && Route::has('cashier.bookings.show')) || ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null))
+                                    <div class="flex justify-end">
+                                        <x-table-actions label="Actions for amenity request {{ $request->amenity_request_id }}">
+                                            @if ($request->booking_id && Route::has('cashier.bookings.show'))
+                                                <flux:menu.item
+                                                    icon="eye"
+                                                    href="{{ route('cashier.bookings.show', $request->booking_id) }}"
+                                                    wire:navigate
+                                                >
+                                                    View booking
+                                                </flux:menu.item>
+                                            @endif
 
-                                    @if ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null)
-                                        <flux:button
-                                            size="sm"
-                                            wire:click="openEdit({{ $request->amenity_request_id }})"
-                                        >
-                                            Modify
-                                        </flux:button>
+                                            @if ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null)
+                                                <flux:menu.item
+                                                    icon="pencil-square"
+                                                    wire:click="openEdit({{ $request->amenity_request_id }})"
+                                                >
+                                                    Modify
+                                                </flux:menu.item>
 
-                                        <flux:button
-                                            size="sm"
-                                            variant="danger"
-                                            wire:click="requestCancel({{ $request->amenity_request_id }})"
-                                        >
-                                            Cancel
-                                        </flux:button>
-                                    @endif
-                                </div>
-
-                                @if (! ($request->amenity_request_status === 'Pending' && $request->assigned_to_user_id === null) && ! Route::has('cashier.bookings.show'))
+                                                <flux:menu.item
+                                                    icon="x-circle"
+                                                    variant="danger"
+                                                    wire:click="requestCancel({{ $request->amenity_request_id }})"
+                                                >
+                                                    Cancel
+                                                </flux:menu.item>
+                                            @endif
+                                        </x-table-actions>
+                                    </div>
+                                @else
                                     <span class="text-xs text-gray-500">
                                         No cashier action
                                     </span>
