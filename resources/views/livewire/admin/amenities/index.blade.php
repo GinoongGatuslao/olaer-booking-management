@@ -33,6 +33,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
     public int $perPage = 10;
 
     public ?int $editingId = null;
+    public bool $showEditor = false;
     public string $amenityName = '';
     public string $amenityDescription = '';
     public string $amenityType = 'Rentable';
@@ -178,6 +179,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
     public function createNew(): void
     {
         $this->resetForm();
+        $this->showEditor = true;
     }
 
     public function startEditing(int $amenityId): void
@@ -201,6 +203,14 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
         );
 
         $this->resetValidation();
+        $this->showEditor = true;
+    }
+
+    public function cancelEdit(): void
+    {
+        session()->flash('success', 'Amenity edit cancelled. No changes were saved.');
+        $this->showEditor = false;
+        $this->resetForm();
     }
 
     public function resetForm(): void
@@ -332,6 +342,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
         );
 
         $this->resetForm();
+        $this->showEditor = false;
     }
 
     public function sortIcon(string $field): string
@@ -421,7 +432,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
         that price to the guest's bill.
     </div>
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+    <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
@@ -430,6 +441,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate without loading every amenity at once.
                         </p>
+                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create amenity</flux:button>
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -476,7 +488,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->amenities as $amenity)
-                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}">
+                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}" class="{{ $editingId === (int) $amenity->amenity_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }}
                                     </td>
@@ -536,8 +548,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             </flux:card>
         </section>
 
-        <aside>
-            <flux:card>
+        <flux:modal wire:model="showEditor" class="md:w-[38rem] max-h-[90vh] overflow-y-auto">
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <h2 class="font-semibold">
@@ -603,10 +614,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                     <div class="flex justify-end gap-3 pt-2">
                         <flux:button
                             type="button"
-                            wire:click="resetForm"
+                            wire:click="cancelEdit"
                             variant="ghost"
                         >
-                            Clear
+                            Cancel
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
@@ -616,7 +627,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         </flux:button>
                     </div>
                 </form>
-            </flux:card>
-        </aside>
+        </flux:modal>
     </div>
 </div>

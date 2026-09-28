@@ -38,6 +38,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
     public int $perPage = 10;
 
     public ?int $editingId = null;
+    public bool $showEditor = false;
     public string $discountName = '';
     public string $discountPercent = '';
     public string $discountStart = '';
@@ -218,6 +219,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
     {
         $this->resetForm();
         $this->status = 'Active';
+        $this->showEditor = true;
     }
 
     public function startEditing(int $discountId): void
@@ -248,6 +250,14 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             (bool) $discount->app_to_function_hall;
 
         $this->resetValidation();
+        $this->showEditor = true;
+    }
+
+    public function cancelEdit(): void
+    {
+        session()->flash('success', 'Discount edit cancelled. No changes were saved.');
+        $this->showEditor = false;
+        $this->resetForm();
     }
 
     public function resetForm(): void
@@ -402,6 +412,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         }
 
         $this->resetForm();
+        $this->showEditor = false;
     }
 
     public function applicabilityLabels(Discount $discount): string
@@ -518,7 +529,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         Changing a discount affects future calculations, not completed historical transactions.
     </div>
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(23rem,1fr)]">
+    <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
@@ -528,6 +539,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate discount master records.
                         </p>
+                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create discount</flux:button>
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -659,7 +671,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             @forelse ($this->discounts as $discount)
                                 @php($timing = $this->timingLabel($discount))
 
-                                <tr wire:key="discount-row-{{ $discount->discount_id }}">
+                                <tr wire:key="discount-row-{{ $discount->discount_id }}" class="{{ $editingId === (int) $discount->discount_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $discount->discount_name }}
                                     </td>
@@ -736,12 +748,8 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             </flux:card>
         </section>
 
-        <aside>
-            <flux:card>
+        <flux:modal wire:model="showEditor" class="md:w-[42rem] max-h-[90vh] overflow-y-auto">
                 <div class="flex items-start justify-between gap-3">
-                    <flux:switch wire:model.live="hasValidity" label="Use a validity period" description="Turn this on when the discount has a specific start and end." />
-
-                    @if ($hasValidity)
                     <div>
                         <h2 class="font-semibold">
                             {{ $editingId !== null
@@ -781,37 +789,40 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         placeholder="10"
                     />
 
-                    <div>
-                        <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                            Start date and time
-                        </label>
+                    <flux:switch wire:model.live="hasValidity" label="Use a validity period" description="Turn this on when the discount has a specific start and end." />
 
-                        <input
-                            wire:model="discountStart"
-                            type="datetime-local"
-                            class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
-                        />
+                    @if ($hasValidity)
+                        <div>
+                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                Start date and time
+                            </label>
 
-                        @error('discountStart')
-                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
+                            <input
+                                wire:model="discountStart"
+                                type="datetime-local"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
+                            />
 
-                    <div>
-                        <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                            End date and time
-                        </label>
+                            @error('discountStart')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-                        <input
-                            wire:model="discountEnd"
-                            type="datetime-local"
-                            class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
-                        />
+                        <div>
+                            <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                End date and time
+                            </label>
 
-                        @error('discountEnd')
-                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                        @enderror
-                    </div>
+                            <input
+                                wire:model="discountEnd"
+                                type="datetime-local"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
+                            />
+
+                            @error('discountEnd')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
                     @endif
 
                     <flux:select wire:model="status" label="Status">
@@ -865,9 +876,9 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <flux:button
                             type="button"
                             variant="ghost"
-                            wire:click="resetForm"
+                            wire:click="cancelEdit"
                         >
-                            Clear
+                            Cancel
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
@@ -877,7 +888,6 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         </flux:button>
                     </div>
                 </form>
-            </flux:card>
-        </aside>
+        </flux:modal>
     </div>
 </div>

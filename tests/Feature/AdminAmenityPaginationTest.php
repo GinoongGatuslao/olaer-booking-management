@@ -34,4 +34,25 @@ class AdminAmenityPaginationTest extends TestCase
             ->assertSee('Amenity 11')
             ->assertDontSee('Amenity 01');
     }
+
+    public function test_cancelling_amenity_edit_discards_unsaved_price(): void
+    {
+        $name = AmenityName::query()->create(['amenity_name' => 'Chair']);
+        $amenity = Amenity::query()->create([
+            'amenity_name_id' => $name->amenity_name_id,
+            'amenity_description' => 'Monoblock',
+            'amenity_type' => 'Rentable',
+            'amenity_price' => 100,
+        ]);
+
+        Livewire::test('admin.amenities.index')
+            ->call('startEditing', $amenity->amenity_id)
+            ->assertSet('showEditor', true)
+            ->set('amenityPrice', '999.00')
+            ->call('cancelEdit')
+            ->assertSet('showEditor', false);
+
+        $this->assertEquals(100, $amenity->fresh()->amenity_price);
+        $this->assertSame('Amenity edit cancelled. No changes were saved.', session('success'));
+    }
 }

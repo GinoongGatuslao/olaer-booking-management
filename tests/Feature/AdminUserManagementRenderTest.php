@@ -50,10 +50,12 @@ class AdminUserManagementRenderTest extends TestCase
 
         Livewire::test('admin.users.index')
             ->call('startEditingUser', $user->user_id)
+            ->assertSet('showEditor', true)
             ->set('firstName', 'New')
             ->set('password', '')
             ->set('passwordConfirmation', '')
             ->call('saveUser')
+            ->assertSet('showEditor', false)
             ->assertHasNoErrors();
 
         $user->refresh();
