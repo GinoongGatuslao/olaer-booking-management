@@ -49,6 +49,9 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Validate Composer metadata and lock
+        run: composer validate --no-check-publish --strict
+
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
@@ -133,6 +136,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+
+      - name: Validate Composer metadata and lock
+        run: composer validate --no-check-publish --strict
 
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
