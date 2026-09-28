@@ -432,16 +432,16 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         <flux:card>
             <flux:heading size="lg">Guest</flux:heading>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <flux:input wire:model="firstName" label="First name *" />
+                <x-required-input wire:model="firstName" name="firstName" label="First name" />
                 <flux:input wire:model="middleName" label="Middle name" />
-                <flux:input wire:model="lastName" label="Last name *" />
-                <flux:input wire:model="email" type="email" label="Email *" />
-                <flux:input wire:model="contactNo" label="Contact number *" />
-                <flux:input wire:model.live="partyCount" type="number" min="1" max="500" label="Total unique guests *" />
+                <x-required-input wire:model="lastName" name="lastName" label="Last name" />
+                <x-required-input wire:model="email" name="email" type="email" label="Email" />
+                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" />
+                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-4">
-                <flux:input wire:model="province" label="Province *" />
-                <flux:input wire:model="city" label="City/Municipality *" />
+                <x-required-input wire:model="province" name="province" label="Province" />
+                <x-required-input wire:model="city" name="city" label="City/Municipality" />
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
             </div>
@@ -462,27 +462,27 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                     @php($availability = $this->availabilityFor($index))
                     <div wire:key="cashier-booking-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="grid gap-4 lg:grid-cols-6">
-                            <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" label="Facility type / product *" class="lg:col-span-2">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type / product" class="lg:col-span-2">
                                 <option value="">Choose product</option>
                                 @foreach ($this->products as $candidate)
                                     <option value="{{ $candidate->facility_product_id }}">{{ $candidate->facilityType?->facility_type }} — {{ $candidate->display_name }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:select wire:model.live="groups.{{ $index }}.rate_code" label="Schedule *">
+                            </x-required-select>
+                            <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
                                 <option value="">Choose schedule</option>
                                 @foreach ($product?->productRates ?? [] as $rate)
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity *" />
-                            <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users *" />
+                            </x-required-select>
+                            <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
                             </div>
                         </div>
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
-                            <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in/use date *" />
-                            <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out/end date *" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_in_date" name="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in/use date" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_out_date" name="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out/end date" />
                         </div>
                         @if ($availability)
                             <div class="mt-3 flex flex-wrap gap-2">
@@ -518,9 +518,9 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                             <div class="space-y-3">
                                 @foreach ($occupants as $occupantIndex => $occupant)
                                     <div class="grid gap-3 md:grid-cols-3">
-                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="First name *" />
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="First name" />
                                         <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
-                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name *" />
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
                                     </div>
                                 @endforeach
                             </div>
@@ -534,12 +534,12 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             <flux:heading size="lg">Payment & admission</flux:heading>
             <flux:text>Core facility charges—and Walk-In admission charges when applicable—must be fully paid before admission. Amenities may remain outstanding.</flux:text>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <flux:select wire:model="modeOfPaymentId" label="Mode of payment *">
+                <x-required-select wire:model="modeOfPaymentId" name="modeOfPaymentId" label="Mode of payment">
                     <option value="">Choose payment mode</option>
                     @foreach (ModeOfPayment::query()->orderBy('mode_of_payment')->get() as $mode)
                         <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
                     @endforeach
-                </flux:select>
+                </x-required-select>
                 <flux:input wire:model="referenceNumber" label="Reference number" />
                 <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
             </div>
@@ -557,11 +557,11 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                         <p class="text-sm text-zinc-500">Category total and Male + Female must each equal the booking party count. Tourist is hidden from presentation and stored as zero for this workflow.</p>
                     </div>
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                        <flux:input wire:model.live="adultCount" type="number" min="0" label="Adults *" />
-                        <flux:input wire:model.live="childrenCount" type="number" min="0" label="Children *" />
-                        <flux:input wire:model.live="pwdScCount" type="number" min="0" label="PWD / Senior *" />
-                        <flux:input wire:model="maleCount" type="number" min="0" label="Male *" />
-                        <flux:input wire:model="femaleCount" type="number" min="0" label="Female *" />
+                        <x-required-input wire:model.live="adultCount" name="adultCount" type="number" min="0" label="Adults" />
+                        <x-required-input wire:model.live="childrenCount" name="childrenCount" type="number" min="0" label="Children" />
+                        <x-required-input wire:model.live="pwdScCount" name="pwdScCount" type="number" min="0" label="PWD / Senior" />
+                        <x-required-input wire:model="maleCount" name="maleCount" type="number" min="0" label="Male" />
+                        <x-required-input wire:model="femaleCount" name="femaleCount" type="number" min="0" label="Female" />
                     </div>
                     <div class="mt-3 flex flex-wrap gap-3 text-sm">
                         <span class="font-medium">Facility core: ₱{{ number_format((float) ($planTotal ?: 0), 2) }}</span>
