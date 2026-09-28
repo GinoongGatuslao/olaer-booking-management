@@ -317,9 +317,9 @@ class extends Component
                         </p>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-3">
-                            <flux:input wire:model.live="adultCount" type="number" min="0" label="Adults" />
-                            <flux:input wire:model.live="childrenCount" type="number" min="0" label="Children" />
-                            <flux:input wire:model.live="pwdScCount" type="number" min="0" label="Senior Citizen / PWD" />
+                            <x-required-input wire:model.live="adultCount" name="adultCount" type="number" min="0" label="Adults" />
+                            <x-required-input wire:model.live="childrenCount" name="childrenCount" type="number" min="0" label="Children" />
+                            <x-required-input wire:model.live="pwdScCount" name="pwdScCount" type="number" min="0" label="Senior Citizen / PWD" />
                         </div>
                     </div>
 
@@ -330,8 +330,8 @@ class extends Component
                         </p>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-3">
-                            <flux:input wire:model.live="maleCount" type="number" min="0" label="Male" />
-                            <flux:input wire:model.live="femaleCount" type="number" min="0" label="Female" />
+                            <x-required-input wire:model.live="maleCount" name="maleCount" type="number" min="0" label="Male" />
+                            <x-required-input wire:model.live="femaleCount" name="femaleCount" type="number" min="0" label="Female" />
                         </div>
                     </div>
 
