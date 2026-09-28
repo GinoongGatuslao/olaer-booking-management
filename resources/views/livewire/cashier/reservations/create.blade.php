@@ -351,14 +351,14 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                                 @foreach ($this->products as $candidate)
                                     <option value="{{ $candidate->facility_product_id }}">{{ $candidate->facilityType?->facility_type }} — {{ $candidate->display_name }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:select wire:model.live="groups.{{ $index }}.rate_code" label="Schedule *">
+                            </x-required-select>
+                            <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
                                 <option value="">Choose schedule</option>
                                 @foreach ($product?->productRates ?? [] as $rate)
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity *" />
+                            </x-required-select>
+                            <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
                             <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
