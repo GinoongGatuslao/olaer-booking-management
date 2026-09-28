@@ -524,7 +524,7 @@ class extends Component
                     The original slip will remain in history as Voided. A new slip will be created from the current form values. Verified value from the original is carried only to this replacement.
                 </flux:text>
             </div>
-            <flux:textarea wire:model="voidReason" label="Correction / void reason *" rows="3" />
+            <x-required-textarea wire:model="voidReason" name="voidReason" label="Correction / void reason" rows="3" />
             <div class="flex justify-end gap-3">
                 <flux:button type="button" variant="ghost" wire:click="$set('showCorrectionDialog', false)">Cancel</flux:button>
                 <flux:button type="button" variant="danger" wire:click="recreateLockedSlip">Void & Create Replacement</flux:button>
