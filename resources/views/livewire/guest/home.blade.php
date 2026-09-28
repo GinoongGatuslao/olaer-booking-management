@@ -535,7 +535,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                                 @foreach ($galleryPhotos as $photo)
                                     <figure
                                         wire:key="public-gallery-photo-{{ $copy }}-{{ $loop->index }}"
-                                        class="h-72 w-[76vw] shrink-0 overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card sm:h-[24rem] sm:w-[58vw] lg:h-[30rem] lg:w-[min(38vw,30rem)]"
+                                        class="aspect-[3/2] w-[86vw] shrink-0 overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card sm:w-[70vw] lg:w-[min(52vw,44rem)]"
                                         @if ($copy === 1)
                                             role="group"
                                             aria-roledescription="slide"
