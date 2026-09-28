@@ -150,7 +150,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
         <div class="absolute inset-0 -z-10 bg-linear-to-t from-public-forest-deep/85 via-transparent to-black/10"></div>
 
         <div class="mx-auto flex min-h-[48rem] max-w-[90rem] items-center px-4 pb-32 pt-24 sm:px-6 lg:px-8">
-            <div class="public-hero-panel max-w-3xl rounded-[2rem] border border-white/20 bg-public-forest-deep/45 p-6 shadow-public-soft backdrop-blur-xl sm:p-10 lg:p-12">
+            <div class="public-hero-panel relative max-w-3xl overflow-hidden rounded-[2rem] border border-white/20 bg-public-forest-deep/45 p-6 shadow-public-soft backdrop-blur-xl sm:p-10 lg:p-12">
                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-public-sand sm:text-sm">
                     Purok Olaer · General Santos City
                 </p>
@@ -206,7 +206,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
     <section id="experience" class="public-reveal scroll-mt-24 px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto grid max-w-[90rem] items-center gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
             <div class="relative mx-auto w-full max-w-xl lg:mx-0">
-                <div class="public-hover-lift overflow-hidden rounded-[2.5rem] bg-public-forest shadow-public-soft">
+                <div class="public-hover-lift public-reveal-item overflow-hidden rounded-[2.5rem] bg-public-forest shadow-public-soft">
                     <img
                         src="{{ asset('images/olaer/spring-day.webp') }}"
                         alt="The clear spring pools and green surroundings at Olaer Spring Resort"
@@ -268,7 +268,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 @forelse ($facilityTypes as $facilityType)
                     <article
                         wire:key="public-facility-type-{{ $facilityType['id'] }}"
-                        class="public-hover-lift flex min-h-80 flex-col rounded-[2rem] border border-white/20 bg-white/10 p-6 shadow-public-card backdrop-blur-md sm:p-7"
+                        class="public-hover-lift public-reveal-item flex min-h-80 flex-col rounded-[2rem] border border-white/20 bg-white/10 p-6 shadow-public-card backdrop-blur-md sm:p-7"
                     >
                         <div class="flex items-start justify-between gap-4">
                             <div>
@@ -337,7 +337,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
 
     <section class="public-reveal px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div class="mx-auto grid max-w-[90rem] gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-            <div class="rounded-[2.5rem] border border-white/70 bg-white/80 p-7 shadow-public-card backdrop-blur-lg sm:p-10 dark:border-white/10 dark:bg-zinc-900/80">
+            <div class="public-reveal-item rounded-[2.5rem] border border-white/70 bg-white/80 p-7 shadow-public-card backdrop-blur-lg sm:p-10 dark:border-white/10 dark:bg-zinc-900/80">
                 <p class="text-xs font-semibold uppercase tracking-[0.22em] text-public-terracotta">Entrance fees</p>
                 <h2 class="mt-4 font-public-display text-4xl font-semibold text-public-forest sm:text-5xl dark:text-white">
                     Plan the whole visit.
@@ -364,7 +364,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
             </div>
 
             <div class="grid gap-5">
-                <article class="public-hover-lift rounded-[2.5rem] bg-public-spring-light p-7 sm:p-9 dark:bg-public-forest">
+                <article class="public-hover-lift public-reveal-item rounded-[2.5rem] bg-public-spring-light p-7 sm:p-9 dark:bg-public-forest">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-terracotta dark:text-public-sand">Recommended</p>
                     <h2 class="mt-3 font-public-display text-3xl font-semibold text-public-forest dark:text-white">Reserve first, finalize with the cashier.</h2>
                     <p class="mt-4 text-sm leading-7 text-public-muted dark:text-white/70">
@@ -378,7 +378,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                     </a>
                 </article>
 
-                <article class="public-hover-lift rounded-[2.5rem] border border-public-forest/15 bg-white/50 p-7 backdrop-blur-sm sm:p-9 dark:border-white/15 dark:bg-white/5">
+                <article class="public-hover-lift public-reveal-item rounded-[2.5rem] border border-public-forest/15 bg-white/50 p-7 backdrop-blur-sm sm:p-9 dark:border-white/15 dark:bg-white/5">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-public-terracotta">Direct booking</p>
                     <h2 class="mt-3 font-public-display text-3xl font-semibold text-public-forest dark:text-white">Already ready to pay in full?</h2>
                     <p class="mt-4 text-sm leading-7 text-public-muted dark:text-zinc-300">
@@ -405,7 +405,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
             </div>
 
             <div class="mt-12 grid auto-rows-[14rem] gap-4 sm:grid-cols-2 sm:auto-rows-[20rem] lg:grid-cols-4">
-                <figure class="public-hover-lift overflow-hidden rounded-[2rem] sm:row-span-2">
+                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] sm:row-span-2">
                     <img
                         src="{{ asset('images/olaer/aerial-pools.webp') }}"
                         alt="Aerial view of Olaer Spring Resort pools and cottages"
@@ -416,7 +416,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         decoding="async"
                     >
                 </figure>
-                <figure class="public-hover-lift overflow-hidden rounded-[2rem] lg:col-span-2">
+                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] lg:col-span-2">
                     <img
                         src="{{ asset('images/olaer/entrance-night.webp') }}"
                         alt="The illuminated Olaer Swimming Resort sign at night"
@@ -427,7 +427,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         decoding="async"
                     >
                 </figure>
-                <figure class="public-hover-lift overflow-hidden rounded-[2rem] sm:row-span-2">
+                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] sm:row-span-2">
                     <img
                         src="{{ asset('images/olaer/resort-grounds.webp') }}"
                         alt="A bright view across the spring pools and palm-lined resort grounds"
@@ -438,7 +438,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         decoding="async"
                     >
                 </figure>
-                <figure class="public-hover-lift overflow-hidden rounded-[2rem]">
+                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem]">
                     <img
                         src="{{ asset('images/olaer/olaer-sign.webp') }}"
                         alt="Visitors posing by the colorful Olaer Swimming Resort sign"
@@ -449,7 +449,7 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                         decoding="async"
                     >
                 </figure>
-                <figure class="public-hover-lift overflow-hidden rounded-[2rem]">
+                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem]">
                     <img
                         src="{{ asset('images/olaer/family-spring.webp') }}"
                         alt="Families enjoying the spring pools and landscaped resort grounds"
