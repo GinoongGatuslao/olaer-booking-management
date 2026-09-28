@@ -69,4 +69,44 @@ class DiscountValidityHardeningTest extends TestCase
             $resolver->appliesToFacilityOn($undated, $room, today()),
         );
     }
+
+    public function test_highest_dated_facility_discount_wins_automatically(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $room = Facility::query()
+            ->whereHas('facilityType', fn ($query) => $query->where('facility_type', 'Room'))
+            ->firstOrFail();
+
+        foreach ([
+            ['name' => 'Valid 10%', 'rate' => 0.10],
+            ['name' => 'Valid 20%', 'rate' => 0.20],
+        ] as $discount) {
+            DB::table('tbl_discount')->insert([
+                'discount_name' => $discount['name'],
+                'discount_amount' => $discount['rate'],
+                'app_to_adult' => false,
+                'app_to_children' => false,
+                'app_to_SC_PWD' => false,
+                'app_to_cottage' => false,
+                'app_to_room' => true,
+                'app_to_function_hall' => false,
+                'discount_start' => now()->subDay()->toDateString(),
+                'discount_end' => now()->addDay()->toDateString(),
+                'status' => 'Active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $resolved = app(DiscountResolverService::class)->resolveForFacility(
+            (int) $room->facility_id,
+            today(),
+        );
+
+        $this->assertNotNull($resolved);
+        $this->assertSame('Valid 20%', $resolved->discount_name);
+        $this->assertSame(0.20, (float) $resolved->discount_amount);
+    }
+
 }
