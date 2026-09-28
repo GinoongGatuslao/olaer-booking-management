@@ -9,6 +9,7 @@ The following are enforced by implementation and/or regression tests on both SQL
 - safe Manager-role removal with an explicit stop when legacy Manager accounts still require reassignment;
 - numeric facility capacity migration and approved product/rate catalog;
 - canonical schedule blocks and overlap prevention;
+- follow-up migration that rejects unmapped active legacy schedules and repairs missing blocks atomically;
 - shared multi-facility planning and automatic physical-unit assignment;
 - immutable facility pricing snapshots;
 - reservation-to-booking conversion with schedule ownership transfer;
@@ -39,7 +40,7 @@ The Laravel CI workflow runs:
    - Composer metadata/lock validation;
    - Composer install;
    - frontend install/build;
-   - fresh migrations;
+   - fresh migrations and an upgrade coverage regression against populated legacy records;
    - route listing;
    - scheduler listing;
    - full Laravel test suite.
@@ -47,7 +48,7 @@ The Laravel CI workflow runs:
    - Composer metadata/lock validation;
    - Composer install;
    - frontend install/build;
-   - fresh MySQL migration;
+   - fresh MySQL migration and the same populated-record upgrade coverage regression;
    - full Laravel test suite.
 
 A branch is not considered release-ready when either job is red.

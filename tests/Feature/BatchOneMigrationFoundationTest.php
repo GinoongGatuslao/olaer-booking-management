@@ -2,7 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\FacilityRateCode;
+use App\FacilitySchedulePolicy;
+use App\Models\Address;
 use App\Models\Facility;
+use App\Models\FacilityScheduleBlock;
+use App\Models\Guest;
+use App\Models\Reservation;
+use App\Models\ReservationDetail;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -167,5 +174,86 @@ class BatchOneMigrationFoundationTest extends TestCase
                 fn ($cookie): bool => $cookie->getName() === $recallerName,
             )
         );
+    }
+
+    public function test_upgrade_stops_on_unmapped_active_schedule_then_backfills_when_repaired(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $room = Facility::query()->where('facility_name', 'R-001')->firstOrFail();
+        $detail = $this->legacyReservationDetail($room, 'R-UPGRADE-1');
+        $migration = require database_path('migrations/2026_09_28_000001_verify_active_facility_schedule_coverage.php');
+
+        try {
+            $migration->up();
+            $this->fail('An active reservation with no schedule snapshot was silently skipped.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString("reservation detail #{$detail->getKey()}", $exception->getMessage());
+            $this->assertStringContainsString('schedule_policy', $exception->getMessage());
+        }
+
+        $this->assertSame(0, FacilityScheduleBlock::query()->count());
+
+        $detail->update([
+            'schedule_policy' => FacilitySchedulePolicy::Overnight,
+            'rate_code' => FacilityRateCode::Overnight,
+        ]);
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(1, FacilityScheduleBlock::query()
+            ->where('reservation_detail_id', $detail->getKey())->count());
+    }
+
+    public function test_upgrade_rolls_back_all_new_schedule_blocks_on_historical_collision(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $room = Facility::query()->where('facility_name', 'R-001')->firstOrFail();
+        $first = $this->legacyReservationDetail($room, 'R-UPGRADE-2', true);
+        $second = $this->legacyReservationDetail($room, 'R-UPGRADE-3', true);
+        $migration = require database_path('migrations/2026_09_28_000001_verify_active_facility_schedule_coverage.php');
+
+        try {
+            $migration->up();
+            $this->fail('Conflicting historical reservations were silently assigned the same facility.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString("reservation detail #{$second->getKey()}", $exception->getMessage());
+        }
+
+        $this->assertSame(0, FacilityScheduleBlock::query()->count());
+        $this->assertNotSame($first->getKey(), $second->getKey());
+    }
+
+    private function legacyReservationDetail(Facility $room, string $reference, bool $mapped = false): ReservationDetail
+    {
+        $address = Address::query()->create([
+            'province' => 'South Cotabato',
+            'city' => 'General Santos City',
+            'barangay' => 'Dadiangas',
+        ]);
+        $guest = Guest::query()->create([
+            'first_name' => 'Legacy',
+            'last_name' => 'Guest',
+            'contact_no' => '09123456789',
+            'email' => strtolower($reference).'@example.test',
+            'address_id' => $address->address_id,
+        ]);
+        $reservation = Reservation::query()->create([
+            'r_ref_no' => $reference,
+            'guest_id' => $guest->guest_id,
+            'reservation_date' => today()->toDateString(),
+            'total_price' => '2500.00',
+            'amount_due' => '2500.00',
+            'status' => 'Active',
+        ]);
+
+        return ReservationDetail::query()->create([
+            'reservation_id' => $reservation->reservation_id,
+            'facility_id' => $room->facility_id,
+            'rate_type' => 'Overnight',
+            'check_in_date' => today()->addDays(30)->toDateString(),
+            'check_out_date' => today()->addDays(31)->toDateString(),
+            'schedule_policy' => $mapped ? FacilitySchedulePolicy::Overnight : null,
+            'rate_code' => $mapped ? FacilityRateCode::Overnight : null,
+        ]);
     }
 }
