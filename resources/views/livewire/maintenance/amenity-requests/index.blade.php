@@ -36,6 +36,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     public int $perPage = 10;
 
     public bool $showCreateForm = false;
+    public ?int $pendingActionRequestId = null;
+    public ?string $pendingAction = null;
+    public bool $showActionDialog = false;
 
     public array $form = [
         'booking_id' => '',
@@ -203,6 +206,39 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         }
 
         $this->resetPage();
+    }
+
+    public function requestAction(string $action, int $amenityRequestId): void
+    {
+        if (! in_array($action, ['accept', 'deliver'], true)) {
+            return;
+        }
+
+        AmenityRequest::query()->findOrFail($amenityRequestId);
+        $this->pendingAction = $action;
+        $this->pendingActionRequestId = $amenityRequestId;
+        $this->showActionDialog = true;
+    }
+
+    public function confirmAction(AmenityRequestWorkflowService $workflow): void
+    {
+        if ($this->pendingActionRequestId === null || $this->pendingAction === null) {
+            return;
+        }
+
+        $requestId = $this->pendingActionRequestId;
+        $action = $this->pendingAction;
+        $this->showActionDialog = false;
+        $this->pendingActionRequestId = null;
+        $this->pendingAction = null;
+
+        if ($action === 'accept') {
+            $this->acceptRequest($requestId, $workflow);
+
+            return;
+        }
+
+        $this->markDelivered($requestId, $workflow);
     }
 
     public function acceptRequest(
@@ -886,8 +922,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                 <flux:button
                                     size="sm"
                                     variant="primary"
-                                    wire:click="acceptRequest({{ $request->amenity_request_id }})"
-                                    wire:confirm="Accept this amenity request for delivery?"
+                                    wire:click="requestAction('accept', {{ $request->amenity_request_id }})"
                                 >
                                     Accept
                                 </flux:button>
@@ -898,8 +933,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                 <flux:button
                                     size="sm"
                                     variant="primary"
-                                    wire:click="markDelivered({{ $request->amenity_request_id }})"
-                                    wire:confirm="Confirm that all requested items were delivered to the guest?"
+                                    wire:click="requestAction('deliver', {{ $request->amenity_request_id }})"
                                 >
                                     Mark Delivered
                                 </flux:button>
@@ -932,4 +966,23 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             {{ $requests->links() }}
         </x-slot:pagination>
     </x-staff-table-shell>
+    <flux:modal wire:model="showActionDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">{{ $pendingAction === 'accept' ? 'Accept amenity request' : 'Confirm delivery' }}</flux:heading>
+                <flux:text class="mt-1">
+                    {{ $pendingAction === 'accept'
+                        ? 'Accept this request and assign it to yourself for delivery?'
+                        : 'Confirm that all requested items were delivered to the guest?' }}
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showActionDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="confirmAction">
+                    {{ $pendingAction === 'accept' ? 'Accept Request' : 'Mark Delivered' }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>

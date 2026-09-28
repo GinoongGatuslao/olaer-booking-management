@@ -39,6 +39,8 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
     public int $perPage = 10;
 
     public ?int $editingFineId = null;
+    public bool $showFineEditor = false;
+    public bool $showDamageTypes = false;
     public string $fineType = 'Situational';
     public string $amenityId = '';
     public string $damageTypeId = '';
@@ -82,7 +84,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_type',
             'damage_type',
             'fine_charge',
-            'usage',
         ];
 
         $sortField = in_array($this->sortField, $allowedSorts, true)
@@ -174,9 +175,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_charge' => $query
                 ->orderBy('tbl_fine.fine_charge', $direction)
                 ->orderBy('tbl_fine.fine_id'),
-            'usage' => $query
-                ->orderBy('guest_fines_count', $direction)
-                ->orderBy('tbl_fine.fine_id'),
             default => $query
                 ->orderByRaw(
                     "CASE
@@ -251,7 +249,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             'fine_type',
             'damage_type',
             'fine_charge',
-            'usage',
         ];
 
         if (! in_array($field, $allowedSorts, true)) {
@@ -273,6 +270,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
     public function createNewFine(): void
     {
         $this->resetFineForm();
+        $this->showFineEditor = true;
     }
 
     public function startEditingFine(int $fineId): void
@@ -306,6 +304,20 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
         );
 
         $this->resetValidation();
+        $this->showFineEditor = true;
+    }
+
+    public function cancelFineEdit(): void
+    {
+        session()->flash('success', 'Fine edit cancelled. No changes were saved.');
+        $this->showFineEditor = false;
+        $this->resetFineForm();
+    }
+
+    public function manageDamageTypes(): void
+    {
+        $this->resetDamageTypeForm();
+        $this->showDamageTypes = true;
     }
 
     public function resetFineForm(): void
@@ -504,6 +516,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
         );
 
         $this->resetFineForm();
+        $this->showFineEditor = false;
         unset($this->fines);
     }
 
@@ -516,6 +529,16 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
         $this->damageType = (string) $damageType->damage_type;
 
         $this->resetValidation();
+        $this->showDamageTypes = true;
+    }
+
+    public function closeDamageTypes(): void
+    {
+        if ($this->editingDamageTypeId !== null || $this->damageType !== '') {
+            session()->flash('success', 'Damage type edit cancelled. No changes were saved.');
+        }
+        $this->showDamageTypes = false;
+        $this->resetDamageTypeForm();
     }
 
     public function resetDamageTypeForm(): void
@@ -681,7 +704,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
         reference them historically.
     </div>
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+    <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
@@ -690,6 +713,10 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate fine master records.
                         </p>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <flux:button type="button" wire:click="createNewFine" variant="primary">Create fine</flux:button>
+                            <flux:button type="button" wire:click="manageDamageTypes" variant="ghost">Manage damage types</flux:button>
+                        </div>
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -746,55 +773,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     <table class="w-full min-w-[68rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_name')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Fine {{ $this->sortIcon('fine_name') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_type')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Type {{ $this->sortIcon('fine_type') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('damage_type')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Damage Type {{ $this->sortIcon('damage_type') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('fine_charge')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Charge {{ $this->sortIcon('fine_charge') }}
-                                    </button>
-                                </th>
-
-                                <th class="px-5 py-3">
-                                    <button
-                                        type="button"
-                                        wire:click="sortBy('usage')"
-                                        class="font-semibold hover:text-zinc-950 dark:hover:text-white"
-                                    >
-                                        Usage {{ $this->sortIcon('usage') }}
-                                    </button>
-                                </th>
 
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
@@ -802,7 +780,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->fines as $fine)
-                                <tr wire:key="fine-row-{{ $fine->fine_id }}">
+                                <tr wire:key="fine-row-{{ $fine->fine_id }}" class="{{ $editingFineId === (int) $fine->fine_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="max-w-sm px-5 py-4">
                                         <p class="font-medium">
                                             {{ $this->fineName($fine) }}
@@ -828,11 +806,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                                     <td class="px-5 py-4 font-semibold">
                                         ₱{{ number_format((float) $fine->fine_charge, 2) }}
-                                    </td>
-
-                                    <td class="px-5 py-4">
-                                        {{ $fine->guest_fines_count }}
-                                        guest fine{{ (int) $fine->guest_fines_count === 1 ? '' : 's' }}
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
@@ -873,8 +846,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             </flux:card>
         </section>
 
-        <aside class="space-y-6">
-            <flux:card>
+        <flux:modal wire:model="showFineEditor" class="md:w-[38rem] max-h-[90vh] overflow-y-auto">
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <h2 class="font-semibold">
@@ -962,10 +934,10 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     <div class="flex justify-end gap-3 pt-2">
                         <flux:button
                             type="button"
-                            wire:click="resetFineForm"
+                            wire:click="cancelFineEdit"
                             variant="ghost"
                         >
-                            Clear
+                            Cancel
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
@@ -975,9 +947,9 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         </flux:button>
                     </div>
                 </form>
-            </flux:card>
+        </flux:modal>
 
-            <flux:card>
+        <flux:modal wire:model="showDamageTypes" class="md:w-[36rem] max-h-[90vh] overflow-y-auto">
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <h2 class="font-semibold">Damage types</h2>
@@ -1009,10 +981,10 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     <div class="flex justify-end gap-3">
                         <flux:button
                             type="button"
-                            wire:click="resetDamageTypeForm"
+                            wire:click="closeDamageTypes"
                             variant="ghost"
                         >
-                            Clear
+                            Close
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
@@ -1043,7 +1015,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         </p>
                     @endforelse
                 </div>
-            </flux:card>
-        </aside>
+        </flux:modal>
     </div>
 </div>

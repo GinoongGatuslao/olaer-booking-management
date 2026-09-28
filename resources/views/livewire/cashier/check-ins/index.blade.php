@@ -445,7 +445,7 @@ new class extends Component {
                 @forelse ($bookingDetails as $detail)
                     <tr
                         wire:key="check-in-detail-{{ $detail->booking_details_id }}"
-                        class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                        class="align-top text-brand-text transition-colors dark:text-zinc-200 {{ $selectedBookingDetailsId === (int) $detail->booking_details_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : 'hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/60' }}"
                     >
                         <td class="px-4 py-4 font-medium">{{ $detail->booking->b_ref_no }}</td>
                         <td class="px-4 py-4">

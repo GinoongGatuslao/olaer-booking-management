@@ -27,7 +27,7 @@
         <div>
             <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-public-sand">Your Visit</h2>
             <nav aria-label="Footer booking links" class="mt-5 grid gap-3 text-sm text-white/70">
-                <a href="{{ route('guest.facilities.planner') }}" class="hover:text-white">Reserve a Facility</a>
+                <a href="{{ route('guest.reservations.create') }}" class="hover:text-white">Reserve a Facility</a>
                 <a href="{{ route('guest.bookings.create') }}" class="hover:text-white">Direct Booking</a>
                 <a href="{{ route('guest.reservations.manage') }}" class="hover:text-white">Manage Reservation</a>
                 <a href="{{ route('guest.confirmations.lookup') }}" class="hover:text-white">Find Booking</a>

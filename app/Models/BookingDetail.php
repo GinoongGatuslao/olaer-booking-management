@@ -108,6 +108,13 @@ class BookingDetail extends Model
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
+    /** @return HasMany<BookingRoomOccupant, $this> */
+    public function roomOccupants(): HasMany
+    {
+        return $this->hasMany(BookingRoomOccupant::class, 'booking_details_id', 'booking_details_id')
+            ->orderBy('position');
+    }
+
     /** @return HasMany<BookingExtraGuest, $this> */
     public function extraGuests(): HasMany
     {

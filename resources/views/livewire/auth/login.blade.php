@@ -35,14 +35,14 @@ $login = function () {
         ]);
     }
 
-    request()->session()->regenerate();
+    session()->regenerate();
 
     $user = Auth::user()->loadMissing('role');
 
     if ($user->status !== 'Active') {
         Auth::guard('web')->logout();
-        request()->session()->invalidate();
-        request()->session()->regenerateToken();
+        session()->invalidate();
+        session()->regenerateToken();
 
         throw ValidationException::withMessages([
             'username' => 'Your account is inactive. Please contact the administrator.',
@@ -50,10 +50,10 @@ $login = function () {
     }
 
     $routeName = match ($user->role?->role_name) {
-        'Admin', 'Manager' => 'admin.dashboard',
+        'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
         'Maintenance Staff' => 'maintenance.dashboard',
-        'Security Guard' => 'security.dashboard',
+        'Security Guard' => 'security.entrance-slips.create',
         default => 'dashboard',
     };
 

@@ -25,8 +25,9 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             'workflow_dispatch:',
             'permissions:',
             'contents: read',
-            "php-version: '8.3'",
+            "php-version: '8.4'",
             "node-version: '22'",
+            'composer validate --no-check-publish --strict',
             'composer install --no-interaction',
             'npm ci',
             'npm run build',
@@ -34,6 +35,9 @@ class ContinuousIntegrationConfigurationTest extends TestCase
             'php artisan route:list',
             'php artisan schedule:list',
             'php artisan test --colors=always',
+            'image: mysql:8.4',
+            'DB_CONNECTION: mysql',
+            'pdo_mysql',
         ] as $requiredFragment) {
             $this->assertStringContainsString(
                 $requiredFragment,
@@ -106,6 +110,19 @@ class ContinuousIntegrationConfigurationTest extends TestCase
         $this->assertStringContainsString(
             '<env name="DB_DATABASE" value=":memory:"/>',
             $phpunit,
+        );
+    }
+
+    public function test_application_timezone_defaults_to_philippine_time(): void
+    {
+        $this->assertSame('Asia/Manila', config('app.timezone'));
+
+        $env = file_get_contents(base_path('.env.example'));
+
+        $this->assertIsString($env);
+        $this->assertStringContainsString(
+            'APP_TIMEZONE=Asia/Manila',
+            $env,
         );
     }
 }

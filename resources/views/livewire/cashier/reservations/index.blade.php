@@ -1,23 +1,16 @@
 <?php
 
-use App\FacilityRateCode;
-use App\Models\Discount;
-use App\Models\Facility;
-use App\Models\ProductRate;
-use App\Models\FacilityType;
 use App\Models\Guest;
 use App\Models\Reservation;
-use App\Services\FacilityAvailabilityService;
-use App\Services\FacilityOccupancyService;
-use App\Services\FacilityProductConfigurationService;
-use App\Services\CashierReservationWorkflowService;
+use App\Models\ReservationDetail;
+use App\Models\FacilityProduct;
 use App\Services\DecimalMoneyService;
-use App\Services\ReservationQuoteService;
 use App\Services\StaffReservationCancellationService;
+use App\Services\ReservationFacilityOperationService;
+use App\Services\RoomOccupantService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -43,49 +36,16 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
-    public bool $showCreateForm = false;
-
-    public string $guestFirstName = '';
-    public string $guestMiddleName = '';
-    public string $guestLastName = '';
-    public string $guestContactNo = '';
-    public string $guestEmail = '';
-    public string $addressPurok = '';
-    public string $addressBarangay = '';
-    public string $addressCity = '';
-    public string $addressProvince = '';
-
-    public string $facilityTypeId = '';
-    public string $facilityId = '';
-    public string $rateType = '';
-    public string $checkInDate = '';
-    public string $checkOutDate = '';
-    public string $discountId = '';
-    public int $totalGuestCount = 1;
-
-    public array $extraGuests = [];
-
-    public ?int $rescheduleReservationId = null;
-    public string $rescheduleFacilityId = '';
-    public string $rescheduleRateType = '';
-    public string $rescheduleCheckInDate = '';
-    public string $rescheduleCheckOutDate = '';
-    public string $rescheduleDiscountId = '';
-
     public ?int $cancelReservationId = null;
     public string $cancellationReason = '';
 
-    public function mount(): void
-    {
-        $today = now()->toDateString();
-
-        $this->addressCity = 'Tacurong City';
-        $this->addressProvince = 'Sultan Kudarat';
-        $this->checkInDate = $today;
-        $this->checkOutDate = $today;
-        $this->rescheduleCheckInDate = $today;
-        $this->rescheduleCheckOutDate = $today;
-    }
+    public ?int $detailActionId = null;
+    public ?string $detailAction = null;
+    public string $detailCheckInDate = '';
+    public string $detailCheckOutDate = '';
+    public string $detailFacilityProductId = '';
+    public string $detailCancellationReason = '';
+    public array $detailOccupants = [];
 
     public function with(): array
     {
@@ -101,6 +61,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'guest.address',
                 'details.facility.facilityType',
                 'details.discount',
+                'details.facility.facilityProduct',
+                'details.roomOccupants',
                 'extraGuests',
                 'payments.modeOfPayment',
             ]);
@@ -144,214 +106,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         return $query
             ->orderBy($sortField, $sortDirection)
             ->paginate($perPage);
-    }
-
-    public function facilityTypes(): Collection
-    {
-        return FacilityType::query()->orderBy('facility_type')->get();
-    }
-
-    public function rateTypes(): Collection
-    {
-        if ($this->facilityTypeId === '') {
-            return collect();
-        }
-
-        return ProductRate::query()
-            ->select('tbl_facility_product_rate.rate_code')
-            ->join('tbl_facility_product', 'tbl_facility_product.facility_product_id', '=', 'tbl_facility_product_rate.facility_product_id')
-            ->where('tbl_facility_product.facility_type_id', (int) $this->facilityTypeId)
-            ->where('tbl_facility_product.is_active', true)
-            ->where('tbl_facility_product_rate.is_active', true)
-            ->distinct()
-            ->pluck('tbl_facility_product_rate.rate_code')
-            ->map(fn (FacilityRateCode|string $rateCode): string => app(FacilityProductConfigurationService::class)
-                ->canonicalRateType($rateCode instanceof FacilityRateCode ? $rateCode : FacilityRateCode::from($rateCode)))
-            ->unique()
-            ->sort()
-            ->values();
-    }
-
-    public function availableFacilities(): Collection
-    {
-        if ($this->facilityTypeId === '' || $this->rateType === '' || $this->checkInDate === '' || $this->checkOutDate === '') {
-            return collect();
-        }
-
-        $availability = app(FacilityAvailabilityService::class);
-
-        try {
-            $rateCode = app(FacilityProductConfigurationService::class)->canonicalRateCode($this->rateType);
-        } catch (InvalidArgumentException) {
-            return collect();
-        }
-
-        $facilities = Facility::query()
-            ->with(['facilityType', 'facilityProduct', 'prices'])
-            ->where('facility_type_id', (int) $this->facilityTypeId)
-            ->where('facility_status', 'Available')
-            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
-                $query->where('rate_code', $rateCode->value)->where('is_active', true);
-            })
-            ->orderBy('facility_name')
-            ->get();
-
-        $available = collect();
-
-        foreach ($facilities as $facility) {
-            try {
-                if ($availability->isAvailable((int) $facility->facility_id, $this->checkInDate, $this->checkOutDate)) {
-                    $available->push($facility);
-                }
-            } catch (Throwable) {
-                return collect();
-            }
-        }
-
-        return $available->each(function (Facility $facility): void {
-            $maximum = $facility->facilityProduct?->strict_maximum;
-            $recommended = $facility->facilityProduct?->suggested_maximum;
-            $facility->setAttribute(
-                'capacity_label',
-                $maximum
-                    ? "Maximum {$maximum} guests"
-                    : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
-            );
-        });
-    }
-
-    public function discounts(): Collection
-    {
-        if ($this->facilityTypeId === '') {
-            return collect();
-        }
-
-        $facilityType = FacilityType::query()->find((int) $this->facilityTypeId);
-
-        if (! $facilityType) {
-            return collect();
-        }
-
-        $field = match ($facilityType->facility_type) {
-            'Cottage' => 'app_to_cottage',
-            'Room' => 'app_to_room',
-            'Function Hall' => 'app_to_function_hall',
-            default => null,
-        };
-
-        if (! $field) {
-            return collect();
-        }
-
-        $discounts = Discount::query()
-            ->where('status', 'Active')
-            ->where($field, true)
-            ->orderBy('discount_name')
-            ->get();
-
-        $valid = collect();
-        $now = now();
-
-        foreach ($discounts as $discount) {
-            if ($discount->discount_start && $now->lt($discount->discount_start)) {
-                continue;
-            }
-
-            if ($discount->discount_end && $now->gt($discount->discount_end)) {
-                continue;
-            }
-
-            $valid->push($discount);
-        }
-
-        return $valid;
-    }
-
-    public function quote(): array
-    {
-        if ($this->facilityId === '' || $this->rateType === '' || $this->checkInDate === '' || $this->checkOutDate === '') {
-            return $this->emptyQuote();
-        }
-
-        try {
-            return app(ReservationQuoteService::class)->quote(
-                facilityId: (int) $this->facilityId,
-                rateType: $this->rateType,
-                checkInDate: $this->checkInDate,
-                checkOutDate: $this->checkOutDate,
-                discountId: $this->discountId !== '' ? (int) $this->discountId : null,
-                totalGuestCount: $this->totalGuestCount,
-            );
-        } catch (Throwable) {
-            return $this->emptyQuote();
-        }
-    }
-
-    public function rescheduleAvailableFacilities(): Collection
-    {
-        if (! $this->rescheduleReservationId) {
-            return collect();
-        }
-
-        $reservation = Reservation::query()
-            ->with('details.facility')
-            ->find($this->rescheduleReservationId);
-
-        $currentDetail = $reservation?->details->first();
-
-        if (! $currentDetail || ! $currentDetail->facility) {
-            return collect();
-        }
-
-        if ($this->rescheduleRateType === '' || $this->rescheduleCheckInDate === '' || $this->rescheduleCheckOutDate === '') {
-            return collect();
-        }
-
-        $availability = app(FacilityAvailabilityService::class);
-
-        try {
-            $rateCode = app(FacilityProductConfigurationService::class)->canonicalRateCode($this->rescheduleRateType);
-        } catch (InvalidArgumentException) {
-            return collect();
-        }
-
-        $facilities = Facility::query()
-            ->with(['facilityType', 'facilityProduct', 'prices'])
-            ->where('facility_type_id', $currentDetail->facility->facility_type_id)
-            ->where('facility_status', 'Available')
-            ->whereHas('facilityProduct.productRates', function ($query) use ($rateCode): void {
-                $query->where('rate_code', $rateCode->value)->where('is_active', true);
-            })
-            ->orderBy('facility_name')
-            ->get();
-
-        $available = collect();
-
-        foreach ($facilities as $facility) {
-            try {
-                if ($availability->isAvailable(
-                    (int) $facility->facility_id,
-                    $this->rescheduleCheckInDate,
-                    $this->rescheduleCheckOutDate,
-                    $this->rescheduleReservationId,
-                )) {
-                    $available->push($facility);
-                }
-            } catch (Throwable) {
-                return collect();
-            }
-        }
-
-        return $available->each(function (Facility $facility): void {
-            $maximum = $facility->facilityProduct?->strict_maximum;
-            $recommended = $facility->facilityProduct?->suggested_maximum;
-            $facility->setAttribute(
-                'capacity_label',
-                $maximum
-                    ? "Maximum {$maximum} guests"
-                    : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
-            );
-        });
     }
 
     public function updatedSearch(): void
@@ -410,209 +164,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->resetPage();
     }
 
-    public function updatedFacilityTypeId(): void
-    {
-        $this->facilityId = '';
-        $this->rateType = '';
-        $this->discountId = '';
-        $this->totalGuestCount = 1;
-        $this->extraGuests = [];
-    }
-
-    public function updatedRateType(): void
-    {
-        $this->facilityId = '';
-        $this->totalGuestCount = 1;
-        $this->extraGuests = [];
-    }
-
-    public function updatedFacilityId(): void
-    {
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function updatedTotalGuestCount(): void
-    {
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function occupancy(): ?array
-    {
-        if ($this->facilityId === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->forFacilityId(
-                    (int) $this->facilityId,
-                    $this->totalGuestCount,
-                );
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function syncPaidExtraGuestRows(): void
-    {
-        $occupancy = $this->occupancy();
-
-        if ($this->facilityId !== '' && $occupancy === null) {
-            return;
-        }
-
-        $required = (int) (
-            $occupancy['paid_extra_guest_count'] ?? 0
-        );
-        $current = $this->extraGuests;
-        $rows = [];
-
-        for ($index = 0; $index < $required; $index++) {
-            $rows[$index] = $current[$index] ?? [
-                'first_name' => '',
-                'middle_name' => '',
-                'last_name' => '',
-            ];
-        }
-
-        $this->extraGuests = $rows;
-    }
-
-    public function createReservation(CashierReservationWorkflowService $workflow): void
-    {
-        $guestCountRules = ['required', 'integer', 'min:1'];
-        $strictMaximum = $this->strictMaximum();
-
-        if ($strictMaximum !== null) {
-            $guestCountRules[] = 'max:'.$strictMaximum;
-        }
-
-        $validated = $this->validate([
-            'guestFirstName' => ['required', 'string', 'max:50'],
-            'guestMiddleName' => ['nullable', 'string', 'max:50'],
-            'guestLastName' => ['required', 'string', 'max:50'],
-            'guestContactNo' => ['required', 'regex:/^09[0-9]{9}$/'],
-            'guestEmail' => ['nullable', 'email', 'max:50'],
-            'addressPurok' => ['nullable', 'string', 'max:50'],
-            'addressBarangay' => ['nullable', 'string', 'max:50'],
-            'addressCity' => ['required', 'string', 'max:50'],
-            'addressProvince' => ['required', 'string', 'max:50'],
-            'facilityTypeId' => ['required', 'exists:tbl_facility_type,facility_type_id'],
-            'facilityId' => ['required', 'exists:tbl_facility,facility_id'],
-            'rateType' => ['required', 'string', 'max:20'],
-            'checkInDate' => ['required', 'date'],
-            'checkOutDate' => ['required', 'date', 'after_or_equal:checkInDate'],
-            'discountId' => ['nullable', 'exists:tbl_discount,discount_id'],
-            'totalGuestCount' => $guestCountRules,
-            'extraGuests' => ['array'],
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
-        ], [
-            'guestContactNo.regex' => 'Contact number must be an 11-digit Philippine mobile number starting with 09.',
-        ]);
-
-        try {
-            $workflow->create([
-                'user_id' => (int) Auth::id(),
-                'first_name' => $validated['guestFirstName'],
-                'middle_name' => $validated['guestMiddleName'],
-                'last_name' => $validated['guestLastName'],
-                'contact_no' => $validated['guestContactNo'],
-                'email' => $validated['guestEmail'],
-                'purok' => $validated['addressPurok'],
-                'barangay' => $validated['addressBarangay'],
-                'city' => $validated['addressCity'],
-                'province' => $validated['addressProvince'],
-                'facility_type_id' => (int) $validated['facilityTypeId'],
-                'facility_id' => (int) $validated['facilityId'],
-                'rate_type' => $validated['rateType'],
-                'check_in_date' => $validated['checkInDate'],
-                'check_out_date' => $validated['checkOutDate'],
-                'discount_id' => $validated['discountId'] !== '' ? (int) $validated['discountId'] : null,
-                'total_guest_count' => (int) $validated['totalGuestCount'],
-                'extra_guests' => $validated['extraGuests'],
-            ]);
-        } catch (Throwable $exception) {
-            $this->addError('facilityId', $exception->getMessage());
-
-            return;
-        }
-
-        $this->resetCreateForm();
-        session()->flash('success', 'Reservation created successfully. The guest can use the reservation reference during check-in or payment.');
-    }
-
-    public function beginReschedule(int $reservationId): void
-    {
-        $reservation = Reservation::query()
-            ->with('details.facility.facilityType')
-            ->findOrFail($reservationId);
-
-        if ($reservation->status !== 'Active') {
-            session()->flash('error', 'Only active reservations can be rescheduled.');
-            return;
-        }
-
-        $detail = $reservation->details->first();
-
-        if (! $detail) {
-            session()->flash('error', 'Reservation has no facility detail to reschedule.');
-            return;
-        }
-
-        $this->rescheduleReservationId = $reservation->reservation_id;
-        $this->rescheduleFacilityId = (string) $detail->facility_id;
-        $this->rescheduleRateType = $detail->rate_type;
-        $this->rescheduleCheckInDate = $detail->check_in_date->toDateString();
-        $this->rescheduleCheckOutDate = $detail->check_out_date->toDateString();
-        $this->rescheduleDiscountId = $detail->discount_id ? (string) $detail->discount_id : '';
-        $this->cancelReservationId = null;
-        $this->cancellationReason = '';
-        $this->resetValidation();
-    }
-
-    public function saveReschedule(CashierReservationWorkflowService $workflow): void
-    {
-        $validated = $this->validate([
-            'rescheduleReservationId' => ['required', 'exists:tbl_reservation,reservation_id'],
-            'rescheduleFacilityId' => ['required', 'exists:tbl_facility,facility_id'],
-            'rescheduleRateType' => ['required', 'string', 'max:20'],
-            'rescheduleCheckInDate' => ['required', 'date'],
-            'rescheduleCheckOutDate' => ['required', 'date', 'after_or_equal:rescheduleCheckInDate'],
-            'rescheduleDiscountId' => ['nullable', 'exists:tbl_discount,discount_id'],
-        ]);
-
-        try {
-            $workflow->reschedule((int) $validated['rescheduleReservationId'], [
-                'user_id' => (int) Auth::id(),
-                'facility_id' => (int) $validated['rescheduleFacilityId'],
-                'rate_type' => $validated['rescheduleRateType'],
-                'check_in_date' => $validated['rescheduleCheckInDate'],
-                'check_out_date' => $validated['rescheduleCheckOutDate'],
-                'discount_id' => $validated['rescheduleDiscountId'] !== '' ? (int) $validated['rescheduleDiscountId'] : null,
-            ]);
-        } catch (Throwable $exception) {
-            $this->addError('rescheduleFacilityId', $exception->getMessage());
-
-            return;
-        }
-
-        $this->cancelReschedule();
-        session()->flash('success', 'Reservation rescheduled successfully.');
-    }
-
-    public function cancelReschedule(): void
-    {
-        $this->rescheduleReservationId = null;
-        $this->rescheduleFacilityId = '';
-        $this->rescheduleRateType = '';
-        $this->rescheduleCheckInDate = now()->toDateString();
-        $this->rescheduleCheckOutDate = now()->toDateString();
-        $this->rescheduleDiscountId = '';
-        $this->resetValidation();
-    }
-
     public function beginCancellation(int $reservationId): void
     {
         $reservation = Reservation::query()->findOrFail($reservationId);
@@ -624,7 +175,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         $this->cancelReservationId = $reservation->reservation_id;
         $this->cancellationReason = '';
-        $this->rescheduleReservationId = null;
         $this->resetValidation();
     }
 
@@ -657,27 +207,115 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         session()->flash('success', 'Reservation cancelled successfully.');
     }
 
-    public function resetCreateForm(): void
+    public function openDetailAction(int $reservationDetailId, string $action): void
     {
-        $this->showCreateForm = false;
-        $this->guestFirstName = '';
-        $this->guestMiddleName = '';
-        $this->guestLastName = '';
-        $this->guestContactNo = '';
-        $this->guestEmail = '';
-        $this->addressPurok = '';
-        $this->addressBarangay = '';
-        $this->addressCity = 'Tacurong City';
-        $this->addressProvince = 'Sultan Kudarat';
-        $this->facilityTypeId = '';
-        $this->facilityId = '';
-        $this->rateType = '';
-        $this->checkInDate = now()->toDateString();
-        $this->checkOutDate = now()->toDateString();
-        $this->discountId = '';
-        $this->totalGuestCount = 1;
-        $this->extraGuests = [];
-        $this->resetValidation();
+        if (! in_array($action, ['reschedule', 'transfer', 'cancel', 'occupants'], true)) {
+            return;
+        }
+
+        $detail = ReservationDetail::query()
+            ->with(['reservation', 'facility.facilityProduct', 'roomOccupants'])
+            ->findOrFail($reservationDetailId);
+
+        if ($detail->reservation?->status !== 'Active'
+            || in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true)) {
+            session()->flash('error', 'This reservation facility is no longer editable.');
+
+            return;
+        }
+
+        $this->detailActionId = $reservationDetailId;
+        $this->detailAction = $action;
+        $this->detailCheckInDate = $detail->check_in_date?->toDateString() ?? '';
+        $this->detailCheckOutDate = $detail->check_out_date?->toDateString() ?? '';
+        $this->detailFacilityProductId = (string) ($detail->facility_product_id ?? '');
+        $this->detailCancellationReason = '';
+        $this->detailOccupants = $detail->roomOccupants
+            ->map(fn ($occupant): array => [
+                'first_name' => $occupant->first_name,
+                'middle_name' => $occupant->middle_name ?? '',
+                'last_name' => $occupant->last_name,
+            ])
+            ->all();
+    }
+
+    public function closeDetailAction(): void
+    {
+        $this->detailActionId = null;
+        $this->detailAction = null;
+        $this->detailCheckInDate = '';
+        $this->detailCheckOutDate = '';
+        $this->detailFacilityProductId = '';
+        $this->detailCancellationReason = '';
+        $this->detailOccupants = [];
+    }
+
+    public function detailTransferProducts(): Collection
+    {
+        if ($this->detailActionId === null) {
+            return collect();
+        }
+
+        $detail = ReservationDetail::query()
+            ->with('facility')
+            ->find($this->detailActionId);
+
+        if ($detail?->facility === null) {
+            return collect();
+        }
+
+        return FacilityProduct::query()
+            ->where('facility_type_id', $detail->facility->facility_type_id)
+            ->where('is_active', true)
+            ->orderBy('display_name')
+            ->get();
+    }
+
+    public function saveDetailAction(
+        ReservationFacilityOperationService $operations,
+        RoomOccupantService $occupants,
+    ): void {
+        if ($this->detailActionId === null || $this->detailAction === null) {
+            return;
+        }
+
+        try {
+            match ($this->detailAction) {
+                'reschedule' => $operations->rescheduleDetail(
+                    $this->detailActionId,
+                    $this->detailCheckInDate,
+                    $this->detailCheckOutDate,
+                    (int) Auth::id(),
+                ),
+                'transfer' => $operations->transferDetailToProduct(
+                    $this->detailActionId,
+                    (int) $this->detailFacilityProductId,
+                    (int) Auth::id(),
+                ),
+                'cancel' => $operations->cancelDetail(
+                    $this->detailActionId,
+                    $this->detailCancellationReason,
+                    (int) Auth::id(),
+                ),
+                'occupants' => $occupants->replaceReservationOccupants(
+                    $this->detailActionId,
+                    $this->detailOccupants,
+                    (int) Auth::id(),
+                ),
+                default => null,
+            };
+
+            session()->flash('success', match ($this->detailAction) {
+                'reschedule' => 'Facility schedule updated without changing the other reservation facilities.',
+                'transfer' => 'Facility upgraded/transferred and automatically reassigned.',
+                'cancel' => 'Facility cancelled. Any paid value was retained as same-transaction credit.',
+                'occupants' => 'Room occupant names updated and audited.',
+                default => 'Reservation facility updated.',
+            });
+            $this->closeDetailAction();
+        } catch (\Throwable $exception) {
+            $this->addError('detailAction', $exception->getMessage());
+        }
     }
 
     public function getSortIcon(string $field): string
@@ -707,35 +345,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ->all());
     }
 
-    private function strictMaximum(): ?int
-    {
-        if ($this->facilityId === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->strictMaximum((int) $this->facilityId);
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function emptyQuote(): array
-    {
-        return [
-            'capacity' => 0,
-            'total_guest_count' => $this->totalGuestCount,
-            'included_guest_count' => 0,
-            'extra_guest_count' => 0,
-            'base_units' => 0,
-            'base_price' => 0.00,
-            'extra_guest_charge' => 0.00,
-            'discount_amount' => 0.00,
-            'total_price' => 0.00,
-            'amount_due' => 0.00,
-        ];
-    }
 };
 
 ?>
@@ -747,7 +356,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         description="Create temporary facility holds, review guest schedules, and manage active reservations before booking conversion."
     >
         <x-slot:actions>
-            <flux:button type="button" variant="primary" wire:click="$set('showCreateForm', true)">
+            <flux:button href="{{ route('cashier.reservations.create') }}" variant="primary" wire:navigate>
                 New reservation
             </flux:button>
             <flux:button
@@ -772,186 +381,66 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         </div>
     @endif
 
-    @if ($showCreateForm)
-        <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div class="flex items-start justify-between gap-4">
+    @if ($detailActionId && $detailAction)
+        <flux:card>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h2 class="font-semibold">Create reservation</h2>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                        This records a temporary facility hold. Payment recording stays in the Payment module.
-                    </p>
+                    <flux:heading size="lg">
+                        @switch($detailAction)
+                            @case('reschedule') Reschedule facility @break
+                            @case('transfer') Upgrade / transfer facility @break
+                            @case('cancel') Cancel facility @break
+                            @case('occupants') Edit room occupants @break
+                        @endswitch
+                    </flux:heading>
+                    <flux:text class="mt-1">This action changes only the selected facility detail, not the other facilities under the reservation.</flux:text>
                 </div>
-                <flux:button type="button" variant="ghost" wire:click="resetCreateForm">Close</flux:button>
+                <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Close</flux:button>
             </div>
 
-            <form wire:submit="createReservation" class="mt-6 space-y-6">
-                <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Guest representative</h3>
-                    <div class="mt-3 grid gap-4 md:grid-cols-3">
-                        <flux:input wire:model="guestFirstName" label="First name" />
-                        <flux:input wire:model="guestMiddleName" label="Middle name" />
-                        <flux:input wire:model="guestLastName" label="Last name" />
-                    </div>
-                    <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        <flux:input wire:model="guestContactNo" label="Contact no." placeholder="09XXXXXXXXX" />
-                        <flux:input wire:model="guestEmail" label="Email (optional)" type="email" />
-                    </div>
-                    <div class="mt-4 grid gap-4 md:grid-cols-4">
-                        <flux:input wire:model="addressPurok" label="Purok" />
-                        <flux:input wire:model="addressBarangay" label="Barangay" />
-                        <flux:input wire:model="addressCity" label="City" />
-                        <flux:input wire:model="addressProvince" label="Province" />
-                    </div>
-                </div>
+            @error('detailAction')
+                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+            @enderror
 
-                <div>
-                    <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Facility and schedule</h3>
-                    <div class="mt-3 grid gap-4 md:grid-cols-3">
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Facility type</label>
-                            <select wire:model.live="facilityTypeId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                                <option value="">Select type</option>
-                                @foreach ($this->facilityTypes() as $type)
-                                    <option value="{{ $type->facility_type_id }}">{{ $type->facility_type }}</option>
-                                @endforeach
-                            </select>
-                            @error('facilityTypeId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Rate type</label>
-                            <select wire:model.live="rateType" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                                <option value="">Select rate</option>
-                                @foreach ($this->rateTypes() as $rate)
-                                    <option value="{{ $rate }}">{{ $rate }}</option>
-                                @endforeach
-                            </select>
-                            @error('rateType') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Facility</label>
-                            <select wire:model.live="facilityId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                                <option value="">Select available facility</option>
-                                @foreach ($this->availableFacilities() as $facility)
-                                    <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity_label }}</option>
-                                @endforeach
-                            </select>
-                            @error('facilityId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
+            <form wire:submit="saveDetailAction" class="mt-5 space-y-4">
+                @if ($detailAction === 'reschedule')
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
+                        <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
                     </div>
-
-                    <div class="mt-4 grid gap-4 md:grid-cols-3">
-                        <flux:input wire:model.live="checkInDate" type="date" label="Check-in date" />
-                        <flux:input wire:model.live="checkOutDate" type="date" label="Check-out date" />
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Discount</label>
-                            <select wire:model.live="discountId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                                <option value="">No discount</option>
-                                @foreach ($this->discounts() as $discount)
-                                    <option value="{{ $discount->discount_id }}">{{ $discount->discount_name }} ({{ number_format((float) $discount->discount_amount * 100, 0) }}%)</option>
-                                @endforeach
-                            </select>
-                            @error('discountId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
+                @elseif ($detailAction === 'transfer')
+                    <flux:select wire:model="detailFacilityProductId" label="Destination facility product *">
+                        <option value="">Choose an upgrade product</option>
+                        @foreach ($this->detailTransferProducts() as $product)
+                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    <p class="text-xs text-zinc-500">The exact physical unit is assigned automatically. Cheaper/downgrade transfers are rejected by the service.</p>
+                @elseif ($detailAction === 'cancel')
+                    <flux:textarea wire:model="detailCancellationReason" label="Cancellation reason *" rows="3" />
+                    <p class="text-xs text-zinc-500">Paid value remains as same-transaction credit and is not refunded or moved to another booking.</p>
+                @elseif ($detailAction === 'occupants')
+                    <div class="space-y-3">
+                        @forelse ($detailOccupants as $index => $occupant)
+                            <div class="grid gap-3 md:grid-cols-3">
+                                <flux:input wire:model="detailOccupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.middle_name" label="Middle name" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.last_name" label="Last name *" />
+                            </div>
+                        @empty
+                            <p class="text-sm text-zinc-500">This facility has no room occupant list.</p>
+                        @endforelse
                     </div>
-                </div>
-
-                <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                    <h3 class="font-medium">Guest capacity</h3>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                        Enter the complete party size, including the primary guest. Rooms include 4 guests and enforce their strict maximum. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
-                    </p>
-
-                    <div class="mt-4 max-w-xs">
-                        <flux:input
-                            wire:model.live="totalGuestCount"
-                            type="number"
-                            min="1"
-                            label="Total guests"
-                        />
-                    </div>
-
-                    @if ($this->occupancy())
-                        @php($occupancy = $this->occupancy())
-                        <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900">
-                            @if ($occupancy['strict_maximum'])
-                                Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
-                            @else
-                                Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
-                            @endif
-                        </div>
-                    @endif
-
-                    @if ($extraGuests !== [])
-                        <div class="mt-4 space-y-3">
-                            <p class="text-sm font-medium">Paid room extra guest names</p>
-                            @foreach ($extraGuests as $index => $extraGuest)
-                                <div
-                                    wire:key="reservation-extra-guest-{{ $index }}"
-                                    class="grid gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 md:grid-cols-3"
-                                >
-                                    <flux:input wire:model="extraGuests.{{ $index }}.first_name" label="Extra guest {{ $index + 1 }} first name" />
-                                    <flux:input wire:model="extraGuests.{{ $index }}.middle_name" label="Middle name" />
-                                    <flux:input wire:model="extraGuests.{{ $index }}.last_name" label="Last name" />
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                @php($quote = $this->quote())
-                <div class="grid gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950 md:grid-cols-4">
-                    <div>
-                        <p class="text-xs uppercase text-zinc-500">Base price</p>
-                        <p class="font-semibold">₱{{ number_format((float) $quote['base_price'], 2) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs uppercase text-zinc-500">Extra guest charge</p>
-                        <p class="font-semibold">₱{{ number_format((float) $quote['extra_guest_charge'], 2) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs uppercase text-zinc-500">Discount</p>
-                        <p class="font-semibold">-₱{{ number_format((float) $quote['discount_amount'], 2) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs uppercase text-zinc-500">Total / Amount due</p>
-                        <p class="font-semibold">₱{{ number_format((float) $quote['total_price'], 2) }}</p>
-                    </div>
-                </div>
+                @endif
 
                 <div class="flex justify-end gap-3">
-                    <flux:button type="button" variant="ghost" wire:click="resetCreateForm">Cancel</flux:button>
-                    <flux:button type="submit" variant="primary">Save reservation</flux:button>
+                    <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Cancel</flux:button>
+                    <flux:button type="submit" variant="{{ $detailAction === 'cancel' ? 'danger' : 'primary' }}">
+                        Save
+                    </flux:button>
                 </div>
             </form>
-        </section>
-    @endif
-
-    @if ($rescheduleReservationId)
-        <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
-            <h2 class="font-semibold">Reschedule reservation #{{ $rescheduleReservationId }}</h2>
-            <form wire:submit="saveReschedule" class="mt-4 grid gap-4 md:grid-cols-5">
-                <flux:input wire:model.live="rescheduleCheckInDate" type="date" label="New check-in" />
-                <flux:input wire:model.live="rescheduleCheckOutDate" type="date" label="New check-out" />
-                <flux:input wire:model.live="rescheduleRateType" label="Rate type" />
-                <div class="space-y-2 md:col-span-2">
-                    <label class="text-sm font-medium text-zinc-700 dark:text-zinc-300">New facility</label>
-                    <select wire:model.live="rescheduleFacilityId" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
-                        <option value="">Select available facility</option>
-                        @foreach ($this->rescheduleAvailableFacilities() as $facility)
-                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} — {{ $facility->facility_size }} / {{ $facility->capacity_label }}</option>
-                        @endforeach
-                    </select>
-                    @error('rescheduleFacilityId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="flex items-end gap-3 md:col-span-5">
-                    <flux:button type="submit" variant="primary">Save reschedule</flux:button>
-                    <flux:button type="button" variant="ghost" wire:click="cancelReschedule">Cancel</flux:button>
-                </div>
-            </form>
-        </section>
+        </flux:card>
     @endif
 
     @if ($cancelReservationId)
@@ -1067,7 +556,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             </thead>
             <tbody class="divide-y divide-brand-border dark:divide-zinc-800">
                 @forelse ($reservations as $reservation)
-                    @php($detail = $reservation->details->first())
                     <tr
                         wire:key="reservation-row-{{ $reservation->reservation_id }}"
                         class="transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
@@ -1077,18 +565,43 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             <div class="font-medium text-brand-text dark:text-white">{{ $this->fullName($reservation->guest) }}</div>
                             <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $reservation->guest->contact_no }} {{ $reservation->guest->email ? '• '.$reservation->guest->email : '' }}</div>
                         </td>
-                        <td class="px-4 py-3">
-                            @if ($detail && $detail->facility)
-                                <div class="font-medium text-brand-text dark:text-white">{{ $detail->facility->facility_name }}</div>
-                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $detail->facility->facilityType?->facility_type }} • {{ $detail->rate_type }}</div>
-                            @else
-                                <span class="text-brand-text-muted dark:text-zinc-400">No facility detail</span>
-                            @endif
-                        </td>
-                        <td class="px-4 py-3">
-                            @if ($detail)
-                                {{ $detail->check_in_date->format('M d, Y') }} → {{ $detail->check_out_date->format('M d, Y') }}
-                            @endif
+                        <td class="px-4 py-3" colspan="2">
+                            <div class="space-y-3">
+                                @forelse ($reservation->details as $detail)
+                                    <div @class([
+                                        'rounded-lg border p-3',
+                                        'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' => $detail->status === 'Cancelled',
+                                        'border-zinc-200 dark:border-zinc-700' => $detail->status !== 'Cancelled',
+                                    ])>
+                                        <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                                            <div>
+                                                <div class="font-medium text-brand-text dark:text-white">
+                                                    {{ $detail->facility?->facility_number }} — {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
+                                                </div>
+                                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">
+                                                    {{ $detail->facility?->facilityType?->facility_type }}
+                                                    · {{ $detail->facility?->facilityProduct?->display_name }}
+                                                    · {{ $detail->rate_type }}
+                                                    · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}
+                                                    · {{ $detail->status ?? 'Active' }}
+                                                </div>
+                                            </div>
+                                            @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
+                                                <div class="flex flex-wrap gap-1">
+                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:button>
+                                                    <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'transfer')">Transfer</flux:button>
+                                                    @if ($detail->roomOccupants->isNotEmpty())
+                                                        <flux:button size="sm" type="button" variant="ghost" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:button>
+                                                    @endif
+                                                    <flux:button size="sm" type="button" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel Facility</flux:button>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @empty
+                                    <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
+                                @endforelse
+                            </div>
                         </td>
                         <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
                         <td class="px-4 py-3">₱{{ number_format($this->amountPaid($reservation), 2) }}</td>
@@ -1098,12 +611,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         </td>
                         <td class="px-4 py-3 text-right">
                             @if ($reservation->status === 'Active')
-                                <div class="flex justify-end gap-2">
-                                    <flux:button size="sm" type="button" wire:click="beginReschedule({{ $reservation->reservation_id }})">Reschedule</flux:button>
-                                    <flux:button size="sm" variant="danger" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">Cancel</flux:button>
-                                </div>
+                                <flux:button size="sm" variant="danger" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
+                                    Cancel Entire Reservation
+                                </flux:button>
                             @else
-                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">No action</span>
+                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
                             @endif
                         </td>
                     </tr>

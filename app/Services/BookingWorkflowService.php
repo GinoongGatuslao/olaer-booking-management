@@ -25,6 +25,9 @@ class BookingWorkflowService
         private readonly DetailExtraGuestService $detailGuests,
         private readonly DecimalMoneyService $money,
         private readonly FacilityProductConfigurationService $products,
+        private readonly FacilityAvailabilityService $availability,
+        private readonly TransactionCreditService $credits,
+        private readonly TransactionLedgerService $ledger,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -341,6 +344,114 @@ class BookingWorkflowService
                 ]);
             }
         });
+    }
+
+    public function transferBookingDetailToProduct(
+        int $bookingDetailsId,
+        int $facilityProductId,
+    ): void {
+        $detail = BookingDetail::query()
+            ->with(['booking', 'facility.facilityProduct', 'facilityProduct'])
+            ->findOrFail($bookingDetailsId);
+
+        $destinationProduct = \App\Models\FacilityProduct::query()
+            ->findOrFail($facilityProductId);
+
+        if ((int) $destinationProduct->facility_type_id !== (int) $detail->facility?->facility_type_id) {
+            throw new InvalidArgumentException(
+                'Facility transfer must stay within the same facility type.',
+            );
+        }
+
+        $rateCode = $detail->getRawOriginal('rate_code') ?: (string) $detail->rate_type;
+        $facilityId = $this->availability->availableFacilityIds(
+            $facilityProductId,
+            $rateCode,
+            (string) $detail->check_in_date,
+            (string) $detail->check_out_date,
+        )->first();
+
+        if ($facilityId === null) {
+            throw new InvalidArgumentException(
+                'No physical facility is available for that product and schedule.',
+            );
+        }
+
+        $this->transferBookingDetail($bookingDetailsId, (int) $facilityId);
+    }
+
+    public function cancelBookingDetail(
+        int $bookingDetailsId,
+        string $reason,
+        int $userId,
+    ): \App\Models\TransactionCredit {
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new InvalidArgumentException('A cancellation reason is required.');
+        }
+
+        return DB::transaction(function () use (
+            $bookingDetailsId,
+            $reason,
+            $userId,
+        ): \App\Models\TransactionCredit {
+            $detail = BookingDetail::query()
+                ->with('booking')
+                ->lockForUpdate()
+                ->findOrFail($bookingDetailsId);
+            $booking = Booking::query()
+                ->with(['details', 'payments', 'reservation.payments'])
+                ->lockForUpdate()
+                ->findOrFail((int) $detail->booking_id);
+
+            $detail->setRelation('booking', $booking);
+            $this->guardEditableBookingDetail($detail);
+
+            $activeDetailCount = $booking->details
+                ->reject(fn (BookingDetail $candidate): bool => in_array(
+                    (string) $candidate->status,
+                    ['Cancelled', 'Payment Rejected'],
+                    true,
+                ))
+                ->count();
+
+            if ($activeDetailCount <= 1) {
+                throw new InvalidArgumentException(
+                    'The last active facility must use the parent booking cancellation workflow.',
+                );
+            }
+
+            if ($detail->line_total === null) {
+                throw new InvalidArgumentException(
+                    'The facility has no immutable line total and cannot be cancelled safely.',
+                );
+            }
+
+            $paidValue = $this->money->normalize((string) $detail->line_total);
+
+            $this->scheduleBlocks->releaseBookingDetails([$detail]);
+            $detail->update(['status' => 'Cancelled']);
+
+            $credit = $this->credits->createForBooking(
+                $booking,
+                'booking_detail_cancellation',
+                (int) $detail->booking_details_id,
+                $paidValue,
+                $reason,
+                $userId > 0 ? $userId : null,
+            );
+
+            $summary = $this->ledger->summaryForBooking(
+                $booking->fresh(['details', 'payments', 'reservation.payments', 'amenityRequests.details', 'guestFines']),
+            );
+            $booking->update([
+                'total_price' => $summary['total'],
+                'amount_due' => $summary['balance'],
+            ]);
+
+            return $credit->fresh('allocations');
+        }, attempts: 3);
     }
 
     public function extendCottageDayRate(int $bookingDetailsId): void

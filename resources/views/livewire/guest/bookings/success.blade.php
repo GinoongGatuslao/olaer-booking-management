@@ -153,7 +153,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                         </div>
 
                         <div class="flex flex-col gap-3 print:hidden">
-                            <flux:button href="{{ route('guest.facilities.planner') }}" variant="primary" wire:navigate>
+                            <flux:button href="{{ route('guest.reservations.create') }}" variant="primary" wire:navigate>
                                 Reserve another facility
                             </flux:button>
                             <flux:button href="{{ route('guest.confirmations.lookup') }}" variant="subtle" wire:navigate>
@@ -182,7 +182,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                     Submit a facility request first, or use your reference number and email address to retrieve an existing confirmation.
                 </p>
                 <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-                    <flux:button href="{{ route('guest.facilities.planner') }}" variant="primary" wire:navigate>
+                    <flux:button href="{{ route('guest.reservations.create') }}" variant="primary" wire:navigate>
                         Reserve a Facility
                     </flux:button>
                     <flux:button href="{{ route('guest.confirmations.lookup') }}" variant="subtle" wire:navigate>

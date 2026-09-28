@@ -19,6 +19,8 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     public string $statusFilter = 'Pending';
     public ?int $selectedPaymentId = null;
     public string $rejectionReason = '';
+    public bool $showVerifyDialog = false;
+    public bool $showRejectDialog = false;
 
     public function mount(): void
     {
@@ -62,6 +64,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function verifySelected(): void
     {
+        $this->showVerifyDialog = false;
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
             return;
@@ -73,7 +76,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                 cashierUserId: (int) Auth::id(),
             );
 
-            session()->flash('success', 'GCash proof verified. Booking is now marked as Booked if fully paid.');
+            session()->flash('success', 'GCash proof verified and the transaction balance was updated.');
             $this->selectedPaymentId = null;
             $this->resetPage();
         } catch (Throwable $exception) {
@@ -83,6 +86,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function rejectSelected(): void
     {
+        $this->showRejectDialog = false;
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
             return;
@@ -95,7 +99,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                 reason: $this->rejectionReason,
             );
 
-            session()->flash('success', 'GCash proof rejected. The selected facility is released from booking conflict checks.');
+            session()->flash('success', 'GCash proof rejected.');
             $this->selectedPaymentId = null;
             $this->rejectionReason = '';
             $this->resetPage();
@@ -108,7 +112,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     {
         $query = $this
             ->gcashPaymentsQuery()
-            ->with(['booking.guest', 'booking.details.facility', 'modeOfPayment', 'verifier']);
+            ->with(['booking.guest', 'booking.details.facility', 'reservation.guest', 'reservation.details.facility', 'modeOfPayment', 'verifier']);
 
         if ($this->statusFilter !== 'all') {
             $query->whereRaw('LOWER(payment_status) = ?', [strtolower($this->statusFilter)]);
@@ -123,6 +127,15 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                         $query->where('b_ref_no', 'like', $term);
                     })
                     ->orWhereHas('booking.guest', function ($query) use ($term): void {
+                        $query->where('first_name', 'like', $term)
+                            ->orWhere('last_name', 'like', $term)
+                            ->orWhere('contact_no', 'like', $term)
+                            ->orWhere('email', 'like', $term);
+                    })
+                    ->orWhereHas('reservation', function ($query) use ($term): void {
+                        $query->where('r_ref_no', 'like', $term);
+                    })
+                    ->orWhereHas('reservation.guest', function ($query) use ($term): void {
                         $query->where('first_name', 'like', $term)
                             ->orWhere('last_name', 'like', $term)
                             ->orWhere('contact_no', 'like', $term)
@@ -145,7 +158,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
         return $this
             ->gcashPaymentsQuery()
             ->whereKey($this->selectedPaymentId)
-            ->with(['booking.guest.address', 'booking.details.facility.facilityType', 'booking.extraGuests', 'modeOfPayment', 'verifier'])
+            ->with(['booking.guest.address', 'booking.details.facility.facilityType', 'booking.extraGuests', 'reservation.guest.address', 'reservation.details.facility.facilityType', 'reservation.extraGuests', 'modeOfPayment', 'verifier'])
             ->first();
     }
 
@@ -165,7 +178,10 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
     private function gcashPaymentsQuery(): Builder
     {
         return Payment::query()
-            ->whereNotNull('booking_id')
+            ->where(function ($query): void {
+                $query->whereNotNull('booking_id')
+                    ->orWhereNotNull('reservation_id');
+            })
             ->whereNotNull('proof_of_payment_path')
             ->whereHas('modeOfPayment', function ($query): void {
                 $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
@@ -179,9 +195,9 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
         <div>
             <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">GCash Payment Verification</h1>
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-                Review guest-uploaded GCash proof before a guest booking becomes fully paid and ready for check-in.
+                Review guest-uploaded GCash proofs for reservation deposits and direct bookings before they affect settled balances.
             </p>
-        </div>
+            </div>
     </div>
 
     @if (session('success'))
@@ -217,7 +233,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     <thead>
                         <tr class="text-left text-xs uppercase tracking-wide text-zinc-500">
                             <th class="px-3 py-3">Payment</th>
-                            <th class="px-3 py-3">Booking</th>
+                            <th class="px-3 py-3">Transaction</th>
                             <th class="px-3 py-3">Guest</th>
                             <th class="px-3 py-3">Amount</th>
                             <th class="px-3 py-3">Status</th>
@@ -226,18 +242,21 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     </thead>
                     <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         @forelse ($payments as $payment)
-                            <tr class="align-top hover:bg-zinc-50 dark:hover:bg-zinc-950/60">
+                            <tr class="align-top {{ $selectedPaymentId === (int) $payment->payment_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-950/60' }}">
                                 <td class="px-3 py-3">
                                     <div class="font-medium text-zinc-950 dark:text-white">{{ $payment->p_ref_no }}</div>
                                     <div class="text-xs text-zinc-500">GCash ref: {{ $payment->reference_number }}</div>
                                 </td>
                                 <td class="px-3 py-3">
-                                    <div class="font-medium text-zinc-950 dark:text-white">{{ optional($payment->booking)->b_ref_no }}</div>
-                                    <div class="text-xs text-zinc-500">{{ optional($payment->booking?->details->first()?->facility)->facility_name }}</div>
+                                    @php($transaction = $payment->booking ?? $payment->reservation)
+                                    @php($facilityNames = ($transaction?->details ?? collect())->map(fn ($detail) => $detail->facility?->facility_name)->filter()->unique()->implode(', '))
+                                    <div class="font-medium text-zinc-950 dark:text-white">{{ $payment->booking?->b_ref_no ?? $payment->reservation?->r_ref_no }}</div>
+                                    <div class="text-xs text-zinc-500">{{ $payment->booking ? 'Booking' : 'Reservation' }} · {{ $facilityNames !== '' ? $facilityNames : 'No facility assigned' }}</div>
                                 </td>
                                 <td class="px-3 py-3">
-                                    <div>{{ optional($payment->booking?->guest)->first_name }} {{ optional($payment->booking?->guest)->last_name }}</div>
-                                    <div class="text-xs text-zinc-500">{{ optional($payment->booking?->guest)->contact_no }}</div>
+                                    @php($guest = ($payment->booking ?? $payment->reservation)?->guest)
+                                    <div>{{ $guest?->first_name }} {{ $guest?->last_name }}</div>
+                                    <div class="text-xs text-zinc-500">{{ $guest?->contact_no }}</div>
                                 </td>
                                 <td class="px-3 py-3 font-medium">₱{{ number_format((float) $payment->amount_paid, 2) }}</td>
                                 <td class="px-3 py-3">
@@ -267,13 +286,14 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">Review details</h2>
 
             @if ($selectedPayment)
-                @php($booking = $selectedPayment->booking)
+                @php($transaction = $selectedPayment->booking ?? $selectedPayment->reservation)
+                @php($isBooking = $selectedPayment->booking !== null)
                 @php($proofUrl = $this->proofUrl($selectedPayment))
 
                 <div class="mt-4 space-y-3 text-sm">
                     <div>
-                        <p class="text-xs uppercase tracking-wide text-zinc-500">Booking reference</p>
-                        <p class="font-medium text-zinc-950 dark:text-white">{{ $booking?->b_ref_no }}</p>
+                        <p class="text-xs uppercase tracking-wide text-zinc-500">{{ $isBooking ? 'Booking' : 'Reservation' }} reference</p>
+                        <p class="font-medium text-zinc-950 dark:text-white">{{ $isBooking ? $transaction?->b_ref_no : $transaction?->r_ref_no }}</p>
                     </div>
 
                     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/30">
@@ -290,8 +310,8 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
                     <div>
                         <p class="text-xs uppercase tracking-wide text-zinc-500">Guest</p>
-                        <p class="font-medium text-zinc-950 dark:text-white">{{ $booking?->guest?->first_name }} {{ $booking?->guest?->last_name }}</p>
-                        <p class="text-zinc-500">{{ $booking?->guest?->email }} · {{ $booking?->guest?->contact_no }}</p>
+                        <p class="font-medium text-zinc-950 dark:text-white">{{ $transaction?->guest?->first_name }} {{ $transaction?->guest?->last_name }}</p>
+                        <p class="text-zinc-500">{{ $transaction?->guest?->email }} · {{ $transaction?->guest?->contact_no }}</p>
                     </div>
 
                     <div class="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950">
@@ -300,22 +320,22 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             <p class="font-semibold">₱{{ number_format((float) $selectedPayment->amount_paid, 2) }}</p>
                         </div>
                         <div>
-                            <p class="text-zinc-500">Booking amount due</p>
-                            <p class="font-semibold">₱{{ number_format((float) ($booking?->amount_due ?? 0), 2) }}</p>
+                            <p class="text-zinc-500">Transaction amount due</p>
+                            <p class="font-semibold">₱{{ number_format((float) ($transaction?->amount_due ?? 0), 2) }}</p>
                         </div>
                         <div>
                             <p class="text-zinc-500">Payment status</p>
                             <p class="font-semibold">{{ $selectedPayment->payment_status }}</p>
                         </div>
                         <div>
-                            <p class="text-zinc-500">Booking status</p>
-                            <p class="font-semibold">{{ $booking?->status }}</p>
+                            <p class="text-zinc-500">Transaction status</p>
+                            <p class="font-semibold">{{ $transaction?->status }}</p>
                         </div>
                     </div>
 
                     <div>
                         <p class="text-xs uppercase tracking-wide text-zinc-500">Facility</p>
-                        @foreach (($booking?->details ?? collect()) as $detail)
+                        @foreach (($transaction?->details ?? collect()) as $detail)
                             <div class="mt-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
                                 <p class="font-medium text-zinc-950 dark:text-white">{{ $detail->facility?->facility_name }}</p>
                                 <p class="text-zinc-500">{{ $detail->rate_type }} · {{ optional($detail->check_in_date)->format('M d, Y') }} to {{ optional($detail->check_out_date)->format('M d, Y') }}</p>
@@ -335,13 +355,13 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
                     @if (strtolower((string) $selectedPayment->payment_status) === 'pending')
                         <div class="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                            <flux:button variant="primary" class="w-full" wire:click="verifySelected" wire:confirm="Verify this GCash proof and mark booking as paid?">
+                            <flux:button variant="primary" class="w-full" wire:click="$set('showVerifyDialog', true)">
                                 Verify payment
                             </flux:button>
 
                             <div class="mt-4">
-                                <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Example: Amount does not match booking total or proof is unreadable." />
-                                <flux:button variant="danger" class="mt-3 w-full" wire:click="rejectSelected" wire:confirm="Reject this GCash proof?">
+                                <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Example: Amount/reference does not match or proof is unreadable." />
+                                <flux:button variant="danger" class="mt-3 w-full" wire:click="$set('showRejectDialog', true)">
                                     Reject payment
                                 </flux:button>
                             </div>
@@ -372,4 +392,35 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             @endif
         </aside>
     </div>
+
+    <flux:modal wire:model="showVerifyDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Verify GCash payment</flux:heading>
+                <flux:text class="mt-1">
+                    Confirm that the GCash reference and uploaded proof match before applying this payment to the transaction balance.
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showVerifyDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="verifySelected">Verify payment</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal wire:model="showRejectDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Reject GCash payment</flux:heading>
+                <flux:text class="mt-1">
+                    Reject this proof only when the amount, reference, or uploaded evidence cannot be verified.
+                </flux:text>
+            </div>
+            <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Explain why this proof is being rejected." />
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showRejectDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="danger" wire:click="rejectSelected">Reject payment</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

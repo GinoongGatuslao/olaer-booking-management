@@ -4,15 +4,24 @@ use App\FacilitySchedulePolicy;
 use App\Models\FacilityProduct;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
+use App\Services\GcashProofStorageService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')] class extends Component
 {
+    use WithFileUploads;
+
     public string $token = '';
+    public bool $bookingMode = false;
+    public string $planTotal = '';
+    public string $paymentAmount = '';
+    public string $referenceNumber = '';
+    public $proofOfPayment = null;
     public int $partyCount = 1;
 
     /** @var array<int, array<string, mixed>> */
@@ -28,12 +37,14 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     public string $barangay = '';
     public string $purok = '';
 
-    /** @var array<int, array{first_name: string, middle_name: string, last_name: string}> */
-    public array $extraGuests = [];
+    /** @var array<int, array<int, array{first_name: string, middle_name: string, last_name: string}>> */
+    public array $roomOccupants = [];
 
     public function mount(FacilityRequirementService $requirements): void
     {
-        $storedToken = (string) session('guest.facility_plan_token', '');
+        $this->bookingMode = request()->routeIs('guest.bookings.create');
+        $sessionKey = $this->bookingMode ? 'guest.booking_plan_token' : 'guest.facility_plan_token';
+        $storedToken = (string) session($sessionKey, '');
 
         try {
             $intent = $storedToken !== ''
@@ -45,7 +56,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         if ($intent === null || $intent->status !== 'Draft') {
             $intent = $requirements->createIntent(session()->getId());
-            session()->put('guest.facility_plan_token', $intent->token);
+            session()->put($sessionKey, $intent->token);
         }
 
         $this->token = $intent->token;
@@ -96,7 +107,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         unset($this->groups[$index]);
         $this->groups = array_values($this->groups);
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
     public function updatedGroups(): void
@@ -131,24 +142,31 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             }
         }
 
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
     public function updatedPartyCount(): void
     {
-        $this->syncExtraGuestRows();
+        $this->syncRoomOccupantRows();
     }
 
-    public function savePlan(FacilityRequirementService $requirements): void
-    {
+    public function savePlan(
+        FacilityRequirementService $requirements,
+        FacilityAssignmentService $assignments,
+    ): void {
         try {
-            $requirements->replaceGroups(
+            $intent = $requirements->replaceGroups(
                 $requirements->ownedIntent($this->token, session()->getId()),
                 $this->partyCount,
                 $this->groups,
             );
-            $this->syncExtraGuestRows();
-            session()->flash('success', 'Facility plan saved. Availability was checked against current reservations and bookings.');
+            $this->syncRoomOccupantRows();
+            $this->planTotal = $assignments->quoteIntentTotal($intent);
+            $this->paymentAmount = $this->bookingMode
+                ? $this->planTotal
+                : app(\App\Services\DecimalMoneyService::class)
+                    ->percentage($this->planTotal, '0.500000');
+            session()->flash('success', 'Facility plan saved. Availability and pricing were checked against current reservations and bookings.');
         } catch (\Throwable $exception) {
             $this->addError('plan', $exception->getMessage());
         }
@@ -157,8 +175,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     public function submit(
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
+        GcashProofStorageService $proofStorage,
     ): void {
         $this->validate($this->rules());
+
+        $proofPath = null;
 
         try {
             $intent = $requirements->replaceGroups(
@@ -166,8 +187,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $this->partyCount,
                 $this->groups,
             );
-            $this->syncExtraGuestRows();
-            $reservation = $assignments->createReservation($intent, [
+            $this->syncRoomOccupantRows();
+            $this->planTotal = $assignments->quoteIntentTotal($intent);
+
+            $guestData = [
                 'first_name' => $this->firstName,
                 'middle_name' => $this->middleName,
                 'last_name' => $this->lastName,
@@ -177,13 +200,41 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 'city' => $this->city,
                 'barangay' => $this->barangay,
                 'purok' => $this->purok,
-                'extra_guests' => $this->extraGuests,
+                'room_occupants' => $this->roomOccupants,
+            ];
+
+            $proofPath = $proofStorage->store($this->proofOfPayment);
+
+            if ($this->bookingMode) {
+                $booking = $assignments->createPendingBooking($intent, [
+                    ...$guestData,
+                    'payment_amount' => $this->paymentAmount,
+                    'reference_number' => $this->referenceNumber,
+                    'proof_of_payment_path' => $proofPath,
+                ]);
+
+                session()->forget('guest.booking_plan_token');
+                session()->put('guest.booking_confirmation_id', (int) $booking->booking_id);
+                $this->redirect(route('guest.bookings.success'), navigate: true);
+
+                return;
+            }
+
+            $reservation = $assignments->createReservation($intent, [
+                ...$guestData,
+                'payment_amount' => $this->paymentAmount,
+                'reference_number' => $this->referenceNumber,
+                'proof_of_payment_path' => $proofPath,
             ]);
 
             session()->forget('guest.facility_plan_token');
             session()->put('guest.reservation_confirmation_id', (int) $reservation->reservation_id);
             $this->redirect(route('guest.reservations.success'), navigate: true);
         } catch (\Throwable $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
             $this->addError('plan', $exception->getMessage());
         }
     }
@@ -209,10 +260,14 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
             'purok' => ['nullable', 'string', 'max:50'],
-            'extraGuests' => ['array'],
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
+            'roomOccupants' => ['array'],
+            'roomOccupants.*' => ['array'],
+            'roomOccupants.*.*.first_name' => ['required', 'string', 'max:50'],
+            'roomOccupants.*.*.middle_name' => ['nullable', 'string', 'max:50'],
+            'roomOccupants.*.*.last_name' => ['required', 'string', 'max:50'],
+            'paymentAmount' => ['required', 'numeric', 'min:1'],
+            'referenceNumber' => ['required', 'string', 'max:50'],
+            'proofOfPayment' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
         ];
     }
 
@@ -232,9 +287,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
     }
 
-    private function expectedExtraGuestCount(): int
+    /** @return array<int, int> */
+    private function expectedRoomGuestCounts(): array
     {
-        $count = 0;
+        $counts = [];
 
         foreach ($this->groups as $index => $group) {
             $product = $this->productFor($index);
@@ -249,27 +305,32 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             $remainder = $estimatedUsers % $quantity;
 
             for ($unit = 0; $unit < $quantity; $unit++) {
-                $unitGuests = $minimum + ($unit < $remainder ? 1 : 0);
-                $count += max(0, $unitGuests - $product->included_guest_count);
+                $counts[] = $minimum + ($unit < $remainder ? 1 : 0);
             }
         }
 
-        return $count;
+        return $counts;
     }
 
-    private function syncExtraGuestRows(): void
+    private function syncRoomOccupantRows(): void
     {
-        $rows = [];
+        $rooms = [];
 
-        for ($index = 0; $index < $this->expectedExtraGuestCount(); $index++) {
-            $rows[] = [
-                'first_name' => $this->extraGuests[$index]['first_name'] ?? '',
-                'middle_name' => $this->extraGuests[$index]['middle_name'] ?? '',
-                'last_name' => $this->extraGuests[$index]['last_name'] ?? '',
-            ];
+        foreach ($this->expectedRoomGuestCounts() as $roomIndex => $guestCount) {
+            $occupants = [];
+
+            for ($occupantIndex = 0; $occupantIndex < $guestCount; $occupantIndex++) {
+                $occupants[] = [
+                    'first_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['first_name'] ?? '',
+                    'middle_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['middle_name'] ?? '',
+                    'last_name' => $this->roomOccupants[$roomIndex][$occupantIndex]['last_name'] ?? '',
+                ];
+            }
+
+            $rooms[] = $occupants;
         }
 
-        $this->extraGuests = $rows;
+        $this->roomOccupants = $rooms;
     }
 };
 
@@ -277,9 +338,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
 <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
     <div class="max-w-3xl">
-        <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">Facility planner</p>
+        <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">{{ $bookingMode ? 'Direct booking' : 'Reservation' }}</p>
         <h1 class="mt-1 text-3xl font-bold tracking-tight text-zinc-950 dark:text-white">Plan one stay with multiple facilities</h1>
-        <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Choose facility groups and quantities. The system checks live availability and assigns the exact units only when you submit.</p>
+        <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Choose facility products, schedules, and quantities. The system assigns exact physical units only when the transaction is submitted.</p>
     </div>
 
     @if (session('success'))
@@ -297,7 +358,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     <flux:heading size="lg">Facility requirements</flux:heading>
                     <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
                 </div>
-                <flux:input wire:model.live="partyCount" type="number" min="1" max="500" label="Total unique guests" />
+                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
             </div>
 
             <div class="mt-6 space-y-4">
@@ -306,29 +367,29 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     @php($selectedProduct = $this->productFor($index))
                     <div wire:key="facility-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="grid gap-4 lg:grid-cols-6">
-                            <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" label="Facility type and name" class="lg:col-span-2">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type and name" class="lg:col-span-2">
                                 <option value="">Choose a facility</option>
                                 @foreach ($this->products as $product)
                                     <option value="{{ $product->facility_product_id }}">{{ $product->facilityType?->facility_type }} — {{ $product->display_name }}</option>
                                 @endforeach
-                            </flux:select>
+                            </x-required-select>
 
-                            <flux:select wire:model.live="groups.{{ $index }}.rate_code" label="Schedule">
+                            <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
                                 <option value="">Choose rate</option>
                                 @foreach ($selectedProduct?->productRates ?? [] as $rate)
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
+                            </x-required-select>
+                            <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" wire:click="removeGroup({{ $index }})" class="w-full">Remove</flux:button>
                             </div>
                         </div>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in / use date" />
-                            <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out / end date" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_in_date" name="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in / use date" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_out_date" name="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out / end date" />
                         </div>
 
                         @if ($availability)
@@ -346,46 +407,85 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 @endforeach
             </div>
 
-            <div class="mt-5 flex flex-wrap gap-3">
+            <div class="mt-5 flex flex-wrap items-center gap-3">
                 <flux:button type="button" variant="ghost" wire:click="addGroup">Add another facility group</flux:button>
-                <flux:button type="button" wire:click="savePlan">Check and save availability</flux:button>
+                <flux:button type="button" wire:click="savePlan">Check availability & total</flux:button>
+                @if ($planTotal !== '')
+                    <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Current total: ₱{{ number_format((float) $planTotal, 2) }}</span>
+                @endif
             </div>
         </flux:card>
 
         <flux:card>
             <flux:heading size="lg">Primary guest</flux:heading>
             <div class="mt-5 grid gap-4 md:grid-cols-3">
-                <flux:input wire:model="firstName" label="First name" />
+                <x-required-input wire:model="firstName" name="firstName" label="First name" />
                 <flux:input wire:model="middleName" label="Middle name" />
-                <flux:input wire:model="lastName" label="Last name" />
+                <x-required-input wire:model="lastName" name="lastName" label="Last name" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <flux:input wire:model="email" type="email" label="Email" />
-                <flux:input wire:model="contactNo" label="Contact number" placeholder="09XXXXXXXXX" />
+                <x-required-input wire:model="email" name="email" type="email" label="Email" />
+                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" placeholder="09XXXXXXXXX" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-4">
-                <flux:input wire:model="province" label="Province" />
-                <flux:input wire:model="city" label="City/Municipality" />
+                <x-required-input wire:model="province" name="province" label="Province" />
+                <x-required-input wire:model="city" name="city" label="City/Municipality" />
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
             </div>
         </flux:card>
 
-        @if ($extraGuests !== [])
+        @if ($roomOccupants !== [])
             <flux:card>
-                <flux:heading size="lg">Paid room extra guests</flux:heading>
-                <flux:text class="mt-1">Rooms include four guests. Name each guest charged above the included count.</flux:text>
-                <div class="mt-5 space-y-4">
-                    @foreach ($extraGuests as $index => $extraGuest)
-                        <div wire:key="extra-guest-{{ $index }}" class="grid gap-4 rounded-xl border border-zinc-200 p-4 md:grid-cols-3 dark:border-zinc-700">
-                            <flux:input wire:model="extraGuests.{{ $index }}.first_name" label="First name" />
-                            <flux:input wire:model="extraGuests.{{ $index }}.middle_name" label="Middle name" />
-                            <flux:input wire:model="extraGuests.{{ $index }}.last_name" label="Last name" />
+                <flux:heading size="lg">Room occupants</flux:heading>
+                <flux:text class="mt-1">Every room occupant must be named. The system will attach these names to the exact room automatically assigned at submission.</flux:text>
+                <div class="mt-5 space-y-5">
+                    @foreach ($roomOccupants as $roomIndex => $occupants)
+                        <div wire:key="room-occupants-{{ $roomIndex }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                            <div class="mb-3 flex items-center justify-between">
+                                <p class="font-semibold">Room {{ $roomIndex + 1 }}</p>
+                                <flux:badge color="blue">{{ count($occupants) }} occupant{{ count($occupants) === 1 ? '' : 's' }}</flux:badge>
+                            </div>
+                            <div class="space-y-3">
+                                @foreach ($occupants as $occupantIndex => $occupant)
+                                    <div wire:key="room-{{ $roomIndex }}-occupant-{{ $occupantIndex }}" class="grid gap-3 md:grid-cols-3">
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="Occupant {{ $occupantIndex + 1 }} first name" />
+                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                     @endforeach
                 </div>
             </flux:card>
         @endif
+
+        <flux:card>
+            <flux:heading size="lg">GCash payment verification</flux:heading>
+            <flux:text class="mt-1">
+                @if ($bookingMode)
+                    Direct online booking requires 100% payment.
+                @else
+                    Reservation requires at least 50% of the final discounted total. You may pay more, up to the full total.
+                @endif
+                The payment remains Pending until a Cashier verifies the reference and private proof.
+            </flux:text>
+            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <x-required-input wire:model="paymentAmount" name="paymentAmount" type="number" step="0.01" min="0.01" label="Payment amount" :readonly="$bookingMode" />
+                <x-required-input wire:model="referenceNumber" name="referenceNumber" label="GCash reference number" />
+            </div>
+            @if (! $bookingMode && $planTotal !== '')
+                <p class="mt-2 text-xs text-zinc-500">Minimum deposit: ₱{{ number_format((float) app(\App\Services\DecimalMoneyService::class)->percentage($planTotal, '0.500000'), 2) }} · Maximum: ₱{{ number_format((float) $planTotal, 2) }}</p>
+            @endif
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Proof of payment <span class="text-red-600">*</span>
+                </label>
+                <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950" />
+                <p class="mt-1 text-xs text-zinc-500">JPG, PNG, or PDF up to 4 MB. Stored privately.</p>
+            </div>
+        </flux:card>
 
         @if ($errors->any())
             <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
@@ -398,7 +498,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         @endif
 
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">Submit reservation plan</flux:button>
+            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Submit booking for verification' : 'Submit reservation' }}</flux:button>
         </div>
     </form>
 </section>

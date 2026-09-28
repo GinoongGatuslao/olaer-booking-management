@@ -34,4 +34,26 @@ class AdminDiscountPaginationTest extends TestCase
             ->assertSee('Discount 11')
             ->assertDontSee('Discount 01');
     }
+
+    public function test_discount_editor_opens_without_dates_and_cancel_discards_changes(): void
+    {
+        $discount = Discount::query()->create([
+            'discount_name' => 'Day Promo',
+            'discount_amount' => 0.10,
+            'app_to_adult' => true,
+            'status' => 'Active',
+        ]);
+
+        Livewire::test('admin.discounts.index')
+            ->call('startEditing', $discount->discount_id)
+            ->assertSet('showEditor', true)
+            ->assertSet('hasValidity', false)
+            ->assertSee('Discount percentage')
+            ->set('discountName', 'Unsaved Promo')
+            ->call('cancelEdit')
+            ->assertSet('showEditor', false)
+            ->assertSee('Discount edit cancelled. No changes were saved.');
+
+        $this->assertSame('Day Promo', $discount->fresh()->discount_name);
+    }
 }

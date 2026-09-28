@@ -43,6 +43,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
     ];
 
     public string $editingRequestId = '';
+    public bool $showCancelDialog = false;
+    public ?int $cancelRequestId = null;
 
     public array $editForm = [
         'facility_id' => '',
@@ -356,6 +358,31 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function requestCancel(int $amenityRequestId): void
+    {
+        AmenityRequest::query()
+            ->whereKey($amenityRequestId)
+            ->where('amenity_request_status', 'Pending')
+            ->whereNull('assigned_to_user_id')
+            ->firstOrFail();
+
+        $this->cancelRequestId = $amenityRequestId;
+        $this->showCancelDialog = true;
+    }
+
+    public function confirmCancel(AmenityRequestWorkflowService $workflow): void
+    {
+        if ($this->cancelRequestId === null) {
+            return;
+        }
+
+        $amenityRequestId = $this->cancelRequestId;
+        $this->showCancelDialog = false;
+        $this->cancelRequestId = null;
+
+        $this->cancelRequest($amenityRequestId, $workflow);
     }
 
     public function cancelRequest(
@@ -1138,8 +1165,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         <flux:button
                                             size="sm"
                                             variant="danger"
-                                            wire:click="cancelRequest({{ $request->amenity_request_id }})"
-                                            wire:confirm="Cancel this pending amenity request?"
+                                            wire:click="requestCancel({{ $request->amenity_request_id }})"
                                         >
                                             Cancel
                                         </flux:button>
@@ -1178,4 +1204,19 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             {{ $requests->links() }}
         </div>
     </flux:card>
+
+    <flux:modal wire:model="showCancelDialog" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Cancel amenity request</flux:heading>
+                <flux:text class="mt-1">
+                    Cancel this pending, undelivered amenity request? This action removes it from the active delivery workflow.
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showCancelDialog', false)">Keep request</flux:button>
+                <flux:button type="button" variant="danger" wire:click="confirmCancel">Cancel request</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

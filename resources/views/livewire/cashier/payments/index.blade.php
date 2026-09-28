@@ -1036,7 +1036,8 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($payables as $payable)
-                        <tr wire:key="payable-{{ $targetType }}-{{ $targetType === 'booking' ? $payable->booking_id : ($targetType === 'reservation' ? $payable->reservation_id : $payable->entrance_slip_id) }}">
+                        @php($payableId = $targetType === 'booking' ? $payable->booking_id : ($targetType === 'reservation' ? $payable->reservation_id : $payable->entrance_slip_id))
+                        <tr wire:key="payable-{{ $targetType }}-{{ $payableId }}" class="{{ $selectedTargetId === (int) $payableId && $this->targetType === $targetType ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                             <td class="px-5 py-4">
                                 {{ $this->payableTypeLabel($targetType) }}
                             </td>

@@ -54,8 +54,22 @@ class InspectionFineIdempotencyHardeningTest extends TestCase
         );
 
         $this->assertSame(
-            $first->guest_fine_id,
-            $second->guest_fine_id,
+            $first->inspection_draft_fine_id,
+            $second->inspection_draft_fine_id,
+        );
+
+        $this->assertDatabaseHas('tbl_booking', [
+            'booking_id' => $bookingId,
+            'amount_due' => 0.00,
+            'total_price' => 1000.00,
+        ]);
+        $this->assertSame(0, DB::table('tbl_guest_fine')->count());
+        $this->assertSame(1, DB::table('tbl_inspection_draft_fines')->count());
+
+        $service->completeInspection(
+            $detailId,
+            $maintenanceId,
+            'Publish one fine.',
         );
 
         $this->assertDatabaseHas('tbl_booking', [
@@ -63,11 +77,7 @@ class InspectionFineIdempotencyHardeningTest extends TestCase
             'amount_due' => 100.00,
             'total_price' => 1100.00,
         ]);
-
-        $this->assertSame(
-            1,
-            DB::table('tbl_guest_fine')->count(),
-        );
+        $this->assertSame(1, DB::table('tbl_guest_fine')->count());
     }
 
     public function test_updating_same_fine_quantity_adds_only_the_delta(): void
@@ -112,6 +122,22 @@ class InspectionFineIdempotencyHardeningTest extends TestCase
 
         $this->assertDatabaseHas('tbl_booking', [
             'booking_id' => $bookingId,
+            'amount_due' => 0.00,
+            'total_price' => 1000.00,
+        ]);
+        $this->assertDatabaseMissing('tbl_guest_fine', [
+            'booking_id' => $bookingId,
+            'fine_id' => $fineId,
+        ]);
+
+        $service->completeInspection(
+            $detailId,
+            $maintenanceId,
+            'Publish updated quantity.',
+        );
+
+        $this->assertDatabaseHas('tbl_booking', [
+            'booking_id' => $bookingId,
             'amount_due' => 200.00,
             'total_price' => 1200.00,
         ]);
@@ -148,7 +174,7 @@ class InspectionFineIdempotencyHardeningTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
-            'Fine quantity cannot be greater than the checklist expected quantity.',
+            'Fine quantity cannot exceed the checklist expected quantity.',
         );
 
         app(FacilityInspectionWorkflowService::class)

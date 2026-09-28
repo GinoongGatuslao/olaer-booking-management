@@ -41,7 +41,6 @@ class DashboardVisualFoundationTest extends TestCase
             'resources/views/livewire/admin/dashboard.blade.php',
             'resources/views/livewire/cashier/dashboard.blade.php',
             'resources/views/livewire/maintenance/dashboard.blade.php',
-            'resources/views/livewire/security/dashboard.blade.php',
         ];
 
         foreach ($dashboards as $relativePath) {

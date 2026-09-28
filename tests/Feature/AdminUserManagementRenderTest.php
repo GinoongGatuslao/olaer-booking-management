@@ -24,7 +24,7 @@ class AdminUserManagementRenderTest extends TestCase
     public function test_existing_user_can_be_updated_without_changing_password(): void
     {
         $role = Role::query()->create([
-            'role_name' => 'Manager',
+            'role_name' => 'Admin',
         ]);
 
         $address = Address::query()->create([
@@ -50,10 +50,12 @@ class AdminUserManagementRenderTest extends TestCase
 
         Livewire::test('admin.users.index')
             ->call('startEditingUser', $user->user_id)
+            ->assertSet('showEditor', true)
             ->set('firstName', 'New')
             ->set('password', '')
             ->set('passwordConfirmation', '')
             ->call('saveUser')
+            ->assertSet('showEditor', false)
             ->assertHasNoErrors();
 
         $user->refresh();

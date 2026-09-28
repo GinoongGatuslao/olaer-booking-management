@@ -17,7 +17,6 @@ class PublicWebsiteFoundationTest extends TestCase
     {
         foreach ([
             'guest.home',
-            'guest.facilities.planner',
             'guest.reservations.create',
             'guest.reservations.success',
             'guest.bookings.create',
@@ -101,25 +100,26 @@ class PublicWebsiteFoundationTest extends TestCase
             ->assertOk()
             ->assertSee('Reserve a Facility')
             ->assertSee('Direct booking')
-            ->assertSee(route('guest.facilities.planner'), false)
+            ->assertSee(route('guest.reservations.create'), false)
             ->assertSee(route('guest.bookings.create'), false);
     }
 
-    public function test_direct_booking_page_uses_global_exceptions_without_ineffective_imports(): void
+    public function test_reservation_and_direct_booking_share_the_authoritative_planner(): void
     {
-        $bookingPage = file_get_contents(
-            resource_path('views/livewire/guest/bookings/create.blade.php'),
-        );
+        $routes = file_get_contents(base_path('routes/web.php'));
 
-        $this->assertIsString($bookingPage);
-        $this->assertStringNotContainsString('use Throwable;', $bookingPage);
+        $this->assertIsString($routes);
         $this->assertStringContainsString(
-            'catch (\InvalidArgumentException $exception)',
-            $bookingPage,
+            "Volt::route('/reserve', 'guest.facilities.planner')",
+            $routes,
         );
         $this->assertStringContainsString(
-            'catch (\Throwable $exception)',
-            $bookingPage,
+            "Volt::route('/book', 'guest.facilities.planner')",
+            $routes,
+        );
+        $this->assertStringNotContainsString(
+            "Volt::route('/plan-facilities'",
+            $routes,
         );
     }
 

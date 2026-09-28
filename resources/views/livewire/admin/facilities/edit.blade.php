@@ -49,6 +49,12 @@ new #[Layout('layouts.app')] #[Title('Edit Facility - Olaer Spring Resort')] cla
             $this->addError('facilityNumber', $exception->getMessage());
         }
     }
+
+    public function cancel(): void
+    {
+        session()->flash('success', 'Facility edit cancelled. No changes were saved.');
+        $this->redirect(route('admin.facilities.index'), navigate: true);
+    }
 };
 
 ?>
@@ -57,7 +63,7 @@ new #[Layout('layouts.app')] #[Title('Edit Facility - Olaer Spring Resort')] cla
     <div>
         <p class="text-sm text-zinc-500">{{ $typeName }} — {{ $productName }}</p>
         <h1 class="text-2xl font-bold tracking-tight">Edit physical facility</h1>
-        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">The facility preset stays fixed so pricing and scheduling remain coherent.</p>
+        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Facility category, capacity, and rates stay fixed here so pricing and scheduling remain coherent.</p>
     </div>
     <flux:card>
         <form wire:submit="save" class="space-y-5">
@@ -73,7 +79,7 @@ new #[Layout('layouts.app')] #[Title('Edit Facility - Olaer Spring Resort')] cla
                 @endif
             </flux:select>
             <div class="flex justify-end gap-3">
-                <flux:button href="{{ route('admin.facilities.index') }}" wire:navigate variant="ghost">Cancel</flux:button>
+                <flux:button type="button" wire:click="cancel" variant="ghost">Cancel</flux:button>
                 <flux:button type="submit" variant="primary">Save changes</flux:button>
             </div>
         </form>

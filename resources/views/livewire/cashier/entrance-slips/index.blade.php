@@ -642,7 +642,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->slips as $slip)
-                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}">
+                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}" class="{{ $selectedSlipId === (int) $slip->entrance_slip_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $this->formatSlipNumber($slip) }}
                                     </td>
@@ -668,7 +668,6 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     <td class="px-5 py-4 text-xs text-zinc-500">
                                         M {{ $slip->no_of_Male }}
                                         · F {{ $slip->no_of_Female }}
-                                        · T {{ $slip->no_of_Tourist }}
                                     </td>
 
                                     <td class="px-5 py-4">
@@ -824,13 +823,11 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                 </div>
 
                                 <div class="flex justify-between gap-4">
-                                    <dt class="text-zinc-500">Male / Female / Tourist</dt>
+                                    <dt class="text-zinc-500">Male / Female</dt>
                                     <dd class="text-right font-medium">
                                         {{ $this->selectedSlip->no_of_Male }}
                                         /
                                         {{ $this->selectedSlip->no_of_Female }}
-                                        /
-                                        {{ $this->selectedSlip->no_of_Tourist }}
                                     </dd>
                                 </div>
                             </dl>

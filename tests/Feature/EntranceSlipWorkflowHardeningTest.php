@@ -137,6 +137,66 @@ class EntranceSlipWorkflowHardeningTest extends TestCase
         ]);
     }
 
+    public function test_paid_slip_correction_voids_original_and_carries_verified_value_only_to_replacement(): void
+    {
+        $securityId = $this->createUser('Security Guard');
+        $cashierId = $this->createUser('Cashier');
+        $this->createEntranceFees();
+        $cashModeId = $this->createPaymentMode('Cash');
+
+        $service = app(EntranceSlipWorkflowService::class);
+        $original = $service->issue($this->validIssuePayload($securityId));
+
+        app(PaymentWorkflowService::class)->recordCashierPayment([
+            'target_type' => 'entrance_slip',
+            'target_id' => $original->entrance_slip_id,
+            'amount_paid' => (string) $original->amount_due,
+            'mode_of_payment_id' => $cashModeId,
+            'reference_number' => '',
+            'user_id' => $cashierId,
+        ]);
+
+        $replacementPayload = $this->validIssuePayload($securityId);
+        $replacement = $service->voidAndRecreate(
+            $original->entrance_slip_id,
+            'Correct guest classification after cashier payment.',
+            $replacementPayload,
+        );
+
+        $this->assertNotSame(
+            (int) $original->entrance_slip_id,
+            (int) $replacement->entrance_slip_id,
+        );
+
+        $this->assertDatabaseHas('tbl_entrance_slip', [
+            'entrance_slip_id' => $original->entrance_slip_id,
+            'status' => 'Voided',
+            'voided_by_user_id' => $securityId,
+            'void_reason' => 'Correct guest classification after cashier payment.',
+            'replacement_entrance_slip_id' => $replacement->entrance_slip_id,
+        ]);
+
+        $this->assertDatabaseHas('tbl_entrance_slip', [
+            'entrance_slip_id' => $replacement->entrance_slip_id,
+            'status' => 'Paid',
+            'amount_due' => 0.00,
+        ]);
+
+        $this->assertDatabaseHas('tbl_payment', [
+            'entrance_slip_id' => $original->entrance_slip_id,
+            'payment_status' => 'Verified',
+        ]);
+        $this->assertDatabaseMissing('tbl_payment', [
+            'entrance_slip_id' => $replacement->entrance_slip_id,
+        ]);
+
+        $this->assertDatabaseHas('tbl_transaction_adjustments', [
+            'entrance_slip_id' => $replacement->entrance_slip_id,
+            'direction' => 'Credit',
+            'amount' => 100.00,
+        ]);
+    }
+
     public function test_entrance_slip_rejects_partial_payment(): void
     {
         $securityId = $this->createUser('Security Guard');

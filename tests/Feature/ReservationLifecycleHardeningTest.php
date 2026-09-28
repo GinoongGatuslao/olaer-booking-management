@@ -30,7 +30,7 @@ class ReservationLifecycleHardeningTest extends TestCase
 
     public function test_only_cashier_can_cancel_staff_reservation(): void
     {
-        $managerId = $this->createUser('Manager');
+        $managerId = $this->createUser('Admin');
         $reservation = $this->createReservationScenario();
 
         $this->expectException(InvalidArgumentException::class);

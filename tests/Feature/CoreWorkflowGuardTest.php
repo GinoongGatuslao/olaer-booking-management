@@ -311,7 +311,7 @@ class CoreWorkflowGuardTest extends TestCase
             );
         } catch (InvalidArgumentException $exception) {
             $this->assertSame(
-                'Only the assigned maintenance staff member can complete this inspection.',
+                'Only the assigned maintenance staff can modify an active inspection.',
                 $exception->getMessage(),
             );
         }

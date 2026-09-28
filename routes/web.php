@@ -30,47 +30,47 @@ Volt::route('/dashboard', 'dashboard')
 
 // Admin Routes
 Volt::route('/admin/dashboard', 'admin.dashboard')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.dashboard');
 
 Volt::route('/admin/entrance-fees', 'admin.entrance-fees.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.entrance-fees.index');
 
 Volt::route('/admin/discounts', 'admin.discounts.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.discounts.index');
 
 Volt::route('/admin/facilities', 'admin.facilities.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.facilities.index');
 
 Volt::route('/admin/facilities/create', 'admin.facilities.create')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.facilities.create');
 
 Volt::route('/admin/facilities/{facility}/edit', 'admin.facilities.edit')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.facilities.edit');
 
 Volt::route('/admin/amenities', 'admin.amenities.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.amenities.index');
 
 Volt::route('/admin/fines', 'admin.fines.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.fines.index');
 
 Volt::route('/admin/users', 'admin.users.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.users.index');
 
 Volt::route('/admin/reports', 'admin.reports.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.reports.index');
 
 Volt::route('/admin/activity-logs', 'admin.activity-logs.index')
-    ->middleware(['auth', 'active', 'role:Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.activity-logs.index');
 
 // Cashier Routes
@@ -86,9 +86,17 @@ Volt::route('/cashier/reservations', 'cashier.reservations.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.reservations.index');
 
+Volt::route('/cashier/reservations/create', 'cashier.reservations.create')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.reservations.create');
+
 Volt::route('/cashier/bookings', 'cashier.bookings.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
     ->name('cashier.bookings.index');
+
+Volt::route('/cashier/bookings/create', 'cashier.bookings.create')
+    ->middleware(['auth', 'active', 'role:Cashier'])
+    ->name('cashier.bookings.create');
 
 Volt::route('/cashier/check-ins', 'cashier.check-ins.index')
     ->middleware(['auth', 'active', 'role:Cashier'])
@@ -132,7 +140,7 @@ Volt::route('/cashier/action-center', 'cashier.action-center.index')
 
 Volt::route('/cashier/bookings/{booking}/details', 'cashier.bookings.show')
     ->whereNumber('booking')
-    ->middleware(['auth', 'active', 'role:Cashier,Admin,Manager'])
+    ->middleware(['auth', 'active', 'role:Cashier,Admin'])
     ->name('cashier.bookings.show');
 
 // Maintenance Staff Routes
@@ -161,10 +169,6 @@ Volt::route('/maintenance/create-amenity-request', 'maintenance.amenity-requests
     ->name('maintenance.create-amenity-request.index');
 
 // Security Guard Routes
-Volt::route('/security/dashboard', 'security.dashboard')
-    ->middleware(['auth', 'active', 'role:Security Guard'])
-    ->name('security.dashboard');
-
 Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
     ->middleware(['auth', 'active', 'role:Security Guard'])
     ->name('security.entrance-slips.create');
@@ -173,16 +177,14 @@ Volt::route('/security/entrance-slips/create', 'security.entrance-slips.create')
 Volt::route('/', 'guest.home')
     ->name('guest.home');
 
-Volt::route('/reserve', 'guest.reservations.create')
+Volt::route('/reserve', 'guest.facilities.planner')
     ->name('guest.reservations.create');
 
-Volt::route('/plan-facilities', 'guest.facilities.planner')
-    ->name('guest.facilities.planner');
 
 Volt::route('/reservation/success', 'guest.reservations.success')
     ->name('guest.reservations.success');
 
-Volt::route('/book', 'guest.bookings.create')
+Volt::route('/book', 'guest.facilities.planner')
     ->name('guest.bookings.create');
 
 Volt::route('/booking/success', 'guest.bookings.success')
@@ -203,29 +205,29 @@ Route::get(
     ->middleware([
         'auth',
         'active',
-        'role:Admin,Manager,Cashier',
+        'role:Admin,Cashier',
     ])
     ->name('payments.gcash-proof');
 
 // Print
 Route::middleware(['auth', 'active'])->prefix('print')->name('print.')->group(function () {
     Route::get('/entrance-slip/{entranceSlip}', [PrintDocumentController::class, 'entranceSlip'])
-        ->middleware('role:Admin,Manager,Cashier,Security Guard')
+        ->middleware('role:Admin,Cashier,Security Guard')
         ->name('entrance-slip');
 
     Route::get('/reservation/{reservation}', [PrintDocumentController::class, 'reservationConfirmation'])
-        ->middleware('role:Admin,Manager,Cashier')
+        ->middleware('role:Admin,Cashier')
         ->name('reservation');
 
     Route::get('/booking/{booking}', [PrintDocumentController::class, 'bookingConfirmation'])
-        ->middleware('role:Admin,Manager,Cashier')
+        ->middleware('role:Admin,Cashier')
         ->name('booking');
 
     Route::get('/payment/{payment}', [PrintDocumentController::class, 'paymentReceipt'])
-        ->middleware('role:Admin,Manager,Cashier')
+        ->middleware('role:Admin,Cashier')
         ->name('payment');
 
     Route::get('/billing/{booking}', [PrintDocumentController::class, 'billingStatement'])
-        ->middleware('role:Admin,Manager,Cashier')
+        ->middleware('role:Admin,Cashier')
         ->name('billing');
 });

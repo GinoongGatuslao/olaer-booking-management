@@ -30,6 +30,8 @@ class extends Component
     public int $pwdScDiscountedQuantity = 0;
 
     public ?int $createdSlipId = null;
+    public bool $showCorrectionDialog = false;
+    public string $voidReason = '';
 
     #[Computed]
     public function calculation(): array
@@ -78,112 +80,10 @@ class extends Component
     public function save(
         EntranceSlipWorkflowService $workflow,
     ): void {
-        $validated = $this->validate([
-            'adultCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'childrenCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'pwdScCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'maleCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'femaleCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'touristCount' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'adultDiscountId' => [
-                'nullable',
-                'integer',
-                'exists:tbl_discount,discount_id',
-            ],
-            'childrenDiscountId' => [
-                'nullable',
-                'integer',
-                'exists:tbl_discount,discount_id',
-            ],
-            'pwdScDiscountId' => [
-                'nullable',
-                'integer',
-                'exists:tbl_discount,discount_id',
-            ],
-            'adultDiscountedQuantity' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'childrenDiscountedQuantity' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-            'pwdScDiscountedQuantity' => [
-                'required',
-                'integer',
-                'min:0',
-                'max:5000',
-            ],
-        ]);
+        $validated = $this->validate($this->slipRules());
 
         try {
-            $payload = [
-                'user_id' => (int) Auth::id(),
-                'adult_count' =>
-                    (int) $validated['adultCount'],
-                'children_count' =>
-                    (int) $validated['childrenCount'],
-                'pwd_sc_count' =>
-                    (int) $validated['pwdScCount'],
-                'male_count' =>
-                    (int) $validated['maleCount'],
-                'female_count' =>
-                    (int) $validated['femaleCount'],
-                'tourist_count' =>
-                    (int) $validated['touristCount'],
-                'adult_discount_id' =>
-                    $validated['adultDiscountId'] ?? null,
-                'children_discount_id' =>
-                    $validated['childrenDiscountId'] ?? null,
-                'pwd_sc_discount_id' =>
-                    $validated['pwdScDiscountId'] ?? null,
-                'adult_discounted_quantity' =>
-                    (int) $validated[
-                        'adultDiscountedQuantity'
-                    ],
-                'children_discounted_quantity' =>
-                    (int) $validated[
-                        'childrenDiscountedQuantity'
-                    ],
-                'pwd_sc_discounted_quantity' =>
-                    (int) $validated[
-                        'pwdScDiscountedQuantity'
-                    ],
-            ];
+            $payload = $this->payloadFromValidated($validated);
             $wasEditing = $this->createdSlipId !== null;
             $slip = $wasEditing
                 ? $workflow->updateBeforeAdmission($this->createdSlipId, $payload)
@@ -211,6 +111,61 @@ class extends Component
         }
     }
 
+    public function requestLockedCorrection(): void
+    {
+        if ($this->createdSlipId === null) {
+            return;
+        }
+
+        $slip = $this->createdSlip;
+
+        if ($slip === null || ($slip->admitted_at === null && $slip->payments->isEmpty())) {
+            $this->addError(
+                'entranceSlip',
+                'This slip is still editable. Save the normal changes instead of voiding it.',
+            );
+
+            return;
+        }
+
+        $this->voidReason = '';
+        $this->showCorrectionDialog = true;
+    }
+
+    public function recreateLockedSlip(
+        EntranceSlipWorkflowService $workflow,
+    ): void {
+        if ($this->createdSlipId === null) {
+            return;
+        }
+
+        $validated = $this->validate([
+            ...$this->slipRules(),
+            'voidReason' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $oldSlipId = $this->createdSlipId;
+            $replacement = $workflow->voidAndRecreate(
+                $oldSlipId,
+                $validated['voidReason'],
+                $this->payloadFromValidated($validated),
+            );
+
+            $this->createdSlipId = (int) $replacement->entrance_slip_id;
+            $this->showCorrectionDialog = false;
+            $this->voidReason = '';
+            unset($this->calculation, $this->createdSlip);
+
+            session()->flash(
+                'success',
+                "Entrance slip #{$oldSlipId} was voided and replaced with #{$replacement->entrance_slip_id}. The locked original history was preserved.",
+            );
+        } catch (\Throwable $exception) {
+            $this->addError('entranceSlip', $exception->getMessage());
+        }
+    }
+
     public function resetForm(): void
     {
         $this->reset([
@@ -219,7 +174,6 @@ class extends Component
             'pwdScCount',
             'maleCount',
             'femaleCount',
-            'touristCount',
             'adultDiscountId',
             'childrenDiscountId',
             'pwdScDiscountId',
@@ -235,6 +189,43 @@ class extends Component
         );
 
         $this->resetValidation();
+    }
+
+    private function slipRules(): array
+    {
+        return [
+            'adultCount' => ['required', 'integer', 'min:0', 'max:5000'],
+            'childrenCount' => ['required', 'integer', 'min:0', 'max:5000'],
+            'pwdScCount' => ['required', 'integer', 'min:0', 'max:5000'],
+            'maleCount' => ['required', 'integer', 'min:0', 'max:5000'],
+            'femaleCount' => ['required', 'integer', 'min:0', 'max:5000'],
+            'adultDiscountId' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
+            'childrenDiscountId' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
+            'pwdScDiscountId' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
+            'adultDiscountedQuantity' => ['required', 'integer', 'min:0', 'max:5000'],
+            'childrenDiscountedQuantity' => ['required', 'integer', 'min:0', 'max:5000'],
+            'pwdScDiscountedQuantity' => ['required', 'integer', 'min:0', 'max:5000'],
+        ];
+    }
+
+    /** @param array<string, mixed> $validated */
+    private function payloadFromValidated(array $validated): array
+    {
+        return [
+            'user_id' => (int) Auth::id(),
+            'adult_count' => (int) $validated['adultCount'],
+            'children_count' => (int) $validated['childrenCount'],
+            'pwd_sc_count' => (int) $validated['pwdScCount'],
+            'male_count' => (int) $validated['maleCount'],
+            'female_count' => (int) $validated['femaleCount'],
+            'tourist_count' => 0,
+            'adult_discount_id' => $validated['adultDiscountId'] ?? null,
+            'children_discount_id' => $validated['childrenDiscountId'] ?? null,
+            'pwd_sc_discount_id' => $validated['pwdScDiscountId'] ?? null,
+            'adult_discounted_quantity' => (int) $validated['adultDiscountedQuantity'],
+            'children_discounted_quantity' => (int) $validated['childrenDiscountedQuantity'],
+            'pwd_sc_discounted_quantity' => (int) $validated['pwdScDiscountedQuantity'],
+        ];
     }
 
     public function formatSlipNo(?int $id): string
@@ -301,12 +292,6 @@ class extends Component
             </p>
         </div>
 
-        <a
-            href="{{ route('security.dashboard') }}"
-            class="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white"
-        >
-            Back to dashboard
-        </a>
     </div>
 
     @if (session('success'))
@@ -332,22 +317,21 @@ class extends Component
                         </p>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-3">
-                            <flux:input wire:model.live="adultCount" type="number" min="0" label="Adults" />
-                            <flux:input wire:model.live="childrenCount" type="number" min="0" label="Children" />
-                            <flux:input wire:model.live="pwdScCount" type="number" min="0" label="Senior Citizen / PWD" />
+                            <x-required-input wire:model.live="adultCount" name="adultCount" type="number" min="0" label="Adults" />
+                            <x-required-input wire:model.live="childrenCount" name="childrenCount" type="number" min="0" label="Children" />
+                            <x-required-input wire:model.live="pwdScCount" name="pwdScCount" type="number" min="0" label="Senior Citizen / PWD" />
                         </div>
                     </div>
 
                     <div>
                         <h2 class="font-semibold">Monitoring counts</h2>
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Male plus Female must equal the entrance category total. Tourist count cannot exceed that total.
+                            Male plus Female must equal the entrance category total.
                         </p>
 
                         <div class="mt-4 grid gap-4 md:grid-cols-3">
-                            <flux:input wire:model.live="maleCount" type="number" min="0" label="Male" />
-                            <flux:input wire:model.live="femaleCount" type="number" min="0" label="Female" />
-                            <flux:input wire:model.live="touristCount" type="number" min="0" label="Tourist" />
+                            <x-required-input wire:model.live="maleCount" name="maleCount" type="number" min="0" label="Male" />
+                            <x-required-input wire:model.live="femaleCount" name="femaleCount" type="number" min="0" label="Female" />
                         </div>
                     </div>
 
@@ -519,6 +503,12 @@ class extends Component
                         Print slip
                     </flux:button>
 
+                    @if ($this->createdSlip->admitted_at !== null || $this->createdSlip->payments->isNotEmpty())
+                        <flux:button type="button" variant="danger" wire:click="requestLockedCorrection">
+                            Correct locked slip
+                        </flux:button>
+                    @endif
+
                     <flux:button type="button" variant="ghost" wire:click="resetForm">
                         Create another
                     </flux:button>
@@ -526,4 +516,20 @@ class extends Component
             @endif
         </aside>
     </div>
+    <flux:modal wire:model="showCorrectionDialog" class="md:w-[34rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Void and replace locked entrance slip</flux:heading>
+                <flux:text class="mt-1">
+                    The original slip will remain in history as Voided. A new slip will be created from the current form values. Verified value from the original is carried only to this replacement.
+                </flux:text>
+            </div>
+            <x-required-textarea wire:model="voidReason" name="voidReason" label="Correction / void reason" rows="3" />
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showCorrectionDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="danger" wire:click="recreateLockedSlip">Void & Create Replacement</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>

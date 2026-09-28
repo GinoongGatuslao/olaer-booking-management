@@ -9,7 +9,7 @@ class RolesSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach (['Admin', 'Manager', 'Cashier', 'Maintenance Staff', 'Security Guard'] as $roleName) {
+        foreach (['Admin', 'Cashier', 'Maintenance Staff', 'Security Guard'] as $roleName) {
             DB::table('tbl_role')->updateOrInsert(
                 ['role_name' => $roleName],
                 ['role_name' => $roleName]

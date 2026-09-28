@@ -37,6 +37,9 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public int $perPage = 10;
 
     public ?int $editingUserId = null;
+    public ?int $statusChangeUserId = null;
+    public bool $showStatusDialog = false;
+    public bool $showEditor = false;
     public string $firstName = '';
     public string $middleName = '';
     public string $lastName = '';
@@ -63,6 +66,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public function roles()
     {
         return Role::query()
+            ->where('role_name', '!=', 'Manager')
             ->orderBy('role_name')
             ->get();
     }
@@ -110,12 +114,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         ->orWhere('status', 'like', $like)
                         ->orWhereHas('role', function (Builder $query) use ($like): void {
                             $query->where('role_name', 'like', $like);
-                        })
-                        ->orWhereHas('address', function (Builder $query) use ($like): void {
-                            $query->where('province', 'like', $like)
-                                ->orWhere('city', 'like', $like)
-                                ->orWhere('barangay', 'like', $like)
-                                ->orWhere('purok', 'like', $like);
                         });
                 });
             });
@@ -205,6 +203,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public function createNewUser(): void
     {
         $this->resetForm();
+        $this->showEditor = true;
     }
 
     public function startEditingUser(int $userId): void
@@ -230,6 +229,14 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         $this->passwordConfirmation = '';
 
         $this->resetValidation();
+        $this->showEditor = true;
+    }
+
+    public function cancelEdit(): void
+    {
+        session()->flash('success', 'Staff account edit cancelled. No changes were saved.');
+        $this->showEditor = false;
+        $this->resetForm();
     }
 
     public function resetForm(): void
@@ -276,7 +283,13 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             ],
             'contactNo' => ['required', 'regex:/^[0-9]{11}$/'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
-            'roleId' => ['required', 'integer', 'exists:tbl_role,role_id'],
+            'roleId' => [
+                'required',
+                'integer',
+                Rule::exists('tbl_role', 'role_id')->where(
+                    fn ($query) => $query->where('role_name', '!=', 'Manager'),
+                ),
+            ],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
@@ -323,7 +336,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             if ((int) $validated['roleId'] !== (int) $currentUser->role_id) {
                 $this->addError(
                     'roleId',
-                    'You cannot change your own role while logged in. Ask another administrator or manager.',
+                    'You cannot change your own role while logged in. Ask another administrator.',
                 );
 
                 return;
@@ -408,6 +421,30 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         );
 
         $this->resetForm();
+        $this->showEditor = false;
+    }
+
+    public function requestStatusChange(int $userId): void
+    {
+        if ($userId === (int) Auth::id()) {
+            return;
+        }
+
+        User::query()->findOrFail($userId);
+        $this->statusChangeUserId = $userId;
+        $this->showStatusDialog = true;
+    }
+
+    public function confirmStatusChange(): void
+    {
+        if ($this->statusChangeUserId === null) {
+            return;
+        }
+
+        $userId = $this->statusChangeUserId;
+        $this->showStatusDialog = false;
+        $this->statusChangeUserId = null;
+        $this->toggleStatus($userId);
     }
 
     public function toggleStatus(int $userId): void
@@ -474,7 +511,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     {
         return match ($roleName) {
             'Admin' => 'zinc',
-            'Manager' => 'purple',
             'Cashier' => 'blue',
             'Maintenance Staff' => 'amber',
             'Security Guard' => 'green',
@@ -521,7 +557,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         This page manages resort staff accounts only. Guest records remain part of the reservation and booking workflows.
     </div>
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+    <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
@@ -535,6 +571,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                             </div>
 
                             <div class="flex flex-wrap items-end gap-2">
+                                <flux:button type="button" wire:click="createNewUser" variant="primary">Create staff account</flux:button>
                                 <div class="w-28">
                                     <flux:select wire:model.live="perPage" label="Rows">
                                         <option value="10">10</option>
@@ -554,7 +591,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                             <flux:input
                                 wire:model.live.debounce.300ms="search"
                                 label="Search"
-                                placeholder="Name, username, email, address"
+                                placeholder="Name, username, email, contact, status, or role"
                                 clearable
                             />
 
@@ -646,7 +683,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->users as $user)
-                                <tr wire:key="user-row-{{ $user->user_id }}" class="align-top">
+                                <tr wire:key="user-row-{{ $user->user_id }}" class="align-top {{ $editingUserId === (int) $user->user_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="max-w-sm px-5 py-4">
                                         <p class="font-medium">
                                             {{ $this->fullName($user) }}
@@ -694,8 +731,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                             </flux:button>
 
                                             <flux:button
-                                                wire:click="toggleStatus({{ $user->user_id }})"
-                                                wire:confirm="{{ $user->status === 'Active' ? 'Deactivate this account?' : 'Activate this account?' }}"
+                                                wire:click="requestStatusChange({{ $user->user_id }})"
                                                 size="sm"
                                                 variant="ghost"
                                                 :disabled="(int) $user->user_id === (int) auth()->id()"
@@ -732,8 +768,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             </flux:card>
         </section>
 
-        <aside>
-            <flux:card>
+        <flux:modal wire:model="showEditor" class="md:w-[42rem] max-h-[90vh] overflow-y-auto">
                 <div class="mb-5 flex items-start justify-between gap-3">
                     <div>
                         <h2 class="font-semibold">
@@ -828,10 +863,10 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     <div class="flex justify-end gap-3 pt-2">
                         <flux:button
                             type="button"
-                            wire:click="resetForm"
+                            wire:click="cancelEdit"
                             variant="ghost"
                         >
-                            Clear
+                            Cancel
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
@@ -839,7 +874,25 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         </flux:button>
                     </div>
                 </form>
-            </flux:card>
-        </aside>
+        </flux:modal>
     </div>
+    <flux:modal wire:model="showStatusDialog" class="md:w-[28rem]">
+        @php($statusUser = $statusChangeUserId ? \App\Models\User::query()->find($statusChangeUserId) : null)
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Confirm account status change</flux:heading>
+                <flux:text class="mt-1">
+                    @if ($statusUser)
+                        {{ $statusUser->status === 'Active' ? 'Deactivate' : 'Activate' }}
+                        {{ $this->fullName($statusUser) }}?
+                    @endif
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showStatusDialog', false)">Cancel</flux:button>
+                <flux:button type="button" variant="danger" wire:click="confirmStatusChange">Confirm</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
 </div>

@@ -14,7 +14,7 @@ class ProfileUpdateTest extends TestCase
         parent::setUp();
 
         $this->markTestSkipped(
-            'Olaer staff profiles are managed by Admin/Manager through User Management; the starter-kit self-service profile and account-deletion workflow is outside capstone scope.',
+            'Olaer staff profiles are managed by Admin/Admin through User Management; the starter-kit self-service profile and account-deletion workflow is outside capstone scope.',
         );
     }
 

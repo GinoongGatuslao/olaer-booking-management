@@ -89,7 +89,7 @@ class GcashProofAccessTest extends TestCase
         Storage::fake('local');
 
         $payment = $this->createPaymentWithProof('local');
-        $manager = $this->createUser('Manager');
+        $manager = $this->createUser('Admin');
 
         $this->actingAs($manager)
             ->get(route('payments.gcash-proof', $payment))
@@ -103,7 +103,7 @@ class GcashProofAccessTest extends TestCase
         Storage::fake('public');
 
         $payment = $this->createPaymentWithProof('public');
-        $manager = $this->createUser('Manager');
+        $manager = $this->createUser('Admin');
 
         $this->actingAs($manager)
             ->get(route('payments.gcash-proof', $payment))

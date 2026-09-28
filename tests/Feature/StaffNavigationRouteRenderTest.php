@@ -67,8 +67,8 @@ class StaffNavigationRouteRenderTest extends TestCase
                     'profile.edit',
                 ],
             ],
-            'manager' => [
-                'Manager',
+            'admin-duplicate-coverage' => [
+                'Admin',
                 [
                     'admin.dashboard',
                     'admin.facilities.index',
@@ -120,7 +120,6 @@ class StaffNavigationRouteRenderTest extends TestCase
             'security' => [
                 'Security Guard',
                 [
-                    'security.dashboard',
                     'security.entrance-slips.create',
                     'guest.home',
                     'profile.edit',

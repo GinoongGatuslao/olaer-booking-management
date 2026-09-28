@@ -46,7 +46,8 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                 $query->where(function (Builder $query) use ($like): void {
                     $query->where('facility_number', 'like', $like)
                         ->orWhere('facility_name', 'like', $like)
-                        ->orWhere('capacity', 'like', $like)
+                        ->orWhere('min_capacity', 'like', $like)
+                        ->orWhere('max_capacity', 'like', $like)
                         ->orWhereIn(
                             'facility_product_id',
                             FacilityProduct::query()->select('facility_product_id')->where('display_name', 'like', $like),
@@ -111,7 +112,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Facility Management</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Physical facility numbers and names are managed separately from reusable facility presets.</p>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Physical facilities use numeric capacity guidance and normalized product/rate configuration.</p>
         </div>
         <div class="flex gap-2">
             <flux:button href="{{ route('admin.facilities.create') }}" wire:navigate variant="primary">Add facilities</flux:button>
@@ -168,7 +169,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             <td class="px-5 py-4 font-medium">{{ $facility->facility_name }}</td>
                             <td class="px-5 py-4">{{ $facility->facilityType?->facility_type }}</td>
                             <td class="px-5 py-4">{{ $facility->facilityProduct?->display_name ?? $facility->facility_size }}</td>
-                            <td class="px-5 py-4">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum '.$facility->facilityProduct->strict_maximum : 'Recommended '.$facility->capacity }}</td>
+                            <td class="px-5 py-4">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum '.$facility->max_capacity : 'Recommended '.$facility->min_capacity.'–'.$facility->max_capacity }}</td>
                             <td class="px-5 py-4"><flux:badge color="{{ $this->statusColor($facility->facility_status) }}">{{ $facility->facility_status }}</flux:badge></td>
                             <td class="px-5 py-4 text-right"><flux:button href="{{ route('admin.facilities.edit', $facility) }}" wire:navigate size="sm" variant="ghost">Edit</flux:button></td>
                         </tr>

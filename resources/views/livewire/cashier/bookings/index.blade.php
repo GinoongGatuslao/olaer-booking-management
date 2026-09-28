@@ -1,17 +1,11 @@
 <?php
 
 use App\Models\BookingDetail;
-use App\Models\Discount;
-use App\Models\Facility;
-use App\Models\ModeOfPayment;
-use App\Models\ProductRate;
-use App\Services\BookingQuoteService;
+use App\Models\FacilityProduct;
 use App\Services\BookingWorkflowService;
-use App\Services\FacilityOccupancyService;
-use App\Services\FacilityProductConfigurationService;
+use App\Services\RoomOccupantService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
@@ -37,32 +31,6 @@ new class extends Component {
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
-    public bool $showCreateForm = false;
-
-    public array $form = [
-        'first_name' => '',
-        'middle_name' => '',
-        'last_name' => '',
-        'contact_no' => '',
-        'email' => '',
-        'province' => 'Sultan Kudarat',
-        'city' => 'Tacurong City',
-        'barangay' => '',
-        'purok' => '',
-        'facility_id' => '',
-        'rate_type' => '',
-        'discount_id' => '',
-        'total_guest_count' => 1,
-        'check_in_date' => '',
-        'check_out_date' => '',
-        'check_in_time' => '12:00',
-        'mode_of_payment_id' => '',
-        'reference_number' => '',
-        'payment_amount' => '',
-    ];
-
-    public array $extraGuests = [];
-
     public array $rescheduleForm = [
         'booking_details_id' => '',
         'label' => '',
@@ -72,15 +40,20 @@ new class extends Component {
     public array $transferForm = [
         'booking_details_id' => '',
         'label' => '',
-        'new_facility_id' => '',
+        'facility_product_id' => '',
     ];
 
-    public function mount(): void
-    {
-        $this->form['check_in_date'] = now()->toDateString();
-        $this->form['check_out_date'] = now()->addDay()->toDateString();
-        $this->form['mode_of_payment_id'] = (string) (ModeOfPayment::query()->where('mode_of_payment', 'Cash')->value('mode_of_payment_id') ?? '');
-    }
+    public array $cancelDetailForm = [
+        'booking_details_id' => '',
+        'label' => '',
+        'reason' => '',
+    ];
+
+    public array $occupantForm = [
+        'booking_details_id' => '',
+        'label' => '',
+        'occupants' => [],
+    ];
 
     public function with(): array
     {
@@ -88,13 +61,7 @@ new class extends Component {
             'bookings' => $this->bookings(),
             'bookingStatuses' => $this->bookingStatuses(),
             'detailStatuses' => $this->detailStatuses(),
-            'facilities' => $this->facilities(),
-            'rateTypes' => $this->rateTypes(),
-            'discounts' => $this->discounts(),
-            'paymentModes' => ModeOfPayment::query()->orderBy('mode_of_payment')->get(),
-            'transferFacilities' => $this->transferFacilities(),
-            'currentQuote' => $this->currentQuote(),
-            'selectedOccupancy' => $this->selectedOccupancy(),
+            'transferProducts' => $this->transferProducts(),
         ];
     }
 
@@ -134,31 +101,6 @@ new class extends Component {
         $this->resetPage();
     }
 
-    public function updatedFormFacilityId(): void
-    {
-        $this->form['rate_type'] = '';
-        $this->form['discount_id'] = '';
-        $this->form['total_guest_count'] = 1;
-        $this->form['payment_amount'] = '';
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function updatedFormTotalGuestCount(): void
-    {
-        $this->form['payment_amount'] = '';
-        $this->syncPaidExtraGuestRows();
-    }
-
-    public function updatedFormRateType(): void
-    {
-        $this->form['payment_amount'] = '';
-    }
-
-    public function updatedFormDiscountId(): void
-    {
-        $this->form['payment_amount'] = '';
-    }
-
     public function sortBy(string $field): void
     {
         $allowed = [
@@ -196,67 +138,6 @@ new class extends Component {
         return $this->sortDirection === 'asc'
             ? '↑'
             : '↓';
-    }
-
-    public function toggleCreateForm(): void
-    {
-        $this->showCreateForm = ! $this->showCreateForm;
-    }
-
-    private function syncPaidExtraGuestRows(): void
-    {
-        $occupancy = $this->selectedOccupancy();
-
-        if ($this->form['facility_id'] !== '' && $occupancy === null) {
-            return;
-        }
-
-        $required = (int) (
-            $occupancy['paid_extra_guest_count'] ?? 0
-        );
-        $current = $this->extraGuests;
-        $rows = [];
-
-        for ($index = 0; $index < $required; $index++) {
-            $rows[$index] = $current[$index] ?? [
-                'first_name' => '',
-                'middle_name' => '',
-                'last_name' => '',
-            ];
-        }
-
-        $this->extraGuests = $rows;
-    }
-
-    public function useQuotedAmount(): void
-    {
-        $quote = $this->currentQuote();
-
-        if ($quote !== null) {
-            $this->form['payment_amount'] = $quote['total'];
-        }
-    }
-
-    public function createBooking(BookingWorkflowService $bookingWorkflow): void
-    {
-        $this->syncPaidExtraGuestRows();
-
-        $validated = $this->validate($this->createRules());
-
-        try {
-            $payload = $validated['form'];
-            $payload['extra_guests'] = $this->extraGuests;
-            $payload['user_id'] = Auth::id();
-
-            $bookingWorkflow->createBooking($payload);
-
-            $this->resetCreateForm();
-            $this->showCreateForm = false;
-            $this->resetPage();
-            session()->flash('success', 'Booking created and payment recorded successfully.');
-        } catch (Throwable $exception) {
-            $this->addError('booking', $exception->getMessage());
-        }
     }
 
     public function openReschedule(int $bookingDetailsId): void
@@ -307,7 +188,7 @@ new class extends Component {
         $this->transferForm = [
             'booking_details_id' => (string) $bookingDetailsId,
             'label' => $detail->booking->b_ref_no . ' - ' . $detail->facility->facility_name,
-            'new_facility_id' => '',
+            'facility_product_id' => (string) ($detail->facility_product_id ?? ''),
         ];
     }
 
@@ -316,7 +197,7 @@ new class extends Component {
         $this->transferForm = [
             'booking_details_id' => '',
             'label' => '',
-            'new_facility_id' => '',
+            'facility_product_id' => '',
         ];
     }
 
@@ -324,13 +205,13 @@ new class extends Component {
     {
         $validated = $this->validate([
             'transferForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
-            'transferForm.new_facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
+            'transferForm.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
         ]);
 
         try {
-            $bookingWorkflow->transferBookingDetail(
+            $bookingWorkflow->transferBookingDetailToProduct(
                 (int) $validated['transferForm']['booking_details_id'],
-                (int) $validated['transferForm']['new_facility_id']
+                (int) $validated['transferForm']['facility_product_id']
             );
 
             $this->cancelTransfer();
@@ -352,67 +233,84 @@ new class extends Component {
         }
     }
 
-    private function createRules(): array
+    public function openCancelDetail(int $bookingDetailsId): void
     {
-        $guestCountRules = ['required', 'integer', 'min:1'];
-        $strictMaximum = $this->strictMaximum();
-
-        if ($strictMaximum !== null) {
-            $guestCountRules[] = 'max:'.$strictMaximum;
-        }
-
-        return [
-            'form.first_name' => ['required', 'string', 'max:50'],
-            'form.middle_name' => ['nullable', 'string', 'max:50'],
-            'form.last_name' => ['required', 'string', 'max:50'],
-            'form.contact_no' => ['required', 'string', 'max:20'],
-            'form.email' => ['nullable', 'email', 'max:100'],
-            'form.province' => ['required', 'string', 'max:50'],
-            'form.city' => ['required', 'string', 'max:50'],
-            'form.barangay' => ['nullable', 'string', 'max:50'],
-            'form.purok' => ['nullable', 'string', 'max:50'],
-            'form.facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'form.rate_type' => ['required', 'string', 'max:50'],
-            'form.discount_id' => ['nullable', 'integer', 'exists:tbl_discount,discount_id'],
-            'form.total_guest_count' => $guestCountRules,
-            'form.check_in_date' => ['required', 'date', 'after_or_equal:today'],
-            'form.check_out_date' => ['required', 'date', 'after:form.check_in_date'],
-            'form.check_in_time' => ['required', 'date_format:H:i'],
-            'form.mode_of_payment_id' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
-            'form.reference_number' => ['nullable', 'string', 'max:100'],
-            'form.payment_amount' => ['required', 'numeric', 'min:0'],
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->findOrFail($bookingDetailsId);
+        $this->cancelDetailForm = [
+            'booking_details_id' => (string) $bookingDetailsId,
+            'label' => $detail->booking?->b_ref_no.' - '.$detail->facility?->facility_name,
+            'reason' => '',
         ];
     }
 
-    private function resetCreateForm(): void
+    public function cancelCancelDetail(): void
     {
-        $this->form = [
-            'first_name' => '',
-            'middle_name' => '',
-            'last_name' => '',
-            'contact_no' => '',
-            'email' => '',
-            'province' => 'Sultan Kudarat',
-            'city' => 'Tacurong City',
-            'barangay' => '',
-            'purok' => '',
-            'facility_id' => '',
-            'rate_type' => '',
-            'discount_id' => '',
-            'total_guest_count' => 1,
-            'check_in_date' => now()->toDateString(),
-            'check_out_date' => now()->addDay()->toDateString(),
-            'check_in_time' => '12:00',
-            'mode_of_payment_id' => (string) (ModeOfPayment::query()->where('mode_of_payment', 'Cash')->value('mode_of_payment_id') ?? ''),
-            'reference_number' => '',
-            'payment_amount' => '',
+        $this->cancelDetailForm = [
+            'booking_details_id' => '',
+            'label' => '',
+            'reason' => '',
         ];
+    }
 
-        $this->extraGuests = [];
-        $this->resetErrorBag();
+    public function saveCancelDetail(BookingWorkflowService $workflow): void
+    {
+        $validated = $this->validate([
+            'cancelDetailForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
+            'cancelDetailForm.reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        try {
+            $workflow->cancelBookingDetail(
+                (int) $validated['cancelDetailForm']['booking_details_id'],
+                $validated['cancelDetailForm']['reason'],
+                (int) Auth::id(),
+            );
+            $this->cancelCancelDetail();
+            session()->flash('success', 'Facility cancelled. Paid value remains as same-transaction credit.');
+        } catch (\Throwable $exception) {
+            $this->addError('cancelDetail', $exception->getMessage());
+        }
+    }
+
+    public function openOccupants(int $bookingDetailsId): void
+    {
+        $detail = BookingDetail::query()
+            ->with(['booking', 'facility', 'roomOccupants'])
+            ->findOrFail($bookingDetailsId);
+
+        $this->occupantForm = [
+            'booking_details_id' => (string) $bookingDetailsId,
+            'label' => $detail->booking?->b_ref_no.' - '.$detail->facility?->facility_name,
+            'occupants' => $detail->roomOccupants->map(fn ($occupant): array => [
+                'first_name' => $occupant->first_name,
+                'middle_name' => $occupant->middle_name ?? '',
+                'last_name' => $occupant->last_name,
+            ])->all(),
+        ];
+    }
+
+    public function cancelOccupants(): void
+    {
+        $this->occupantForm = [
+            'booking_details_id' => '',
+            'label' => '',
+            'occupants' => [],
+        ];
+    }
+
+    public function saveOccupants(RoomOccupantService $occupants): void
+    {
+        try {
+            $occupants->replaceBookingOccupants(
+                (int) $this->occupantForm['booking_details_id'],
+                $this->occupantForm['occupants'],
+                (int) Auth::id(),
+            );
+            $this->cancelOccupants();
+            session()->flash('success', 'Room occupant names updated and audited.');
+        } catch (\Throwable $exception) {
+            $this->addError('occupants', $exception->getMessage());
+        }
     }
 
     private function bookings()
@@ -499,132 +397,27 @@ new class extends Component {
             ->pluck('status');
     }
 
-    private function facilities()
-    {
-        return Facility::query()
-            ->with(['facilityType', 'facilityProduct'])
-            ->whereIn('facility_status', ['Available', 'available'])
-            ->orderBy('facility_name')
-            ->get();
-    }
-
-    private function transferFacilities()
+    private function transferProducts()
     {
         if ($this->transferForm['booking_details_id'] === '') {
             return collect();
         }
 
-        $detail = BookingDetail::query()->with('facility')->find((int) $this->transferForm['booking_details_id']);
+        $detail = BookingDetail::query()
+            ->with('facility')
+            ->find((int) $this->transferForm['booking_details_id']);
 
         if (! $detail || ! $detail->facility) {
             return collect();
         }
 
-        return Facility::query()
-            ->with('facilityProduct')
+        return FacilityProduct::query()
             ->where('facility_type_id', $detail->facility->facility_type_id)
-            ->where('facility_id', '!=', $detail->facility_id)
-            ->whereIn('facility_status', ['Available', 'available'])
-            ->orderBy('facility_name')
-            ->get()
-            ->each(function (Facility $facility): void {
-                $maximum = $facility->facilityProduct?->strict_maximum;
-                $recommended = $facility->facilityProduct?->suggested_maximum;
-                $facility->setAttribute(
-                    'capacity_label',
-                    $maximum
-                        ? "Maximum {$maximum} guests"
-                        : 'Recommended for up to '.($recommended ?? $facility->capacity).' guests',
-                );
-            });
-    }
-
-    private function rateTypes()
-    {
-        if ($this->form['facility_id'] === '') {
-            return collect();
-        }
-
-        $products = app(FacilityProductConfigurationService::class);
-
-        try {
-            $facility = $products->configuredFacility((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return collect();
-        }
-
-        return $facility->facilityProduct->productRates
-            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
-            ->map(fn (ProductRate $rate): array => [
-                'rate_type' => $products->canonicalRateType($rate),
-                'display_name' => $rate->display_name,
-                'amount' => $rate->amount,
-            ])
-            ->sortBy('rate_type')
-            ->values();
-    }
-
-    private function discounts()
-    {
-        return Discount::query()
-            ->where('status', 'Active')
-            ->orderBy('discount_name')
+            ->where('is_active', true)
+            ->orderBy('display_name')
             ->get();
     }
 
-    private function selectedOccupancy(): ?array
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->forFacilityId(
-                    (int) $this->form['facility_id'],
-                    max(1, (int) $this->form['total_guest_count']),
-                );
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function strictMaximum(): ?int
-    {
-        if ($this->form['facility_id'] === '') {
-            return null;
-        }
-
-        try {
-            return app(FacilityOccupancyService::class)
-                ->strictMaximum((int) $this->form['facility_id']);
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function currentQuote(): ?array
-    {
-        if ($this->form['facility_id'] === '' || $this->form['rate_type'] === '') {
-            return null;
-        }
-
-        try {
-            return app(BookingQuoteService::class)->quote(
-                facilityId: (int) $this->form['facility_id'],
-                rateType: (string) $this->form['rate_type'],
-                discountId: $this->form['discount_id'] !== ''
-                    ? (int) $this->form['discount_id']
-                    : null,
-                totalGuestCount: max(
-                    1,
-                    (int) $this->form['total_guest_count'],
-                ),
-            );
-        } catch (Throwable) {
-            return null;
-        }
-    }
 };
 ?>
 
@@ -635,8 +428,8 @@ new class extends Component {
         description="Create paid facility bookings, reschedule stays, transfer facilities, and extend eligible cottage bookings."
     >
         <x-slot:actions>
-            <flux:button variant="primary" wire:click="toggleCreateForm">
-                {{ $showCreateForm ? 'Hide Form' : 'Add Booking' }}
+            <flux:button href="{{ route('cashier.bookings.create') }}" variant="primary" wire:navigate>
+                New booking
             </flux:button>
         </x-slot:actions>
     </x-staff-page-header>
@@ -663,143 +456,6 @@ new class extends Component {
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
     @enderror
 
-    @if ($showCreateForm)
-        <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Create Paid Booking</h2>
-            <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">A booking is confirmed only after exact full payment is recorded.</p>
-
-            <form wire:submit.prevent="createBooking" class="space-y-6">
-                <div class="grid gap-4 md:grid-cols-3">
-                    <flux:input label="First name" wire:model="form.first_name" />
-                    <flux:input label="Middle name" wire:model="form.middle_name" />
-                    <flux:input label="Last name" wire:model="form.last_name" />
-                    <flux:input label="Contact number" wire:model="form.contact_no" />
-                    <flux:input label="Email" type="email" wire:model="form.email" />
-                    <flux:input label="Province" wire:model="form.province" />
-                    <flux:input label="City" wire:model="form.city" />
-                    <flux:input label="Barangay" wire:model="form.barangay" />
-                    <flux:input label="Purok" wire:model="form.purok" />
-                </div>
-
-                <div class="grid gap-4 md:grid-cols-4">
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Facility</label>
-                        <select wire:model.live="form.facility_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select facility</option>
-                            @foreach ($facilities as $facility)
-                                <option value="{{ $facility->facility_id }}">
-                                    {{ $facility->facility_name }} - {{ optional($facility->facilityType)->facility_type }} / {{ $facility->facilityProduct?->strict_maximum ? 'maximum' : 'recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('form.facility_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Rate type</label>
-                        <select wire:model.live="form.rate_type" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select rate</option>
-                            @foreach ($rateTypes as $rate)
-                                <option value="{{ $rate['rate_type'] }}">{{ $rate['display_name'] }} - ₱{{ number_format((float) $rate['amount'], 2) }}</option>
-                            @endforeach
-                        </select>
-                        @error('form.rate_type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Discount</label>
-                        <select wire:model.live="form.discount_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">No discount</option>
-                            @foreach ($discounts as $discount)
-                                <option value="{{ $discount->discount_id }}">{{ $discount->discount_name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <flux:input label="Check-in time" type="time" wire:model="form.check_in_time" />
-
-                    <flux:input label="Check-in date" type="date" wire:model.live="form.check_in_date" />
-                    <flux:input label="Check-out date" type="date" wire:model.live="form.check_out_date" />
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Mode of payment</label>
-                        <select wire:model="form.mode_of_payment_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                            <option value="">Select payment mode</option>
-                            @foreach ($paymentModes as $mode)
-                                <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
-                            @endforeach
-                        </select>
-                        @error('form.mode_of_payment_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <flux:input label="GCash reference number" wire:model="form.reference_number" />
-                    <flux:input label="Payment amount" type="number" step="0.01" wire:model="form.payment_amount" />
-                </div>
-
-                <div class="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-                    <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Guest capacity</h3>
-                    <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                        Total guests includes the primary guest. Rooms include 4 guests and enforce their strict maximum; room guests above 4 cost ₱100 each. Cottage and function-hall capacities are recommendations only.
-                    </p>
-
-                    <div class="mt-4 max-w-xs">
-                        <flux:input
-                            label="Total guests"
-                            type="number"
-                            min="1"
-                            wire:model.live="form.total_guest_count"
-                        />
-                    </div>
-
-                    @if ($selectedOccupancy)
-                        <div class="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-950">
-                            @if ($selectedOccupancy['strict_maximum'])
-                                Maximum {{ $selectedOccupancy['strict_maximum'] }} guests · Included {{ $selectedOccupancy['included_guest_count'] }} · Paid room extras {{ $selectedOccupancy['paid_extra_guest_count'] }}
-                            @else
-                                Recommended capacity: {{ $selectedOccupancy['suggested_minimum'] ? $selectedOccupancy['suggested_minimum'].'–' : '' }}{{ $selectedOccupancy['suggested_maximum'] }} guests (informational)
-                            @endif
-                        </div>
-                    @endif
-
-                    @if ($extraGuests !== [])
-                        <div class="mt-4 space-y-3">
-                            <p class="text-sm font-medium">Paid room extra guest names</p>
-                            @foreach ($extraGuests as $index => $extraGuest)
-                                <div wire:key="extra-guest-{{ $index }}" class="grid gap-3 md:grid-cols-3">
-                                    <flux:input placeholder="First name" wire:model="extraGuests.{{ $index }}.first_name" />
-                                    <flux:input placeholder="Middle name" wire:model="extraGuests.{{ $index }}.middle_name" />
-                                    <flux:input placeholder="Last name" wire:model="extraGuests.{{ $index }}.last_name" />
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
-                    <h3 class="font-medium text-zinc-900 dark:text-zinc-100">Current quote</h3>
-                    @if ($currentQuote)
-                        <div class="mt-2 grid gap-2 text-sm md:grid-cols-4">
-                            <div>Base: <strong>₱{{ number_format((float) $currentQuote['base_price'], 2) }}</strong></div>
-                            <div>Discount: <strong>₱{{ number_format((float) $currentQuote['discount_amount'], 2) }}</strong></div>
-                            <div>Extra guest fee: <strong>₱{{ number_format((float) $currentQuote['extra_guest_fee'], 2) }}</strong></div>
-                            <div>Total: <strong>₱{{ number_format((float) $currentQuote['total'], 2) }}</strong></div>
-                        </div>
-                        <div class="mt-3">
-                            <flux:button type="button" size="sm" wire:click="useQuotedAmount">Use exact amount</flux:button>
-                        </div>
-                    @else
-                        <p class="mt-1 text-sm text-zinc-500">Select facility and rate type to compute total.</p>
-                    @endif
-                </div>
-
-                <div class="flex gap-2">
-                    <flux:button type="submit" variant="primary">Create Booking</flux:button>
-                    <flux:button type="button" wire:click="toggleCreateForm">Cancel</flux:button>
-                </div>
-            </form>
-        </div>
-    @endif
-
     @if ($rescheduleForm['booking_details_id'] !== '')
         <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
             <h2 class="text-lg font-semibold text-amber-950 dark:text-amber-100">Reschedule Booking</h2>
@@ -818,18 +474,58 @@ new class extends Component {
             <p class="text-sm text-blue-800 dark:text-blue-200">{{ $transferForm['label'] }}</p>
             <form wire:submit.prevent="saveTransfer" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
-                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">New facility</label>
-                    <select wire:model="transferForm.new_facility_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
-                        <option value="">Select matching facility</option>
-                        @foreach ($transferFacilities as $facility)
-                            <option value="{{ $facility->facility_id }}">{{ $facility->facility_name }} - {{ $facility->capacity_label }}</option>
+                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product</label>
+                    <select wire:model="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
+                        <option value="">Choose upgrade product</option>
+                        @foreach ($transferProducts as $product)
+                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </select>
+                    <p class="mt-1 text-xs text-zinc-500">Exact unit is assigned automatically; cheaper transfers are rejected.</p>
                 </div>
-                <flux:button type="submit" variant="primary">Save Transfer</flux:button>
+                <flux:button type="submit" variant="primary">Auto-assign Transfer</flux:button>
                 <flux:button type="button" wire:click="cancelTransfer">Cancel</flux:button>
             </form>
         </div>
+    @endif
+
+    @if ($cancelDetailForm['booking_details_id'] !== '')
+        <flux:card>
+            <flux:heading size="lg">Cancel facility</flux:heading>
+            <flux:text class="mt-1">{{ $cancelDetailForm['label'] }}</flux:text>
+            @error('cancelDetail') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            <form wire:submit="saveCancelDetail" class="mt-4 space-y-4">
+                <flux:textarea wire:model="cancelDetailForm.reason" label="Cancellation reason *" rows="3" />
+                <p class="text-xs text-zinc-500">Only this facility is cancelled. Paid value stays within this booking as transaction credit.</p>
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="cancelCancelDetail">Close</flux:button>
+                    <flux:button type="submit" variant="danger">Cancel Facility</flux:button>
+                </div>
+            </form>
+        </flux:card>
+    @endif
+
+    @if ($occupantForm['booking_details_id'] !== '')
+        <flux:card>
+            <flux:heading size="lg">Edit room occupants</flux:heading>
+            <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
+            @error('occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            <form wire:submit="saveOccupants" class="mt-4 space-y-4">
+                @forelse ($occupantForm['occupants'] as $index => $occupant)
+                    <div class="grid gap-3 md:grid-cols-3">
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" label="Last name *" />
+                    </div>
+                @empty
+                    <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>
+                @endforelse
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="cancelOccupants">Close</flux:button>
+                    <flux:button type="submit" variant="primary">Save Occupants</flux:button>
+                </div>
+            </form>
+        </flux:card>
     @endif
 
     <x-staff-table-shell
@@ -941,6 +637,8 @@ new class extends Component {
                                     <flux:button size="sm" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:button>
                                     <flux:button size="sm" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:button>
                                     <flux:button size="sm" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:button>
+                                    <flux:button size="sm" variant="ghost" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:button>
+                                    <flux:button size="sm" variant="danger" wire:click="openCancelDetail({{ $booking->booking_details_id }})">Cancel Facility</flux:button>
                                 @endif
                             </div>
                         </td>

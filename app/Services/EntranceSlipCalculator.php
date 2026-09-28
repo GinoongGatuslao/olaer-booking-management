@@ -46,15 +46,11 @@ class EntranceSlipCalculator
 
         return Discount::query()
             ->where('status', 'Active')
+            ->whereNotNull('discount_start')
+            ->whereNotNull('discount_end')
             ->where($column, true)
-            ->where(function ($query) {
-                $query->whereNull('discount_start')
-                    ->orWhere('discount_start', '<=', now());
-            })
-            ->where(function ($query) {
-                $query->whereNull('discount_end')
-                    ->orWhere('discount_end', '>=', now());
-            })
+            ->where('discount_start', '<=', now())
+            ->where('discount_end', '>=', now())
             ->orderBy('discount_name')
             ->get();
     }

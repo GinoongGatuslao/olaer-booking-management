@@ -49,6 +49,9 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Validate Composer metadata and lock
+        run: composer validate --no-check-publish --strict
+
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
@@ -79,3 +82,86 @@ jobs:
 
       - name: Run Laravel test suite
         run: php artisan test --colors=always
+
+
+  mysql84:
+    name: MySQL 8.4 migration and regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: olaer_batch3_validation_ci
+          MYSQL_USER: olaer
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: false
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: olaer_batch3_validation_ci
+      DB_USERNAME: olaer
+      DB_PASSWORD: secret
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, bcmath, pdo_mysql
+          coverage: none
+          tools: composer:v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validate Composer metadata and lock
+        run: composer validate --no-check-publish --strict
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Prepare Laravel environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+          php artisan optimize:clear
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Verify fresh migrations on MySQL 8.4
+        run: php artisan migrate:fresh --force --no-interaction
+
+      - name: Run Laravel test suite on MySQL 8.4
+        run: php artisan test --colors=always
+
+      - name: Verify competing MySQL transactions on disposable seeded data
+        run: |
+          php artisan migrate:fresh --seed --force --no-interaction
+          OLAER_RUN_MYSQL_CONCURRENCY_TEST=1 php artisan test --colors=always --filter=test_overlapping_mysql_transactions_serialize_and_only_one_owner_wins

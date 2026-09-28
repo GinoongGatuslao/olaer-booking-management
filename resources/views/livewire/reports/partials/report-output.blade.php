@@ -494,11 +494,6 @@
                 <p class="text-xs text-zinc-500">Female</p>
                 <p class="text-xl font-bold">{{ $report['female'] }}</p>
             </div>
-
-            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Tourists</p>
-                <p class="text-xl font-bold">{{ $report['tourist'] }}</p>
-            </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -512,7 +507,6 @@
                         <th class="p-2 text-right">SC/PWD</th>
                         <th class="p-2 text-right">Male</th>
                         <th class="p-2 text-right">Female</th>
-                        <th class="p-2 text-right">Tourist</th>
                         <th class="p-2">Created By</th>
                         <th class="p-2">Handled By</th>
                     </tr>
@@ -528,7 +522,6 @@
                             <td class="p-2 text-right">{{ $slip->no_of_PWD_SC }}</td>
                             <td class="p-2 text-right">{{ $slip->no_of_Male }}</td>
                             <td class="p-2 text-right">{{ $slip->no_of_Female }}</td>
-                            <td class="p-2 text-right">{{ $slip->no_of_Tourist }}</td>
                             <td class="p-2">{{ $this->staffName($slip->createdBy, 'Unknown') }}</td>
                             <td class="p-2">{{ $this->staffName($slip->handledBy, 'Unknown') }}</td>
                         </tr>

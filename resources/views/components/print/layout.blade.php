@@ -26,7 +26,7 @@
                 <p class="font-semibold">{{ $title }}</p>
             </div>
             <div class="flex gap-2">
-                <button onclick="window.history.back()" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50">Back</button>
+                <button onclick="if (window.opener && !window.opener.closed) { window.close(); } else if (window.history.length > 1) { window.history.back(); } else { window.location.href = '/'; }" class="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50">Back</button>
                 <button onclick="window.print()" class="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">Print</button>
             </div>
         </div>

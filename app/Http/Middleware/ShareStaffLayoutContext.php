@@ -30,10 +30,10 @@ class ShareStaffLayoutContext
     private function dashboardRoute(string $roleName): string
     {
         return match ($roleName) {
-            'Admin', 'Manager' => 'admin.dashboard',
+            'Admin' => 'admin.dashboard',
             'Cashier' => 'cashier.dashboard',
             'Maintenance Staff' => 'maintenance.dashboard',
-            'Security Guard' => 'security.dashboard',
+            'Security Guard' => 'security.entrance-slips.create',
             default => 'dashboard',
         };
     }
@@ -44,7 +44,7 @@ class ShareStaffLayoutContext
     private function quickAction(string $roleName): ?array
     {
         return match ($roleName) {
-            'Admin', 'Manager' => [
+            'Admin' => [
                 'label' => 'View Reports',
                 'route' => 'admin.reports.index',
                 'icon' => 'chart-bar',
