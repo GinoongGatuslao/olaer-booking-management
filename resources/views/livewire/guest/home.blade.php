@@ -404,62 +404,121 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 </h2>
             </div>
 
-            <div class="mt-12 grid auto-rows-[14rem] gap-4 sm:grid-cols-2 sm:auto-rows-[20rem] lg:grid-cols-4">
-                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] sm:row-span-2">
-                    <img
-                        src="{{ asset('images/olaer/aerial-pools.webp') }}"
-                        alt="Aerial view of Olaer Spring Resort pools and cottages"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1492"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] lg:col-span-2">
-                    <img
-                        src="{{ asset('images/olaer/entrance-night.webp') }}"
-                        alt="The illuminated Olaer Swimming Resort sign at night"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1080"
-                        height="1080"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem] sm:row-span-2">
-                    <img
-                        src="{{ asset('images/olaer/resort-grounds.webp') }}"
-                        alt="A bright view across the spring pools and palm-lined resort grounds"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1190"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem]">
-                    <img
-                        src="{{ asset('images/olaer/olaer-sign.webp') }}"
-                        alt="Visitors posing by the colorful Olaer Swimming Resort sign"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
-                <figure class="public-hover-lift public-gallery-item overflow-hidden rounded-[2rem]">
-                    <img
-                        src="{{ asset('images/olaer/family-spring.webp') }}"
-                        alt="Families enjoying the spring pools and landscaped resort grounds"
-                        class="size-full object-cover motion-safe:transition motion-safe:duration-500 motion-safe:hover:scale-[1.02]"
-                        width="1200"
-                        height="1600"
-                        loading="lazy"
-                        decoding="async"
-                    >
-                </figure>
+            <div
+                class="mt-12"
+                role="region"
+                aria-roledescription="carousel"
+                aria-label="Resort photo gallery"
+                x-data="{
+                    current: 0,
+                    direction: 1,
+                    visible: false,
+                    hovered: false,
+                    focused: false,
+                    paused: false,
+                    timer: null,
+                    motion: window.matchMedia('(prefers-reduced-motion: reduce)'),
+                    init() {
+                        this.observer = new IntersectionObserver(([entry]) => {
+                            this.visible = entry.isIntersecting
+                            this.sync()
+                        }, { threshold: 0.25 })
+                        this.observer.observe(this.$el)
+                        this.onMotionChange = () => this.sync()
+                        this.onVisibilityChange = () => this.sync()
+                        this.motion.addEventListener('change', this.onMotionChange)
+                        document.addEventListener('visibilitychange', this.onVisibilityChange)
+                    },
+                    destroy() {
+                        clearInterval(this.timer)
+                        this.observer.disconnect()
+                        this.motion.removeEventListener('change', this.onMotionChange)
+                        document.removeEventListener('visibilitychange', this.onVisibilityChange)
+                    },
+                    sync() {
+                        clearInterval(this.timer)
+                        this.timer = null
+                        if (this.visible && !this.hovered && !this.focused && !this.paused && !this.motion.matches && !document.hidden) {
+                            this.timer = setInterval(() => this.advance(), 6000)
+                        }
+                    },
+                    advance() {
+                        if (this.current === this.$refs.track.children.length - 1) this.direction = -1
+                        if (this.current === 0) this.direction = 1
+                        this.go(this.current + this.direction)
+                    },
+                    go(index) {
+                        const track = this.$refs.track
+                        this.current = Math.max(0, Math.min(index, track.children.length - 1))
+                        track.scrollTo({ left: track.children[this.current].offsetLeft, behavior: this.motion.matches ? 'instant' : 'smooth' })
+                    },
+                    updateCurrent() {
+                        const track = this.$refs.track
+                        const gap = parseFloat(getComputedStyle(track).columnGap) || 0
+                        this.current = Math.min(track.children.length - 1, Math.round(track.scrollLeft / (track.firstElementChild.offsetWidth + gap)))
+                    }
+                }"
+                @mouseenter="hovered = true; sync()"
+                @mouseleave="hovered = false; sync()"
+                @focusin="focused = true; sync()"
+                @focusout="focused = false; sync()"
+            >
+                <div
+                    x-ref="track"
+                    @scroll.debounce.150ms="updateCurrent()"
+                    class="relative flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 pt-3 after:w-[22%] after:shrink-0 after:content-[''] sm:gap-5 sm:after:w-[40%] lg:after:w-[54%] motion-reduce:scroll-auto"
+                    aria-label="Resort photos"
+                    tabindex="0"
+                    @pointerdown="paused = true; sync()"
+                >
+                    @foreach ([
+                        ['file' => 'aerial-pools.webp', 'alt' => 'Aerial view of Olaer Spring Resort pools and cottages', 'width' => 1200, 'height' => 1492],
+                        ['file' => 'entrance-night.webp', 'alt' => 'The illuminated Olaer Swimming Resort sign at night', 'width' => 1080, 'height' => 1080],
+                        ['file' => 'resort-grounds.webp', 'alt' => 'A bright view across the spring pools and palm-lined resort grounds', 'width' => 1190, 'height' => 1600],
+                        ['file' => 'olaer-sign.webp', 'alt' => 'Visitors posing by the colorful Olaer Swimming Resort sign', 'width' => 1200, 'height' => 1600],
+                        ['file' => 'family-spring.webp', 'alt' => 'Families enjoying the spring pools and landscaped resort grounds', 'width' => 1200, 'height' => 1600],
+                    ] as $photo)
+                        <figure
+                            wire:key="public-gallery-photo-{{ $loop->index }}"
+                            class="h-72 w-[78%] shrink-0 snap-start overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card transition-[opacity,transform] duration-700 sm:h-[25rem] sm:w-[60%] lg:h-[32rem] lg:w-[46%] motion-reduce:transition-none"
+                            :class="current === {{ $loop->index }} ? 'scale-100 opacity-100' : 'scale-[0.97] opacity-75'"
+                            role="group"
+                            aria-roledescription="slide"
+                            aria-label="Photo {{ $loop->iteration }} of 5"
+                        >
+                            <img
+                                src="{{ asset('images/olaer/'.$photo['file']) }}"
+                                alt="{{ $photo['alt'] }}"
+                                class="size-full object-cover"
+                                width="{{ $photo['width'] }}"
+                                height="{{ $photo['height'] }}"
+                                loading="lazy"
+                                decoding="async"
+                            >
+                        </figure>
+                    @endforeach
+                </div>
+
+                <div class="mt-5 flex items-center justify-between gap-4">
+                    <div class="flex items-baseline gap-2 text-public-forest dark:text-white">
+                        <span class="font-public-display text-2xl" x-text="String(current + 1).padStart(2, '0')">01</span>
+                        <span class="text-sm text-public-muted dark:text-white/60">/ 05</span>
+                        <span class="sr-only" role="status" :aria-live="timer ? 'off' : 'polite'" x-text="'Photo ' + (current + 1) + ' of 5'">Photo 1 of 5</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="button" aria-label="Previous photo" @click="paused = true; sync(); go(current - 1)" :disabled="current === 0" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                            <flux:icon.chevron-left class="size-5" />
+                        </button>
+                        <button type="button" aria-label="Next photo" @click="paused = true; sync(); go(current + 1)" :disabled="current === 4" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                            <flux:icon.chevron-right class="size-5" />
+                        </button>
+                        <button type="button" :aria-label="paused ? 'Play slideshow' : 'Pause slideshow'" @click="paused = !paused; sync()" class="ml-2 inline-flex size-11 items-center justify-center rounded-full bg-public-forest text-white transition hover:bg-public-forest-deep motion-reduce:hidden" title="Toggle slideshow">
+                            <flux:icon.pause x-show="!paused" class="size-5" />
+                            <flux:icon.play x-show="paused" class="size-5" />
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
