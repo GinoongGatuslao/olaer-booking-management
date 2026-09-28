@@ -104,7 +104,7 @@ class PublicWebsiteFoundationTest extends TestCase
             ->assertSee(route('guest.bookings.create'), false);
     }
 
-    public function test_gallery_keeps_all_resort_photos_and_accessible_carousel_controls(): void
+    public function test_gallery_loops_without_a_scrollbar_and_keeps_accessible_controls(): void
     {
         $response = $this->get(route('guest.home'));
 
@@ -119,6 +119,10 @@ class PublicWebsiteFoundationTest extends TestCase
             5,
             substr_count($response->getContent(), 'aria-roledescription="slide"'),
         );
+        $this->assertStringNotContainsString(
+            'overflow-x-auto scroll-smooth',
+            $response->getContent(),
+        );
 
         foreach ([
             'aerial-pools.webp',
@@ -128,6 +132,10 @@ class PublicWebsiteFoundationTest extends TestCase
             'family-spring.webp',
         ] as $photo) {
             $response->assertSee('images/olaer/'.$photo);
+            $this->assertSame(
+                3,
+                substr_count($response->getContent(), 'images/olaer/'.$photo),
+            );
         }
     }
 

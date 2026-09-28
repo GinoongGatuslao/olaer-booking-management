@@ -404,6 +404,16 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 </h2>
             </div>
 
+            @php
+                $galleryPhotos = [
+                    ['file' => 'aerial-pools.webp', 'alt' => 'Aerial view of Olaer Spring Resort pools and cottages', 'width' => 1200, 'height' => 1492],
+                    ['file' => 'entrance-night.webp', 'alt' => 'The illuminated Olaer Swimming Resort sign at night', 'width' => 1080, 'height' => 1080],
+                    ['file' => 'resort-grounds.webp', 'alt' => 'A bright view across the spring pools and palm-lined resort grounds', 'width' => 1190, 'height' => 1600],
+                    ['file' => 'olaer-sign.webp', 'alt' => 'Visitors posing by the colorful Olaer Swimming Resort sign', 'width' => 1200, 'height' => 1600],
+                    ['file' => 'family-spring.webp', 'alt' => 'Families enjoying the spring pools and landscaped resort grounds', 'width' => 1200, 'height' => 1600],
+                ];
+            @endphp
+
             <div
                 class="mt-12"
                 role="region"
@@ -411,106 +421,155 @@ new #[Layout('layouts.public')] #[Title('Olaer Spring Resort | General Santos Ci
                 aria-label="Resort photo gallery"
                 x-data="{
                     current: 0,
-                    direction: 1,
                     visible: false,
                     hovered: false,
                     focused: false,
                     paused: false,
-                    timer: null,
+                    offset: 0,
+                    period: 0,
+                    step: 0,
+                    frame: null,
+                    touchX: 0,
                     motion: window.matchMedia('(prefers-reduced-motion: reduce)'),
                     init() {
                         this.observer = new IntersectionObserver(([entry]) => {
                             this.visible = entry.isIntersecting
                             this.sync()
-                        }, { threshold: 0.25 })
+                        }, { threshold: 0.1 })
                         this.observer.observe(this.$el)
-                        this.onMotionChange = () => this.sync()
+                        this.resizeObserver = new ResizeObserver(() => this.measure())
+                        this.resizeObserver.observe(this.$refs.window)
+                        this.resizeObserver.observe(this.$refs.sequence.firstElementChild)
+                        this.onMotionChange = () => { this.sync(); this.draw() }
                         this.onVisibilityChange = () => this.sync()
                         this.motion.addEventListener('change', this.onMotionChange)
                         document.addEventListener('visibilitychange', this.onVisibilityChange)
+                        this.measure()
                     },
                     destroy() {
-                        clearInterval(this.timer)
+                        cancelAnimationFrame(this.frame)
                         this.observer.disconnect()
+                        this.resizeObserver.disconnect()
                         this.motion.removeEventListener('change', this.onMotionChange)
                         document.removeEventListener('visibilitychange', this.onVisibilityChange)
                     },
                     sync() {
-                        clearInterval(this.timer)
-                        this.timer = null
+                        cancelAnimationFrame(this.frame)
+                        this.frame = null
+                        this.lastTime = null
                         if (this.visible && !this.hovered && !this.focused && !this.paused && !this.motion.matches && !document.hidden) {
-                            this.timer = setInterval(() => this.advance(), 6000)
+                            this.frame = requestAnimationFrame(time => this.tick(time))
                         }
                     },
-                    advance() {
-                        if (this.current === this.$refs.track.children.length - 1) this.direction = -1
-                        if (this.current === 0) this.direction = 1
-                        this.go(this.current + this.direction)
+                    tick(time) {
+                        if (this.lastTime !== null) this.offset += Math.min(time - this.lastTime, 50) * 0.045
+                        this.lastTime = time
+                        this.draw()
+                        this.frame = requestAnimationFrame(next => this.tick(next))
                     },
-                    go(index) {
-                        const track = this.$refs.track
-                        this.current = Math.max(0, Math.min(index, track.children.length - 1))
-                        track.scrollTo({ left: track.children[this.current].offsetLeft, behavior: this.motion.matches ? 'instant' : 'smooth' })
+                    measure() {
+                        const progress = this.step ? (this.offset + this.viewport / 2 - (this.period + this.cardWidth / 2)) / this.step : 0
+                        this.viewport = this.$refs.window.clientWidth
+                        this.cardWidth = this.$refs.sequence.firstElementChild.offsetWidth
+                        this.step = this.cardWidth + (parseFloat(getComputedStyle(this.$refs.sequence).columnGap) || 0)
+                        this.period = this.$refs.sequence.offsetWidth
+                        this.offset = this.period + this.cardWidth / 2 + progress * this.step - this.viewport / 2
+                        this.slides = Array.from(this.$refs.belt.querySelectorAll('figure'))
+                        this.centers = this.slides.map(slide => slide.offsetLeft + slide.offsetWidth / 2)
+                        this.draw()
                     },
-                    updateCurrent() {
-                        const track = this.$refs.track
-                        const gap = parseFloat(getComputedStyle(track).columnGap) || 0
-                        this.current = Math.min(track.children.length - 1, Math.round(track.scrollLeft / (track.firstElementChild.offsetWidth + gap)))
+                    draw() {
+                        if (!this.period) return
+                        const position = this.period + ((this.offset % this.period) + this.period) % this.period
+                        this.$refs.belt.style.transform = `translate3d(${-position}px, 0, 0)`
+                        const center = position + this.viewport / 2
+                        this.slides.forEach((slide, index) => {
+                            const proximity = Math.max(0, 1 - Math.abs(this.centers[index] - center) / (this.step * 1.4))
+                            const emphasis = proximity * proximity * (3 - 2 * proximity)
+                            slide.style.transform = `scale(${0.86 + 0.14 * emphasis})`
+                            slide.style.opacity = String(0.6 + 0.4 * emphasis)
+                        })
+                        const count = this.$refs.sequence.children.length
+                        this.current = ((Math.round((center - this.period - this.cardWidth / 2) / this.step) % count) + count) % count
+                    },
+                    move(direction) {
+                        this.paused = true
+                        this.sync()
+                        if (this.motion.matches) {
+                            this.offset += direction * this.step
+                            this.draw()
+                            return
+                        }
+                        const start = this.offset
+                        const began = performance.now()
+                        const animate = time => {
+                            const progress = Math.min((time - began) / 700, 1)
+                            this.offset = start + direction * this.step * (1 - (1 - progress) ** 3)
+                            this.draw()
+                            this.frame = progress < 1 ? requestAnimationFrame(animate) : null
+                        }
+                        this.frame = requestAnimationFrame(animate)
                     }
                 }"
-                @mouseenter="hovered = true; sync()"
-                @mouseleave="hovered = false; sync()"
-                @focusin="focused = true; sync()"
-                @focusout="focused = false; sync()"
             >
                 <div
-                    x-ref="track"
-                    @scroll.debounce.150ms="updateCurrent()"
-                    class="relative flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 pt-3 after:w-[22%] after:shrink-0 after:content-[''] sm:gap-5 sm:after:w-[40%] lg:after:w-[54%] motion-reduce:scroll-auto"
+                    x-ref="window"
+                    class="public-gallery-window relative left-1/2 w-screen -translate-x-1/2 overflow-hidden py-3"
                     aria-label="Resort photos"
                     tabindex="0"
-                    @pointerdown="paused = true; sync()"
+                    @mouseenter="hovered = true; sync()"
+                    @mouseleave="hovered = false; sync()"
+                    @focusin="focused = true; sync()"
+                    @focusout="focused = false; sync()"
+                    @keydown.arrow-left.prevent="move(-1)"
+                    @keydown.arrow-right.prevent="move(1)"
+                    @touchstart="touchX = $event.touches[0].clientX"
+                    @touchend="if (Math.abs(touchX - $event.changedTouches[0].clientX) > 40) move(touchX > $event.changedTouches[0].clientX ? 1 : -1)"
                 >
-                    @foreach ([
-                        ['file' => 'aerial-pools.webp', 'alt' => 'Aerial view of Olaer Spring Resort pools and cottages', 'width' => 1200, 'height' => 1492],
-                        ['file' => 'entrance-night.webp', 'alt' => 'The illuminated Olaer Swimming Resort sign at night', 'width' => 1080, 'height' => 1080],
-                        ['file' => 'resort-grounds.webp', 'alt' => 'A bright view across the spring pools and palm-lined resort grounds', 'width' => 1190, 'height' => 1600],
-                        ['file' => 'olaer-sign.webp', 'alt' => 'Visitors posing by the colorful Olaer Swimming Resort sign', 'width' => 1200, 'height' => 1600],
-                        ['file' => 'family-spring.webp', 'alt' => 'Families enjoying the spring pools and landscaped resort grounds', 'width' => 1200, 'height' => 1600],
-                    ] as $photo)
-                        <figure
-                            wire:key="public-gallery-photo-{{ $loop->index }}"
-                            class="h-72 w-[78%] shrink-0 snap-start overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card transition-[opacity,transform] duration-700 sm:h-[25rem] sm:w-[60%] lg:h-[32rem] lg:w-[46%] motion-reduce:transition-none"
-                            :class="current === {{ $loop->index }} ? 'scale-100 opacity-100' : 'scale-[0.97] opacity-75'"
-                            role="group"
-                            aria-roledescription="slide"
-                            aria-label="Photo {{ $loop->iteration }} of 5"
-                        >
-                            <img
-                                src="{{ asset('images/olaer/'.$photo['file']) }}"
-                                alt="{{ $photo['alt'] }}"
-                                class="size-full object-cover"
-                                width="{{ $photo['width'] }}"
-                                height="{{ $photo['height'] }}"
-                                loading="lazy"
-                                decoding="async"
+                    <div x-ref="belt" class="relative flex w-max" style="transform: translate3d(-33.333333%, 0, 0)">
+                        @for ($copy = 0; $copy < 3; $copy++)
+                            <div
+                                @if ($copy === 1) x-ref="sequence" @else aria-hidden="true" inert @endif
+                                class="flex shrink-0 gap-4 pr-4 sm:gap-5 sm:pr-5"
                             >
-                        </figure>
-                    @endforeach
+                                @foreach ($galleryPhotos as $photo)
+                                    <figure
+                                        wire:key="public-gallery-photo-{{ $copy }}-{{ $loop->index }}"
+                                        class="h-72 w-[76vw] shrink-0 overflow-hidden rounded-[2rem] bg-public-forest shadow-public-card sm:h-[24rem] sm:w-[58vw] lg:h-[30rem] lg:w-[min(38vw,30rem)]"
+                                        @if ($copy === 1)
+                                            role="group"
+                                            aria-roledescription="slide"
+                                            aria-label="Photo {{ $loop->iteration }} of 5"
+                                        @endif
+                                    >
+                                        <img
+                                            src="{{ asset('images/olaer/'.$photo['file']) }}"
+                                            alt="{{ $copy === 1 ? $photo['alt'] : '' }}"
+                                            class="size-full object-cover"
+                                            width="{{ $photo['width'] }}"
+                                            height="{{ $photo['height'] }}"
+                                            loading="lazy"
+                                            decoding="async"
+                                        >
+                                    </figure>
+                                @endforeach
+                            </div>
+                        @endfor
+                    </div>
                 </div>
 
                 <div class="mt-5 flex items-center justify-between gap-4">
                     <div class="flex items-baseline gap-2 text-public-forest dark:text-white">
                         <span class="font-public-display text-2xl" x-text="String(current + 1).padStart(2, '0')">01</span>
                         <span class="text-sm text-public-muted dark:text-white/60">/ 05</span>
-                        <span class="sr-only" role="status" :aria-live="timer ? 'off' : 'polite'" x-text="'Photo ' + (current + 1) + ' of 5'">Photo 1 of 5</span>
+                        <span class="sr-only" role="status" :aria-live="paused || motion.matches ? 'polite' : 'off'" x-text="'Photo ' + (current + 1) + ' of 5'">Photo 1 of 5</span>
                     </div>
 
                     <div class="flex items-center gap-2">
-                        <button type="button" aria-label="Previous photo" @click="paused = true; sync(); go(current - 1)" :disabled="current === 0" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                        <button type="button" aria-label="Previous photo" @click="move(-1)" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white dark:border-white/25 dark:text-white dark:hover:bg-white/15">
                             <flux:icon.chevron-left class="size-5" />
                         </button>
-                        <button type="button" aria-label="Next photo" @click="paused = true; sync(); go(current + 1)" :disabled="current === 4" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/25 dark:text-white dark:hover:bg-white/15">
+                        <button type="button" aria-label="Next photo" @click="move(1)" class="inline-flex size-11 items-center justify-center rounded-full border border-public-forest/20 text-public-forest transition hover:bg-public-forest hover:text-white dark:border-white/25 dark:text-white dark:hover:bg-white/15">
                             <flux:icon.chevron-right class="size-5" />
                         </button>
                         <button type="button" :aria-label="paused ? 'Play slideshow' : 'Pause slideshow'" @click="paused = !paused; sync()" class="ml-2 inline-flex size-11 items-center justify-center rounded-full bg-public-forest text-white transition hover:bg-public-forest-deep motion-reduce:hidden" title="Toggle slideshow">

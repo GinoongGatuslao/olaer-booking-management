@@ -93,6 +93,10 @@ select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
 }
 
+.public-gallery-window {
+    mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
     .public-hero-image {
         animation: public-hero-arrive 1.5s ease-out both, public-hero-breathe 24s 1.5s ease-in-out infinite alternate;
