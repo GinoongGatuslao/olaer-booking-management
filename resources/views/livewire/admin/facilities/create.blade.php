@@ -112,14 +112,16 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
             </x-required-select>
 
             <div class="grid gap-4 sm:grid-cols-2">
-                <flux:input
+                <x-required-input
                     wire:model="facilityNumber"
-                    label="New facility number *"
+                    name="facilityNumber"
+                    label="New facility number"
                     placeholder="Example: COT-SMA-056"
                 />
-                <flux:input
+                <x-required-input
                     wire:model="facilityName"
-                    label="New facility name *"
+                    name="facilityName"
+                    label="New facility name"
                     placeholder="Example: Poolside Cottage 56"
                 />
             </div>
