@@ -358,7 +358,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     <flux:heading size="lg">Facility requirements</flux:heading>
                     <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
                 </div>
-                <flux:input wire:model.live="partyCount" type="number" min="1" max="500" label="Total unique guests" />
+                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
             </div>
 
             <div class="mt-6 space-y-4">
@@ -367,29 +367,29 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     @php($selectedProduct = $this->productFor($index))
                     <div wire:key="facility-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="grid gap-4 lg:grid-cols-6">
-                            <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" label="Facility type and name" class="lg:col-span-2">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type and name" class="lg:col-span-2">
                                 <option value="">Choose a facility</option>
                                 @foreach ($this->products as $product)
                                     <option value="{{ $product->facility_product_id }}">{{ $product->facilityType?->facility_type }} — {{ $product->display_name }}</option>
                                 @endforeach
-                            </flux:select>
+                            </x-required-select>
 
-                            <flux:select wire:model.live="groups.{{ $index }}.rate_code" label="Schedule">
+                            <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
                                 <option value="">Choose rate</option>
                                 @foreach ($selectedProduct?->productRates ?? [] as $rate)
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
-                            </flux:select>
-                            <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
+                            </x-required-select>
+                            <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" wire:click="removeGroup({{ $index }})" class="w-full">Remove</flux:button>
                             </div>
                         </div>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in / use date" />
-                            <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out / end date" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_in_date" name="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in / use date" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.check_out_date" name="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out / end date" />
                         </div>
 
                         @if ($availability)
@@ -419,17 +419,17 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         <flux:card>
             <flux:heading size="lg">Primary guest</flux:heading>
             <div class="mt-5 grid gap-4 md:grid-cols-3">
-                <flux:input wire:model="firstName" label="First name" />
+                <x-required-input wire:model="firstName" name="firstName" label="First name" />
                 <flux:input wire:model="middleName" label="Middle name" />
-                <flux:input wire:model="lastName" label="Last name" />
+                <x-required-input wire:model="lastName" name="lastName" label="Last name" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <flux:input wire:model="email" type="email" label="Email" />
-                <flux:input wire:model="contactNo" label="Contact number" placeholder="09XXXXXXXXX" />
+                <x-required-input wire:model="email" name="email" type="email" label="Email" />
+                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" placeholder="09XXXXXXXXX" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-4">
-                <flux:input wire:model="province" label="Province" />
-                <flux:input wire:model="city" label="City/Municipality" />
+                <x-required-input wire:model="province" name="province" label="Province" />
+                <x-required-input wire:model="city" name="city" label="City/Municipality" />
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
             </div>
@@ -449,9 +449,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                             <div class="space-y-3">
                                 @foreach ($occupants as $occupantIndex => $occupant)
                                     <div wire:key="room-{{ $roomIndex }}-occupant-{{ $occupantIndex }}" class="grid gap-3 md:grid-cols-3">
-                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="Occupant {{ $occupantIndex + 1 }} first name" />
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="Occupant {{ $occupantIndex + 1 }} first name" />
                                         <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
-                                        <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
+                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
                                     </div>
                                 @endforeach
                             </div>
@@ -472,8 +472,8 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 The payment remains Pending until a Cashier verifies the reference and private proof.
             </flux:text>
             <div class="mt-5 grid gap-4 md:grid-cols-2">
-                <flux:input wire:model="paymentAmount" type="number" step="0.01" min="0.01" label="Payment amount" :readonly="$bookingMode" />
-                <flux:input wire:model="referenceNumber" label="GCash reference number" />
+                <x-required-input wire:model="paymentAmount" name="paymentAmount" type="number" step="0.01" min="0.01" label="Payment amount" :readonly="$bookingMode" />
+                <x-required-input wire:model="referenceNumber" name="referenceNumber" label="GCash reference number" />
             </div>
             @if (! $bookingMode && $planTotal !== '')
                 <p class="mt-2 text-xs text-zinc-500">Minimum deposit: ₱{{ number_format((float) app(\App\Services\DecimalMoneyService::class)->percentage($planTotal, '0.500000'), 2) }} · Maximum: ₱{{ number_format((float) $planTotal, 2) }}</p>
