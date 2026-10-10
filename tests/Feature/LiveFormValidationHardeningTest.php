@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\FacilityRateCode;
+use App\FacilitySchedulePolicy;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\BookingWorkflowService;
+use App\Services\FacilityScheduleBlockService;
 use App\Services\ReservationFacilityOperationService;
 use App\Services\RoomOccupantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,6 +69,23 @@ class LiveFormValidationHardeningTest extends TestCase
                 $this->fail('Malformed date was accepted.');
             } catch (InvalidArgumentException $exception) {
                 $this->assertStringContainsString('valid', $exception->getMessage());
+            }
+        }
+    }
+
+    public function test_schedule_generation_rejects_invalid_and_unbounded_date_ranges(): void
+    {
+        $service = app(FacilityScheduleBlockService::class);
+
+        foreach ([
+            ['2026-99-99', '2026-10-11'],
+            ['2026-10-10', '2028-10-10'],
+        ] as [$checkIn, $checkOut]) {
+            try {
+                $service->requiredBlocks(1, FacilitySchedulePolicy::Overnight, FacilityRateCode::Overnight, $checkIn, $checkOut);
+                $this->fail('Invalid or excessive date range was accepted.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertNotSame('', $exception->getMessage());
             }
         }
     }

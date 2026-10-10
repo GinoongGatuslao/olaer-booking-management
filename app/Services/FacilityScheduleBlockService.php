@@ -41,11 +41,21 @@ class FacilityScheduleBlockService
             throw new InvalidArgumentException('The facility schedule configuration is invalid.');
         }
 
+        foreach ([$checkInDate, $checkOutDate] as $date) {
+            if (is_string($date) && validator(['date' => $date], ['date' => 'date_format:Y-m-d'])->fails()) {
+                throw new InvalidArgumentException('Choose valid check-in and check-out dates.');
+            }
+        }
+
         $checkIn = CarbonImmutable::parse($checkInDate)->startOfDay();
         $checkOut = CarbonImmutable::parse($checkOutDate)->startOfDay();
 
         if ($checkOut->lessThan($checkIn)) {
             throw new InvalidArgumentException('Check-out date cannot be before check-in date.');
+        }
+
+        if ($checkOut->greaterThan($checkIn->addDays(366))) {
+            throw new InvalidArgumentException('A facility schedule cannot span more than 366 days.');
         }
 
         return match ($schedulePolicy) {
