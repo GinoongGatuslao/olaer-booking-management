@@ -188,7 +188,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
     {
         $detail = BookingDetail::query()
             ->with(['booking.guest', 'facility'])
-            ->findOrFail($bookingDetailsId);
+            ->find($bookingDetailsId);
+
+        if (! $detail?->booking?->guest) {
+            $this->cancelSelection();
+            $this->showCheckOutDialog = false;
+            $this->addError('checkOut', 'This check-out is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $guest = $detail->booking->guest;
         $facilityName = $detail->facility !== null ? $detail->facility->facility_name : 'No facility';
@@ -488,11 +496,13 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             }
         }
 
+        $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
+
         if ($this->sortField === 'guest_name') {
-            $query->orderBy('tbl_guest.last_name', $this->sortDirection)
-                ->orderBy('tbl_guest.first_name', $this->sortDirection);
+            $query->orderBy('tbl_guest.last_name', $direction)
+                ->orderBy('tbl_guest.first_name', $direction);
         } elseif ($this->sortField === 'facility_name') {
-            $query->orderBy('tbl_facility.facility_name', $this->sortDirection);
+            $query->orderBy('tbl_facility.facility_name', $direction);
         } else {
             $sortMap = [
                 'b_ref_no' => 'tbl_booking.b_ref_no',
@@ -503,7 +513,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             ];
 
             $sortColumn = $sortMap[$this->sortField] ?? 'tbl_booking_details.check_out_date';
-            $query->orderBy($sortColumn, $this->sortDirection);
+            $query->orderBy($sortColumn, $direction);
         }
 
         $perPage = in_array($this->perPage, [10, 25, 50, 100], true)

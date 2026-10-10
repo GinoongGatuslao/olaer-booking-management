@@ -149,7 +149,14 @@ new class extends Component {
     {
         $detail = BookingDetail::query()
             ->with(['booking.guest', 'facility'])
-            ->findOrFail($bookingDetailsId);
+            ->find($bookingDetailsId);
+
+        if (! $detail?->booking?->guest) {
+            $this->cancelSelection();
+            $this->addError('checkIn', 'This check-in is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $guest = $detail->booking->guest;
         $facilityName = optional($detail->facility)->facility_name ?? 'No facility';
@@ -239,11 +246,13 @@ new class extends Component {
             );
         }
 
+        $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
+
         if ($this->sortField === 'guest_name') {
-            $query->orderBy('tbl_guest.last_name', $this->sortDirection)
-                ->orderBy('tbl_guest.first_name', $this->sortDirection);
+            $query->orderBy('tbl_guest.last_name', $direction)
+                ->orderBy('tbl_guest.first_name', $direction);
         } elseif ($this->sortField === 'facility_name') {
-            $query->orderBy('tbl_facility.facility_name', $this->sortDirection);
+            $query->orderBy('tbl_facility.facility_name', $direction);
         } else {
             $sortMap = [
                 'booking_id' => 'tbl_booking.booking_id',
@@ -255,7 +264,7 @@ new class extends Component {
             ];
 
             $sortColumn = $sortMap[$this->sortField] ?? 'tbl_booking_details.check_in_date';
-            $query->orderBy($sortColumn, $this->sortDirection);
+            $query->orderBy($sortColumn, $direction);
         }
 
         $perPage = in_array($this->perPage, [10, 25, 50, 100], true)

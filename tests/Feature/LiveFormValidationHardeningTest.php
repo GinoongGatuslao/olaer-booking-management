@@ -190,6 +190,31 @@ class LiveFormValidationHardeningTest extends TestCase
             ->assertSee('This staff account is no longer available. Refresh the list and try again.');
     }
 
+    public function test_stale_check_in_and_check_out_selections_are_recoverable(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        Volt::test('cashier.check-ins.index')
+            ->call('selectCheckIn', 999)
+            ->assertSet('selectedBookingDetailsId', null)
+            ->assertSee('This check-in is no longer available. Refresh the list and try again.');
+
+        Volt::test('cashier.check-outs.index')
+            ->call('selectCheckOut', 999)
+            ->assertSet('selectedBookingDetailsId', null)
+            ->assertSee('This check-out is no longer available. Refresh the list and try again.');
+    }
+
+    public function test_check_in_and_check_out_lists_ignore_invalid_sort_directions(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        foreach (['cashier.check-ins.index', 'cashier.check-outs.index'] as $route) {
+            $this->get(route($route, ['sort' => 'guest_name', 'direction' => 'sideways']))
+                ->assertOk();
+        }
+    }
+
     private function staff(string $roleName): User
     {
         $role = Role::query()->create(['role_name' => $roleName]);
