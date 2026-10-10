@@ -147,6 +147,49 @@ class LiveFormValidationHardeningTest extends TestCase
             ->assertSee('This reservation is no longer available for conversion. Refresh the list.');
     }
 
+    public function test_stale_booking_actions_keep_the_list_usable(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        foreach (['openReschedule', 'openTransfer', 'openCancelDetail', 'openOccupants'] as $action) {
+            Volt::test('cashier.bookings.index')
+                ->call($action, 999)
+                ->assertHasNoErrors(['reschedule', 'transfer', 'cancelDetail', 'occupants'])
+                ->assertSee('This booking facility is no longer available. Refresh the list and try again.');
+        }
+
+        Volt::test('cashier.bookings.index')
+            ->call('extendBooking', 999)
+            ->assertSee('The cottage could not be extended. Refresh the list and try again.');
+    }
+
+    public function test_booking_list_ignores_invalid_sort_direction_in_the_url(): void
+    {
+        $this->actingAs($this->staff('Cashier'))
+            ->get(route('cashier.bookings.index', ['sort' => 'booking_id', 'direction' => 'sideways']))
+            ->assertOk()
+            ->assertSee('Booking Management');
+    }
+
+    public function test_stale_staff_account_actions_keep_the_list_usable(): void
+    {
+        $this->actingAs($this->staff('Admin'));
+
+        Volt::test('admin.users.index')
+            ->call('startEditingUser', 999)
+            ->assertSet('showEditor', false)
+            ->assertSee('This staff account is no longer available. Refresh the list and try again.');
+
+        Volt::test('admin.users.index')
+            ->call('requestStatusChange', 999)
+            ->assertSet('showStatusDialog', false)
+            ->assertSee('This staff account is no longer available. Refresh the list and try again.');
+
+        Volt::test('admin.users.index')
+            ->call('toggleStatus', 999)
+            ->assertSee('This staff account is no longer available. Refresh the list and try again.');
+    }
+
     private function staff(string $roleName): User
     {
         $role = Role::query()->create(['role_name' => $roleName]);

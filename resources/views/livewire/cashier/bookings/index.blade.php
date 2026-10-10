@@ -142,7 +142,14 @@ new class extends Component {
 
     public function openReschedule(int $bookingDetailsId): void
     {
-        $detail = BookingDetail::query()->with(['booking.guest', 'facility'])->findOrFail($bookingDetailsId);
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->find($bookingDetailsId);
+
+        if (! $detail?->booking || ! $detail->facility) {
+            $this->cancelReschedule();
+            $this->addError('booking', 'This booking facility is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $this->rescheduleForm = [
             'booking_details_id' => (string) $bookingDetailsId,
@@ -176,14 +183,24 @@ new class extends Component {
             $this->cancelReschedule();
             $this->resetPage();
             session()->flash('success', 'Booking rescheduled successfully.');
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('reschedule', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('reschedule', 'The booking could not be rescheduled. Refresh the list and try again.');
         }
     }
 
     public function openTransfer(int $bookingDetailsId): void
     {
-        $detail = BookingDetail::query()->with(['booking.guest', 'facility'])->findOrFail($bookingDetailsId);
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->find($bookingDetailsId);
+
+        if (! $detail?->booking || ! $detail->facility) {
+            $this->cancelTransfer();
+            $this->addError('booking', 'This booking facility is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $this->transferForm = [
             'booking_details_id' => (string) $bookingDetailsId,
@@ -217,8 +234,11 @@ new class extends Component {
             $this->cancelTransfer();
             $this->resetPage();
             session()->flash('success', 'Facility transfer saved successfully. If there was an upgrade charge, it was added to amount due.');
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('transfer', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('transfer', 'The facility could not be transferred. Refresh the list and try again.');
         }
     }
 
@@ -228,14 +248,25 @@ new class extends Component {
             $bookingWorkflow->extendCottageDayRate($bookingDetailsId);
             $this->resetPage();
             session()->flash('success', 'Cottage extension recorded. The extension charge was added to amount due.');
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('extend', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('extend', 'The cottage could not be extended. Refresh the list and try again.');
         }
     }
 
     public function openCancelDetail(int $bookingDetailsId): void
     {
-        $detail = BookingDetail::query()->with(['booking', 'facility'])->findOrFail($bookingDetailsId);
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->find($bookingDetailsId);
+
+        if (! $detail?->booking || ! $detail->facility) {
+            $this->cancelCancelDetail();
+            $this->addError('booking', 'This booking facility is no longer available. Refresh the list and try again.');
+
+            return;
+        }
+
         $this->cancelDetailForm = [
             'booking_details_id' => (string) $bookingDetailsId,
             'label' => $detail->booking?->b_ref_no.' - '.$detail->facility?->facility_name,
@@ -267,8 +298,11 @@ new class extends Component {
             );
             $this->cancelCancelDetail();
             session()->flash('success', 'Facility cancelled. Paid value remains as same-transaction credit.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('cancelDetail', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('cancelDetail', 'The facility could not be cancelled. Refresh the list and try again.');
         }
     }
 
@@ -276,7 +310,14 @@ new class extends Component {
     {
         $detail = BookingDetail::query()
             ->with(['booking', 'facility', 'roomOccupants'])
-            ->findOrFail($bookingDetailsId);
+            ->find($bookingDetailsId);
+
+        if (! $detail?->booking || ! $detail->facility) {
+            $this->cancelOccupants();
+            $this->addError('booking', 'This booking facility is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $this->occupantForm = [
             'booking_details_id' => (string) $bookingDetailsId,
@@ -380,7 +421,10 @@ new class extends Component {
             'status' => 'tbl_booking_details.status',
         ];
 
-        $query->orderBy($sortMap[$this->sortField] ?? 'tbl_booking.booking_id', $this->sortDirection);
+        $query->orderBy(
+            $sortMap[$this->sortField] ?? 'tbl_booking.booking_id',
+            $this->sortDirection === 'asc' ? 'asc' : 'desc',
+        );
 
         $perPage = in_array($this->perPage, [10, 25, 50, 100], true)
             ? $this->perPage

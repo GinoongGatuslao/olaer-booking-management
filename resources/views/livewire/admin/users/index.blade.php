@@ -210,7 +210,15 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     {
         $user = User::query()
             ->with(['address', 'role'])
-            ->findOrFail($userId);
+            ->find($userId);
+
+        if (! $user) {
+            $this->showEditor = false;
+            $this->resetForm();
+            session()->flash('error', 'This staff account is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $this->editingUserId = (int) $user->user_id;
         $this->firstName = (string) $user->first_name;
@@ -430,7 +438,14 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             return;
         }
 
-        User::query()->findOrFail($userId);
+        if (! User::query()->whereKey($userId)->exists()) {
+            $this->showStatusDialog = false;
+            $this->statusChangeUserId = null;
+            session()->flash('error', 'This staff account is no longer available. Refresh the list and try again.');
+
+            return;
+        }
+
         $this->statusChangeUserId = $userId;
         $this->showStatusDialog = true;
     }
@@ -458,7 +473,13 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             return;
         }
 
-        $user = User::query()->findOrFail($userId);
+        $user = User::query()->find($userId);
+
+        if (! $user) {
+            session()->flash('error', 'This staff account is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         $user->update([
             'status' => $user->status === 'Active' ? 'Inactive' : 'Active',
