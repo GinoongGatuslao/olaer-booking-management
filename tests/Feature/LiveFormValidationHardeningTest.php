@@ -96,6 +96,29 @@ class LiveFormValidationHardeningTest extends TestCase
             ->assertSee('Report filters are invalid. Review the fields and generate the report again.');
     }
 
+    public function test_rejection_requires_a_reason_without_closing_the_dialog(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        Volt::test('cashier.gcash-verifications.index')
+            ->set('selectedPaymentId', 999)
+            ->set('showRejectDialog', true)
+            ->set('rejectionReason', '')
+            ->call('rejectSelected')
+            ->assertHasErrors(['rejectionReason' => 'required'])
+            ->assertSet('showRejectDialog', true);
+    }
+
+    public function test_stale_reservation_selection_is_a_recoverable_message(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        Volt::test('cashier.reservation-conversions.index')
+            ->call('selectReservation', 999)
+            ->assertSet('selectedReservationId', null)
+            ->assertSee('This reservation is no longer available for conversion. Refresh the list.');
+    }
+
     private function staff(string $roleName): User
     {
         $role = Role::query()->create(['role_name' => $roleName]);

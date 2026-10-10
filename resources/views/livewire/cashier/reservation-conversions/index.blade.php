@@ -62,13 +62,21 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public function selectReservation(int $reservationId): void
     {
         $this->resetMessages();
+        $this->selectedReservationId = null;
+        $this->paymentAmount = '';
+        $this->modeOfPaymentId = null;
+        $this->referenceNumber = '';
 
-        $reservation = Reservation::query()->findOrFail($reservationId);
+        $reservation = Reservation::query()->find($reservationId);
+
+        if ($reservation === null || ! in_array($reservation->status, ['Active', 'Paid'], true) || $reservation->booking()->exists()) {
+            $this->errorMessage = 'This reservation is no longer available for conversion. Refresh the list.';
+
+            return;
+        }
 
         $this->selectedReservationId = (int) $reservation->reservation_id;
         $this->paymentAmount = (string) $reservation->amount_due;
-        $this->modeOfPaymentId = null;
-        $this->referenceNumber = '';
     }
 
     public function convert(ReservationToBookingWorkflowService $service): void
@@ -112,8 +120,11 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             $this->paymentAmount = '';
             $this->modeOfPaymentId = null;
             $this->referenceNumber = '';
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'The reservation could not be converted. Refresh the list and try again.';
         }
     }
 

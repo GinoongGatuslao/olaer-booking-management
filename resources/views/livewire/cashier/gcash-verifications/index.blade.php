@@ -64,7 +64,6 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     public function verifySelected(): void
     {
-        $this->showVerifyDialog = false;
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
             return;
@@ -77,20 +76,27 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             );
 
             session()->flash('success', 'GCash proof verified and the transaction balance was updated.');
+            $this->showVerifyDialog = false;
             $this->selectedPaymentId = null;
             $this->resetPage();
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             session()->flash('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            session()->flash('error', 'The payment could not be verified. Refresh the list and try again.');
         }
     }
 
     public function rejectSelected(): void
     {
-        $this->showRejectDialog = false;
         if (! $this->selectedPaymentId) {
             session()->flash('error', 'Select a pending GCash payment first.');
             return;
         }
+
+        $this->validate([
+            'rejectionReason' => ['required', 'string', 'max:500'],
+        ]);
 
         try {
             app(GcashPaymentVerificationService::class)->reject(
@@ -100,11 +106,15 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             );
 
             session()->flash('success', 'GCash proof rejected.');
+            $this->showRejectDialog = false;
             $this->selectedPaymentId = null;
             $this->rejectionReason = '';
             $this->resetPage();
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             session()->flash('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            session()->flash('error', 'The payment could not be rejected. Refresh the list and try again.');
         }
     }
 
