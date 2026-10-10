@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\BookingWorkflowService;
 use App\Services\FacilityScheduleBlockService;
+use App\Services\GuestReservationManagementService;
 use App\Services\ReservationFacilityOperationService;
 use App\Services\RoomOccupantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -213,6 +214,34 @@ class LiveFormValidationHardeningTest extends TestCase
             $this->get(route($route, ['sort' => 'guest_name', 'direction' => 'sideways']))
                 ->assertOk();
         }
+    }
+
+    public function test_stale_amenity_request_actions_keep_the_list_usable(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        Volt::test('cashier.amenity-requests.index')
+            ->call('openEdit', 999)
+            ->assertSet('editingRequestId', '')
+            ->assertSee('This amenity request is no longer available. Refresh the list and try again.');
+
+        Volt::test('cashier.amenity-requests.index')
+            ->call('requestCancel', 999)
+            ->assertSet('showCancelDialog', false)
+            ->assertSee('This amenity request is no longer pending. Refresh the list and try again.');
+    }
+
+    public function test_guest_otp_verification_hides_unexpected_errors(): void
+    {
+        $service = \Mockery::mock(GuestReservationManagementService::class);
+        $service->shouldReceive('verifyOtp')->once()->andThrow(new \RuntimeException('internal database error'));
+        $this->app->instance(GuestReservationManagementService::class, $service);
+
+        Volt::test('guest.reservations.manage')
+            ->set('otp', '123456')
+            ->call('verifyOtp')
+            ->assertSet('errorMessage', 'We could not verify the code. Please try again or request a new one.')
+            ->assertDontSee('internal database error');
     }
 
     private function staff(string $roleName): User

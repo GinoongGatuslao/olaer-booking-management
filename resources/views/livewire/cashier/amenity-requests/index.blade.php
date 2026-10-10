@@ -253,11 +253,11 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 'success',
                 'Amenity request created. It is now available for maintenance delivery and will be paid during checkout.',
             );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('request', $exception->getMessage());
         } catch (\Throwable $exception) {
-            $this->addError(
-                'request',
-                $exception->getMessage(),
-            );
+            report($exception);
+            $this->addError('request', 'The amenity request could not be created. Refresh the list and try again.');
         }
     }
 
@@ -265,7 +265,14 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
     {
         $request = AmenityRequest::query()
             ->with('details')
-            ->findOrFail($amenityRequestId);
+            ->find($amenityRequestId);
+
+        if (! $request) {
+            $this->cancelEdit();
+            $this->addError('request', 'This amenity request is no longer available. Refresh the list and try again.');
+
+            return;
+        }
 
         if ($request->amenity_request_status !== 'Pending') {
             $this->addError(
@@ -352,21 +359,29 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 'success',
                 'Amenity request updated successfully.',
             );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('edit', $exception->getMessage());
         } catch (\Throwable $exception) {
-            $this->addError(
-                'edit',
-                $exception->getMessage(),
-            );
+            report($exception);
+            $this->addError('edit', 'The amenity request could not be updated. Refresh the list and try again.');
         }
     }
 
     public function requestCancel(int $amenityRequestId): void
     {
-        AmenityRequest::query()
+        $request = AmenityRequest::query()
             ->whereKey($amenityRequestId)
             ->where('amenity_request_status', 'Pending')
             ->whereNull('assigned_to_user_id')
-            ->firstOrFail();
+            ->first();
+
+        if (! $request) {
+            $this->cancelRequestId = null;
+            $this->showCancelDialog = false;
+            $this->addError('request', 'This amenity request is no longer pending. Refresh the list and try again.');
+
+            return;
+        }
 
         $this->cancelRequestId = $amenityRequestId;
         $this->showCancelDialog = true;
@@ -401,11 +416,11 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 'success',
                 'Pending amenity request cancelled.',
             );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('request', $exception->getMessage());
         } catch (\Throwable $exception) {
-            $this->addError(
-                'request',
-                $exception->getMessage(),
-            );
+            report($exception);
+            $this->addError('request', 'The amenity request could not be cancelled. Refresh the list and try again.');
         }
     }
 

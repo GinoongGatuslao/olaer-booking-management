@@ -94,8 +94,11 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             $this->verified = true;
             $this->otpRequested = false;
             $this->successMessage = 'Reservation verified. You can now update or cancel it.';
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'We could not verify the code. Please try again or request a new one.';
         }
     }
 
@@ -204,8 +207,8 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             'facilityTypeId' => ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'],
             'rateType' => ['required', 'string', 'max:20'],
             'facilityId' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'checkInDate' => ['required', 'date', 'after_or_equal:today'],
-            'checkOutDate' => ['required', 'date', 'after:checkInDate'],
+            'checkInDate' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'checkOutDate' => ['required', 'date_format:Y-m-d', 'after:checkInDate'],
             'totalGuestCount' => $guestCountRules,
             'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
             'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
@@ -225,8 +228,11 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
             $this->showUpdateForm = false;
             $this->successMessage = 'Reservation updated successfully.';
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'The reservation could not be updated. Refresh the page and try again.';
         }
     }
 
@@ -247,8 +253,11 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             $this->verified = false;
             $this->showCancelForm = false;
             $this->successMessage = 'Reservation cancelled successfully.';
-        } catch (Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'The reservation could not be cancelled. Refresh the page and try again.';
         }
     }
 
