@@ -133,36 +133,6 @@ class FacilityPlanningAndAssignmentTest extends TestCase
         ]]);
     }
 
-    /** @return array{FacilityProduct, Collection<int, Facility>} */
-    private function cottageInventory(int $quantity): array
-    {
-        $type = FacilityType::query()->create(['facility_type' => 'Cottage']);
-        $product = FacilityProduct::query()->create([
-            'product_code' => FacilityProductCode::CottageSmall,
-            'facility_type_id' => $type->facility_type_id,
-            'display_name' => 'Small Cottage',
-            'size_label' => 'Small',
-            'schedule_policy' => FacilitySchedulePolicy::DatedSlots,
-            'capacity_policy' => FacilityCapacityPolicy::RecommendedInformational,
-            'suggested_minimum' => 1,
-            'suggested_maximum' => 6,
-            'is_active' => true,
-        ]);
-
-        foreach ([
-            FacilityRateCode::Day->value => ['Day', '100.00'],
-            FacilityRateCode::Night->value => ['Night', '120.00'],
-            FacilityRateCode::Both->value => ['Both', '200.00'],
-        ] as $rateCode => [$displayName, $amount]) {
-            ProductRate::query()->create([
-                'facility_product_id' => $product->facility_product_id,
-                'rate_code' => $rateCode,
-                'display_name' => $displayName,
-                'amount' => $amount,
-                'is_active' => true,
-            ]);
-        }
-
     public function test_invalid_calendar_date_is_rejected_before_parsing(): void
     {
         [$product] = $this->cottageInventory(1);
@@ -229,6 +199,36 @@ class FacilityPlanningAndAssignmentTest extends TestCase
             'estimated_users' => 2,
         ]]);
     }
+
+    /** @return array{FacilityProduct, Collection<int, Facility>} */
+    private function cottageInventory(int $quantity): array
+    {
+        $type = FacilityType::query()->create(['facility_type' => 'Cottage']);
+        $product = FacilityProduct::query()->create([
+            'product_code' => FacilityProductCode::CottageSmall,
+            'facility_type_id' => $type->facility_type_id,
+            'display_name' => 'Small Cottage',
+            'size_label' => 'Small',
+            'schedule_policy' => FacilitySchedulePolicy::DatedSlots,
+            'capacity_policy' => FacilityCapacityPolicy::RecommendedInformational,
+            'suggested_minimum' => 1,
+            'suggested_maximum' => 6,
+            'is_active' => true,
+        ]);
+
+        foreach ([
+            FacilityRateCode::Day->value => ['Day', '100.00'],
+            FacilityRateCode::Night->value => ['Night', '120.00'],
+            FacilityRateCode::Both->value => ['Both', '200.00'],
+        ] as $rateCode => [$displayName, $amount]) {
+            ProductRate::query()->create([
+                'facility_product_id' => $product->facility_product_id,
+                'rate_code' => $rateCode,
+                'display_name' => $displayName,
+                'amount' => $amount,
+                'is_active' => true,
+            ]);
+        }
 
         $facilities = new Collection;
 
