@@ -272,7 +272,7 @@ class BatchTwoRemediationTest extends TestCase
             ->set('groups.0.check_in_date', $date)
             ->set('groups.0.check_out_date', $date)
             ->call('savePlan')
-            ->assertHasErrors('plan');
+            ->assertHasErrors('groups.0.rate_code');
 
         $this->assertSame($bookingCount, Booking::query()->count());
     }
