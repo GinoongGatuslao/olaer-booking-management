@@ -128,8 +128,13 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                 $this->selectedTransactionType,
                 $this->selectedTransactionId,
             );
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
+
+            return null;
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'This billing statement is unavailable. Refresh the list and try again.';
 
             return null;
         }

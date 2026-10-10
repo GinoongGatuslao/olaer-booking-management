@@ -244,6 +244,15 @@ class LiveFormValidationHardeningTest extends TestCase
             ->assertDontSee('internal database error');
     }
 
+    public function test_stale_billing_statement_is_a_recoverable_message(): void
+    {
+        $this->actingAs($this->staff('Cashier'));
+
+        Volt::test('cashier.billings.index')
+            ->call('selectBooking', 999)
+            ->assertSee('This billing statement is unavailable. Refresh the list and try again.');
+    }
+
     private function staff(string $roleName): User
     {
         $role = Role::query()->create(['role_name' => $roleName]);
