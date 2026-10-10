@@ -42,7 +42,8 @@ class FacilityScheduleBlockService
         }
 
         foreach ([$checkInDate, $checkOutDate] as $date) {
-            if (is_string($date) && validator(['date' => $date], ['date' => 'date_format:Y-m-d'])->fails()) {
+            if (is_string($date)
+                && validator(['date' => $date], ['date' => strlen($date) === 10 ? 'date_format:Y-m-d' : 'date_format:Y-m-d H:i:s'])->fails()) {
                 throw new InvalidArgumentException('Choose valid check-in and check-out dates.');
             }
         }

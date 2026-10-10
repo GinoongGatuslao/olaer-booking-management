@@ -77,6 +77,14 @@ class LiveFormValidationHardeningTest extends TestCase
     {
         $service = app(FacilityScheduleBlockService::class);
 
+        $this->assertCount(1, $service->requiredBlocks(
+            1,
+            FacilitySchedulePolicy::Overnight,
+            FacilityRateCode::Overnight,
+            '2026-10-10 00:00:00',
+            '2026-10-11 00:00:00',
+        ));
+
         foreach ([
             ['2026-99-99', '2026-10-11'],
             ['2026-10-10', '2028-10-10'],
