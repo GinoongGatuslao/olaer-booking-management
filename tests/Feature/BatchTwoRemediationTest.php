@@ -277,6 +277,23 @@ class BatchTwoRemediationTest extends TestCase
         $this->assertSame($bookingCount, Booking::query()->count());
     }
 
+    public function test_cashier_planners_reject_extreme_room_quantities_without_expanding_occupants(): void
+    {
+        [$product] = $this->productAndFacility(FacilityProductCode::RoomStandard, 'Room', [
+            FacilityRateCode::Overnight->value => '1000.00',
+        ], included: 4, maximum: 6);
+        $this->actingAs($this->cashier());
+
+        foreach (['cashier.bookings.create', 'cashier.reservations.create'] as $component) {
+            Volt::test($component)
+                ->set('groups.0.facility_product_id', (string) $product->facility_product_id)
+                ->set('groups.0.quantity', 1000000)
+                ->assertSet('roomOccupants', [])
+                ->call('savePlan')
+                ->assertHasErrors(['groups.0.quantity' => 'max']);
+        }
+    }
+
     public function test_guest_cottage_management_uses_rate_code_when_display_name_changes(): void
     {
         Mail::fake();

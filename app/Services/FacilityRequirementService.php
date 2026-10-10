@@ -57,8 +57,8 @@ class FacilityRequirementService
         int $partyCount,
         array $groups,
     ): FacilityRequirementIntent {
-        if ($partyCount < 1 || $groups === []) {
-            throw new InvalidArgumentException('Enter a party count and at least one facility requirement.');
+        if ($partyCount < 1 || $partyCount > 500 || $groups === [] || count($groups) > 20) {
+            throw new InvalidArgumentException('Enter 1 to 500 guests and 1 to 20 facility groups.');
         }
 
         return DB::transaction(function () use ($intent, $partyCount, $groups): FacilityRequirementIntent {
@@ -135,8 +135,15 @@ class FacilityRequirementService
         $checkInDate = (string) ($group['check_in_date'] ?? '');
         $checkOutDate = (string) ($group['check_out_date'] ?? '');
 
-        if ($productId < 1 || $quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $rateCode === null || $checkInDate === '' || $checkOutDate === '') {
+        if ($productId < 1 || $quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $estimatedUsers > 500 || $rateCode === null) {
             throw new InvalidArgumentException('Each facility requirement needs a valid product, rate, quantity, and guest estimate.');
+        }
+
+        foreach ([$checkInDate, $checkOutDate] as $date) {
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
+                || ! checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))) {
+                throw new InvalidArgumentException('Choose valid check-in and check-out dates.');
+            }
         }
 
         $checkIn = CarbonImmutable::parse($checkInDate)->startOfDay();
@@ -146,7 +153,11 @@ class FacilityRequirementService
             throw new InvalidArgumentException('Facility requirement dates are invalid.');
         }
 
-        $product = FacilityProduct::query()->with('productRates')->findOrFail($productId);
+        $product = FacilityProduct::query()->with('productRates')->where('is_active', true)->find($productId);
+
+        if ($product === null) {
+            throw new InvalidArgumentException('The selected facility is no longer available. Choose another.');
+        }
 
         if ($product->schedule_policy === FacilitySchedulePolicy::Overnight) {
             if (! $checkOut->greaterThan($checkIn)) {

@@ -89,6 +89,13 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
     public function addGroup(): void
     {
+        if (count($this->groups) >= 20) {
+            $this->addError('groups', 'You can add up to 20 facility groups.');
+
+            return;
+        }
+
+        $this->resetErrorBag('groups');
         $this->groups[] = [
             'facility_product_id' => '',
             'quantity' => 1,
@@ -97,6 +104,8 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'check_out_date' => today()->addDay()->toDateString(),
             'estimated_users' => max(1, $this->partyCount),
         ];
+        $this->planTotal = '';
+        $this->paymentAmount = '';
     }
 
     public function removeGroup(int $index): void
@@ -107,7 +116,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         unset($this->groups[$index]);
         $this->groups = array_values($this->groups);
+        $this->resetErrorBag('groups');
         $this->syncRoomOccupantRows();
+        $this->planTotal = '';
+        $this->paymentAmount = '';
     }
 
     public function updatedGroups(): void
@@ -131,6 +143,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 continue;
             }
 
+            if (! validator(['date' => $checkInDate], ['date' => 'date_format:Y-m-d'])->passes()) {
+                continue;
+            }
+
             if ($product->schedule_policy === FacilitySchedulePolicy::Overnight) {
                 $checkOutDate = (string) ($group['check_out_date'] ?? '');
 
@@ -143,17 +159,24 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
 
         $this->syncRoomOccupantRows();
+        $this->planTotal = '';
+        $this->paymentAmount = '';
     }
 
     public function updatedPartyCount(): void
     {
         $this->syncRoomOccupantRows();
+        $this->planTotal = '';
+        $this->paymentAmount = '';
     }
 
     public function savePlan(
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
     ): void {
+        $this->resetErrorBag('plan');
+        $this->validate($this->planRules());
+
         try {
             $intent = $requirements->replaceGroups(
                 $requirements->ownedIntent($this->token, session()->getId()),
@@ -167,8 +190,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 : app(\App\Services\DecimalMoneyService::class)
                     ->percentage($this->planTotal, '0.500000');
             session()->flash('success', 'Facility plan saved. Availability and pricing were checked against current reservations and bookings.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('plan', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('plan', 'The facility plan could not be saved. Please try again.');
         }
     }
 
@@ -230,17 +256,24 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             session()->forget('guest.facility_plan_token');
             session()->put('guest.reservation_confirmation_id', (int) $reservation->reservation_id);
             $this->redirect(route('guest.reservations.success'), navigate: true);
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
             }
 
             $this->addError('plan', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
+            report($exception);
+            $this->addError('plan', 'Your request could not be submitted. Please try again or contact the resort.');
         }
     }
 
     /** @return array<string, array<int, mixed>> */
-    protected function rules(): array
+    private function planRules(): array
     {
         return [
             'partyCount' => ['required', 'integer', 'min:1', 'max:500'],
@@ -248,9 +281,17 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'groups.*.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
             'groups.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
             'groups.*.rate_code' => ['required', 'string', 'max:30'],
-            'groups.*.check_in_date' => ['required', 'date', 'after_or_equal:today'],
-            'groups.*.check_out_date' => ['required', 'date'],
-            'groups.*.estimated_users' => ['required', 'integer', 'min:1'],
+            'groups.*.check_in_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'groups.*.check_out_date' => ['required', 'date_format:Y-m-d'],
+            'groups.*.estimated_users' => ['required', 'integer', 'min:1', 'max:500'],
+        ];
+    }
+
+    /** @return array<string, array<int, mixed>> */
+    protected function rules(): array
+    {
+        return [
+            ...$this->planRules(),
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
@@ -299,8 +340,13 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 continue;
             }
 
-            $quantity = max(1, (int) ($group['quantity'] ?? 1));
-            $estimatedUsers = max($quantity, (int) ($group['estimated_users'] ?? $quantity));
+            $quantity = (int) ($group['quantity'] ?? 0);
+            $estimatedUsers = (int) ($group['estimated_users'] ?? 0);
+
+            if ($quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $estimatedUsers > 500 || array_sum($counts) + $estimatedUsers > 500) {
+                continue;
+            }
+
             $minimum = intdiv($estimatedUsers, $quantity);
             $remainder = $estimatedUsers % $quantity;
 
@@ -362,6 +408,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
 
             <div class="mt-6 space-y-4">
+                @error('groups')
+                    <p class="text-sm text-red-700 dark:text-red-300">{{ $message }}</p>
+                @enderror
                 @foreach ($groups as $index => $group)
                     @php($availability = $this->availabilityFor($index))
                     @php($selectedProduct = $this->productFor($index))
@@ -381,7 +430,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                                 @endforeach
                             </x-required-select>
                             <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" wire:click="removeGroup({{ $index }})" class="w-full">Remove</flux:button>
                             </div>

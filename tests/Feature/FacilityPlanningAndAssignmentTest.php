@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use InvalidArgumentException;
+use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class FacilityPlanningAndAssignmentTest extends TestCase
@@ -161,6 +162,73 @@ class FacilityPlanningAndAssignmentTest extends TestCase
                 'is_active' => true,
             ]);
         }
+
+    public function test_invalid_calendar_date_is_rejected_before_parsing(): void
+    {
+        [$product] = $this->cottageInventory(1);
+        $requirements = app(FacilityRequirementService::class);
+        $intent = $requirements->createIntent('bad-date-session', 2);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Choose valid check-in and check-out dates.');
+
+        $requirements->replaceGroups($intent, 2, [[
+            'facility_product_id' => $product->facility_product_id,
+            'quantity' => 1,
+            'rate_code' => FacilityRateCode::Day->value,
+            'check_in_date' => '2026-99-99',
+            'check_out_date' => '2026-99-99',
+            'estimated_users' => 2,
+        ]]);
+    }
+
+    public function test_guest_planner_shows_a_date_error_instead_of_crashing_on_bad_input(): void
+    {
+        [$product] = $this->cottageInventory(1);
+
+        Volt::test('guest.facilities.planner')
+            ->set('groups.0.facility_product_id', (string) $product->facility_product_id)
+            ->set('groups.0.check_in_date', '2026-99-99')
+            ->call('savePlan')
+            ->assertHasErrors('groups.0.check_in_date');
+    }
+
+    public function test_changing_a_saved_guest_plan_clears_the_old_quote_and_payment(): void
+    {
+        [$product] = $this->cottageInventory(2);
+        $date = today()->addDays(10)->toDateString();
+
+        Volt::test('guest.facilities.planner')
+            ->set('groups.0.facility_product_id', (string) $product->facility_product_id)
+            ->set('groups.0.rate_code', FacilityRateCode::Day->value)
+            ->set('groups.0.check_in_date', $date)
+            ->set('groups.0.estimated_users', 1)
+            ->call('savePlan')
+            ->assertSet('planTotal', '100.00')
+            ->set('groups.0.quantity', 2)
+            ->assertSet('planTotal', '')
+            ->assertSet('paymentAmount', '');
+    }
+
+    public function test_unavailable_product_has_an_actionable_plan_error(): void
+    {
+        [$product] = $this->cottageInventory(1);
+        $product->update(['is_active' => false]);
+        $date = today()->addDays(10)->toDateString();
+        $intent = app(FacilityRequirementService::class)->createIntent('inactive-product-session', 2);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The selected facility is no longer available. Choose another.');
+
+        app(FacilityRequirementService::class)->replaceGroups($intent, 2, [[
+            'facility_product_id' => $product->facility_product_id,
+            'quantity' => 1,
+            'rate_code' => FacilityRateCode::Day->value,
+            'check_in_date' => $date,
+            'check_out_date' => $date,
+            'estimated_users' => 2,
+        ]]);
+    }
 
         $facilities = new Collection;
 

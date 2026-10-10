@@ -83,6 +83,13 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
 
     public function addGroup(): void
     {
+        if (count($this->groups) >= 20) {
+            $this->addError('groups', 'You can add up to 20 facility groups.');
+
+            return;
+        }
+
+        $this->resetErrorBag('groups');
         $this->groups[] = [
             'facility_product_id' => '',
             'quantity' => 1,
@@ -92,6 +99,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             'estimated_users' => max(1, $this->partyCount),
         ];
         $this->syncRoomOccupantRows();
+        $this->planTotal = '';
     }
 
     public function removeGroup(int $index): void
@@ -102,7 +110,9 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
 
         unset($this->groups[$index]);
         $this->groups = array_values($this->groups);
+        $this->resetErrorBag('groups');
         $this->syncRoomOccupantRows();
+        $this->planTotal = '';
     }
 
     public function updatedGroups(): void
@@ -123,6 +133,10 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             $checkIn = (string) ($group['check_in_date'] ?? '');
 
             if ($checkIn === '') {
+                continue;
+            }
+
+            if (! validator(['date' => $checkIn], ['date' => 'date_format:Y-m-d'])->passes()) {
                 continue;
             }
 
@@ -153,6 +167,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
         FacilityAssignmentService $assignments,
     ): void {
         $this->resetErrorBag();
+        $this->validate($this->planRules());
 
         try {
             $intent = $requirements->replaceGroups(
@@ -162,8 +177,11 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             );
             $this->syncRoomOccupantRows();
             $this->planTotal = $assignments->quoteIntentTotal($intent);
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('plan', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('plan', 'The facility plan could not be saved. Please try again.');
         }
     }
 
@@ -201,12 +219,15 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                 "Reservation {$reservation->r_ref_no} created. Collect/verify at least 50% of the final total before treating the deposit requirement as satisfied.",
             );
             $this->redirect(route('cashier.reservations.index'), navigate: true);
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('plan', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('plan', 'The reservation could not be created. Please try again.');
         }
     }
 
-    protected function rules(): array
+    private function planRules(): array
     {
         return [
             'partyCount' => ['required', 'integer', 'min:1', 'max:500'],
@@ -214,9 +235,16 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             'groups.*.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
             'groups.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
             'groups.*.rate_code' => ['required', 'string', 'max:30'],
-            'groups.*.check_in_date' => ['required', 'date', 'after_or_equal:today'],
-            'groups.*.check_out_date' => ['required', 'date'],
-            'groups.*.estimated_users' => ['required', 'integer', 'min:1'],
+            'groups.*.check_in_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'groups.*.check_out_date' => ['required', 'date_format:Y-m-d'],
+            'groups.*.estimated_users' => ['required', 'integer', 'min:1', 'max:500'],
+        ];
+    }
+
+    protected function rules(): array
+    {
+        return [
+            ...$this->planRules(),
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
@@ -262,8 +290,13 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                 continue;
             }
 
-            $quantity = max(1, (int) ($group['quantity'] ?? 1));
-            $estimatedUsers = max($quantity, (int) ($group['estimated_users'] ?? $quantity));
+            $quantity = (int) ($group['quantity'] ?? 0);
+            $estimatedUsers = (int) ($group['estimated_users'] ?? 0);
+
+            if ($quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $estimatedUsers > 500 || array_sum($counts) + $estimatedUsers > 500) {
+                continue;
+            }
+
             $minimum = intdiv($estimatedUsers, $quantity);
             $remainder = $estimatedUsers % $quantity;
 
@@ -341,6 +374,9 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             </div>
 
             <div class="mt-5 space-y-4">
+                @error('groups')
+                    <p class="text-sm text-red-700 dark:text-red-300">{{ $message }}</p>
+                @enderror
                 @foreach ($groups as $index => $group)
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
@@ -359,7 +395,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                                 @endforeach
                             </x-required-select>
                             <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" label="Estimated users" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated users" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
                             </div>
