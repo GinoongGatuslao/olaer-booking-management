@@ -26,7 +26,14 @@ class RoomOccupantService
             );
         }
 
-        return collect($occupants)->values()->map(function (array $occupant): array {
+        return collect($occupants)->values()->map(function (mixed $occupant): array {
+            if (! is_array($occupant)
+                || ! is_string($occupant['first_name'] ?? null)
+                || ! is_string($occupant['last_name'] ?? null)
+                || ! is_string($occupant['middle_name'] ?? '')) {
+                throw new InvalidArgumentException('Every room occupant needs valid name fields.');
+            }
+
             $firstName = trim((string) ($occupant['first_name'] ?? ''));
             $middleName = trim((string) ($occupant['middle_name'] ?? ''));
             $lastName = trim((string) ($occupant['last_name'] ?? ''));
@@ -35,6 +42,10 @@ class RoomOccupantService
                 throw new InvalidArgumentException(
                     'Every room occupant must have a first name and last name.',
                 );
+            }
+
+            if (mb_strlen($firstName) > 50 || mb_strlen($middleName) > 50 || mb_strlen($lastName) > 50) {
+                throw new InvalidArgumentException('Room occupant names must be 50 characters or fewer.');
             }
 
             return [

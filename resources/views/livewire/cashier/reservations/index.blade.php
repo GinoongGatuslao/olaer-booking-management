@@ -11,6 +11,7 @@ use App\Services\RoomOccupantService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -166,7 +167,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public function beginCancellation(int $reservationId): void
     {
-        $reservation = Reservation::query()->findOrFail($reservationId);
+        $reservation = Reservation::query()->find($reservationId);
+
+        if ($reservation === null) {
+            session()->flash('error', 'This reservation is no longer available. Refresh the list.');
+
+            return;
+        }
 
         if ($reservation->status !== 'Active') {
             session()->flash('error', 'Only active reservations can be cancelled.');
@@ -215,7 +222,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         $detail = ReservationDetail::query()
             ->with(['reservation', 'facility.facilityProduct', 'roomOccupants'])
-            ->findOrFail($reservationDetailId);
+            ->find($reservationDetailId);
+
+        if ($detail === null) {
+            session()->flash('error', 'This facility is no longer available. Refresh the list.');
+
+            return;
+        }
 
         if ($detail->reservation?->status !== 'Active'
             || in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true)) {
@@ -237,6 +250,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'last_name' => $occupant->last_name,
             ])
             ->all();
+        $this->resetValidation();
     }
 
     public function closeDetailAction(): void
@@ -248,6 +262,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->detailFacilityProductId = '';
         $this->detailCancellationReason = '';
         $this->detailOccupants = [];
+        $this->resetValidation();
     }
 
     public function detailTransferProducts(): Collection
@@ -275,9 +290,27 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         ReservationFacilityOperationService $operations,
         RoomOccupantService $occupants,
     ): void {
-        if ($this->detailActionId === null || $this->detailAction === null) {
-            return;
+        $rules = [
+            'detailActionId' => ['required', 'integer', 'exists:tbl_reservation_details,reservation_details_id'],
+            'detailAction' => ['required', Rule::in(['reschedule', 'transfer', 'cancel', 'occupants'])],
+        ];
+
+        if ($this->detailAction === 'reschedule') {
+            $rules['detailCheckInDate'] = ['required', 'date_format:Y-m-d', 'after_or_equal:today'];
+            $rules['detailCheckOutDate'] = ['required', 'date_format:Y-m-d', 'after_or_equal:detailCheckInDate'];
+        } elseif ($this->detailAction === 'transfer') {
+            $rules['detailFacilityProductId'] = ['required', 'integer', Rule::exists('tbl_facility_product', 'facility_product_id')->where('is_active', true)];
+        } elseif ($this->detailAction === 'cancel') {
+            $rules['detailCancellationReason'] = ['required', 'string', 'max:500'];
+        } elseif ($this->detailAction === 'occupants') {
+            $rules['detailOccupants'] = ['required', 'array', 'min:1', 'max:50'];
+            $rules['detailOccupants.*'] = ['required', 'array'];
+            $rules['detailOccupants.*.first_name'] = ['required', 'string', 'max:50'];
+            $rules['detailOccupants.*.middle_name'] = ['nullable', 'string', 'max:50'];
+            $rules['detailOccupants.*.last_name'] = ['required', 'string', 'max:50'];
         }
+
+        $this->validate($rules);
 
         try {
             match ($this->detailAction) {
@@ -313,8 +346,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 default => 'Reservation facility updated.',
             });
             $this->closeDetailAction();
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('detailAction', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('detailAction', 'This facility could not be updated. Refresh the list and try again.');
         }
     }
 
@@ -401,6 +437,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             @error('detailAction')
                 <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
             @enderror
+
+            @if ($errors->has('detailCheckInDate') || $errors->has('detailCheckOutDate') || $errors->has('detailFacilityProductId') || $errors->has('detailCancellationReason') || $errors->has('detailOccupants') || $errors->has('detailOccupants.*.first_name') || $errors->has('detailOccupants.*.last_name'))
+                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $errors->first() }}</div>
+            @endif
 
             <form wire:submit="saveDetailAction" class="mt-5 space-y-4">
                 @if ($detailAction === 'reschedule')

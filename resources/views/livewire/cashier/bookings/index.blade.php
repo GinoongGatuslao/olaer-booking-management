@@ -164,7 +164,7 @@ new class extends Component {
     {
         $validated = $this->validate([
             'rescheduleForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
-            'rescheduleForm.new_check_in_date' => ['required', 'date', 'after_or_equal:today'],
+            'rescheduleForm.new_check_in_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
         ]);
 
         try {
@@ -300,16 +300,28 @@ new class extends Component {
 
     public function saveOccupants(RoomOccupantService $occupants): void
     {
+        $validated = $this->validate([
+            'occupantForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
+            'occupantForm.occupants' => ['required', 'array', 'min:1', 'max:50'],
+            'occupantForm.occupants.*' => ['required', 'array'],
+            'occupantForm.occupants.*.first_name' => ['required', 'string', 'max:50'],
+            'occupantForm.occupants.*.middle_name' => ['nullable', 'string', 'max:50'],
+            'occupantForm.occupants.*.last_name' => ['required', 'string', 'max:50'],
+        ]);
+
         try {
             $occupants->replaceBookingOccupants(
-                (int) $this->occupantForm['booking_details_id'],
-                $this->occupantForm['occupants'],
+                (int) $validated['occupantForm']['booking_details_id'],
+                $validated['occupantForm']['occupants'],
                 (int) Auth::id(),
             );
             $this->cancelOccupants();
             session()->flash('success', 'Room occupant names updated and audited.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('occupants', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('occupants', 'Room occupants could not be saved. Refresh the list and try again.');
         }
     }
 
@@ -510,6 +522,7 @@ new class extends Component {
             <flux:heading size="lg">Edit room occupants</flux:heading>
             <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
             @error('occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
+            @error('occupantForm.occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
             <form wire:submit="saveOccupants" class="mt-4 space-y-4">
                 @forelse ($occupantForm['occupants'] as $index => $occupant)
                     <div class="grid gap-3 md:grid-cols-3">

@@ -103,11 +103,14 @@ class extends Component
                     ? 'Entrance slip updated. Print the revised slip before sending the guest to the cashier.'
                     : 'Entrance slip created. Review or edit it, then print it and direct the guest to the cashier.',
             );
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError(
                 'entranceSlip',
                 $exception->getMessage(),
             );
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('entranceSlip', 'The entrance slip could not be saved. Please try again.');
         }
     }
 
@@ -161,8 +164,11 @@ class extends Component
                 'success',
                 "Entrance slip #{$oldSlipId} was voided and replaced with #{$replacement->entrance_slip_id}. The locked original history was preserved.",
             );
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('entranceSlip', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('entranceSlip', 'The replacement slip could not be created. Please try again.');
         }
     }
 

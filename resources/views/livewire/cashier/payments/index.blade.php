@@ -252,8 +252,11 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 'success',
                 'Payment recorded successfully. The receipt is ready.',
             );
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('payment', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('payment', 'The payment could not be recorded. Please refresh and try again.');
         }
     }
 

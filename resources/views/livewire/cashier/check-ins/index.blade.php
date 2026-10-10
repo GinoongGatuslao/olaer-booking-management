@@ -179,8 +179,11 @@ new class extends Component {
             $this->cancelSelection();
             $this->resetPage();
             session()->flash('success', 'Guest checked in successfully.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('checkIn', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('checkIn', 'Check-in could not be completed. Refresh the list and try again.');
         }
     }
 

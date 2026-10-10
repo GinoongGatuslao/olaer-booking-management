@@ -223,8 +223,11 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             $this->refreshSelectedState();
 
             session()->flash('success', 'Inspection request sent to maintenance.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('checkOut', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('checkOut', 'The inspection request could not be sent. Refresh and try again.');
         }
     }
 
@@ -253,8 +256,11 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             $this->cancelSelection();
             $this->resetPage();
             session()->flash('success', 'Guest checked out successfully. Facility is now available.');
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             $this->addError('checkOut', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('checkOut', 'Check-out could not be completed. Refresh the list and try again.');
         }
     }
 

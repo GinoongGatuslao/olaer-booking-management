@@ -67,6 +67,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
 
     public function with(): array
     {
+        if ($this->generated && validator($this->reportInputs(), $this->reportRules())->fails()) {
+            $this->generated = false;
+            $this->addError('reportType', 'Report filters are invalid. Review the fields and generate the report again.');
+        }
+
+        if (! $this->generated) {
+            $this->printAll = false;
+        }
+
         $service = app(ReportsService::class);
 
         return [
@@ -80,6 +89,29 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
 
     public function generate(): void
     {
+        $this->validate($this->reportRules());
+
+        $this->generated = true;
+        $this->printAll = false;
+        $this->resetPage('reportPage');
+    }
+
+    private function reportInputs(): array
+    {
+        return [
+            'reportType' => $this->reportType,
+            'perPage' => $this->perPage,
+            'reportSearch' => $this->reportSearch,
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
+            'month' => $this->month,
+            'year' => $this->year,
+            'facilityTypeId' => $this->facilityTypeId,
+        ];
+    }
+
+    private function reportRules(): array
+    {
         $rules = [
             'reportType' => [
                 'required',
@@ -89,17 +121,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
             'reportSearch' => ['nullable', 'string', 'max:100'],
         ];
 
-        if ($this->reportType === 'tourism') {
-            $rules['month'] = ['required', 'integer', 'between:1,12'];
-            $rules['year'] = ['required', 'integer', 'between:2000,2100'];
-        } else {
-            $rules['startDate'] = ['required', 'date'];
-            $rules['endDate'] = [
-                'required',
-                'date',
-                'after_or_equal:startDate',
-            ];
-        }
+        $rules['startDate'] = ['required', 'date_format:Y-m-d'];
+        $rules['endDate'] = ['required', 'date_format:Y-m-d', 'after_or_equal:startDate'];
 
         if ($this->usesFacilityType()) {
             $rules['facilityTypeId'] = [
@@ -109,11 +132,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
             ];
         }
 
-        $this->validate($rules);
-
-        $this->generated = true;
-        $this->printAll = false;
-        $this->resetPage('reportPage');
+        return $rules;
     }
 
     public function clearReport(): void

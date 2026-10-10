@@ -155,6 +155,10 @@ class BookingWorkflowService
 
     public function rescheduleBookingDetail(int $bookingDetailsId, string $newCheckInDate): void
     {
+        if (validator(['check_in_date' => $newCheckInDate], ['check_in_date' => ['required', 'date_format:Y-m-d']])->fails()) {
+            throw new InvalidArgumentException('Choose a valid check-in date.');
+        }
+
         DB::transaction(function () use ($bookingDetailsId, $newCheckInDate): void {
             $detail = BookingDetail::query()
                 ->with('booking')

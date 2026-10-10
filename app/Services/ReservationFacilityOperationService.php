@@ -28,6 +28,16 @@ class ReservationFacilityOperationService
         ?string $newCheckOutDate,
         int $userId,
     ): ReservationDetail {
+        if (validator([
+            'check_in_date' => $newCheckInDate,
+            'check_out_date' => $newCheckOutDate,
+        ], [
+            'check_in_date' => ['required', 'date_format:Y-m-d'],
+            'check_out_date' => ['nullable', 'date_format:Y-m-d'],
+        ])->fails()) {
+            throw new InvalidArgumentException('Choose valid check-in and check-out dates.');
+        }
+
         return DB::transaction(function () use (
             $reservationDetailId,
             $newCheckInDate,

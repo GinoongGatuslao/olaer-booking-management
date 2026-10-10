@@ -66,6 +66,15 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
 
     public function with(): array
     {
+        if ($this->generated && validator($this->reportInputs(), $this->reportRules())->fails()) {
+            $this->generated = false;
+            $this->addError('reportType', 'Report filters are invalid. Review the fields and generate the report again.');
+        }
+
+        if (! $this->generated) {
+            $this->printAll = false;
+        }
+
         $service = app(ReportsService::class);
 
         return [
@@ -78,6 +87,29 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
     }
 
     public function generate(): void
+    {
+        $this->validate($this->reportRules());
+
+        $this->generated = true;
+        $this->printAll = false;
+        $this->resetPage('reportPage');
+    }
+
+    private function reportInputs(): array
+    {
+        return [
+            'reportType' => $this->reportType,
+            'perPage' => $this->perPage,
+            'reportSearch' => $this->reportSearch,
+            'startDate' => $this->startDate,
+            'endDate' => $this->endDate,
+            'month' => $this->month,
+            'year' => $this->year,
+            'facilityTypeId' => $this->facilityTypeId,
+        ];
+    }
+
+    private function reportRules(): array
     {
         $rules = [
             'reportType' => [
@@ -92,10 +124,10 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             $rules['month'] = ['required', 'integer', 'between:1,12'];
             $rules['year'] = ['required', 'integer', 'between:2000,2100'];
         } else {
-            $rules['startDate'] = ['required', 'date'];
+            $rules['startDate'] = ['required', 'date_format:Y-m-d'];
             $rules['endDate'] = [
                 'required',
-                'date',
+                'date_format:Y-m-d',
                 'after_or_equal:startDate',
             ];
         }
@@ -108,11 +140,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             ];
         }
 
-        $this->validate($rules);
-
-        $this->generated = true;
-        $this->printAll = false;
-        $this->resetPage('reportPage');
+        return $rules;
     }
 
     public function clearReport(): void
