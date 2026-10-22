@@ -491,7 +491,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->amenities as $amenity)
-                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}" class="{{ $editingId === (int) $amenity->amenity_id}} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
+                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}" class="{{ $editingId === (int) $amenity->amenity_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : ''}} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }}
                                     </td>

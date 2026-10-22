@@ -88,7 +88,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
             </thead>
             <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                 @forelse ($this->entranceFees as $fee)
-                    <tr wire:key="entrance-fee-{{ $fee->entrance_fee_id }}" class="hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
+                    <tr wire:key="entrance-fee-{{ $fee->entrance_fee_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : ''}}" class="hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                         <td class="px-5 py-4 font-medium">{{ $fee->entrance_fee_name }}</td>
                         <td class="px-5 py-4 font-semibold">₱{{ number_format((float) $fee->entrance_fee_price, 2) }}</td>
                         <td class="px-5 py-4 text-right"><flux:button type="button" wire:click="edit({{ $fee->entrance_fee_id }})" icon="pencil-square" variant="ghost" size="sm">Edit rate</flux:button></td>

@@ -78,6 +78,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             $query->where('status', $this->statusFilter);
         }
 
+        if ($this->dateFrom !== '' || $this->dateTo !== '') {
+        $query->whereHas('details', function ($detailsQuery): void {
+            if ($this->dateFrom !== '') {
+                $detailsQuery->whereDate('check_in_date', '=', $this->dateFrom);
+            }
+
+            if ($this->dateTo !== '') {
+                $detailsQuery->whereDate('check_out_date', '=', $this->dateTo);
+            }
+        });
+    }
+
         if (trim($this->search) !== '') {
             $search = '%' . trim($this->search) . '%';
 
@@ -539,6 +551,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         <option value="50">50</option>
                         <option value="100">100</option>
                     </flux:select>
+
+                    <flux:input
+                            wire:model.live="dateFrom"
+                            type="date"
+                            label="From"
+                        />
+
+                        <flux:input
+                            wire:model.live="dateTo"
+                            type="date"
+                            label="To"
+                        />
                 </div>
 
                 <x-slot:actions>

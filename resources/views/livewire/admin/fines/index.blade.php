@@ -719,7 +719,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         </div>
                     </div>
 
-                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <flux:input
                             wire:model.live.debounce.300ms="search"
                             label="Search"
@@ -783,7 +783,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->fines as $fine)
-                                <tr wire:key="fine-row-{{ $fine->fine_id }}" class="{{ $editingFineId === (int) $fine->fine_id }}hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
+                                <tr wire:key="fine-row-{{ $fine->fine_id }}" class="{{ $editingFineId === (int) $fine->fine_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : ''}}hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="max-w-sm px-5 py-4">
                                         <p class="font-medium">
                                             {{ $this->fineName($fine) }}

@@ -187,7 +187,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
     @endif
 
     <flux:card>
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <flux:input
                 label="Guest / Reference"
                 placeholder="Name, email, contact, reservation or booking ref"

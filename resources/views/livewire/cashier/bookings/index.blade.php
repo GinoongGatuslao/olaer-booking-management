@@ -103,6 +103,8 @@ new class extends Component {
         $this->sortField = 'booking_id';
         $this->sortDirection = 'desc';
         $this->perPage = 10;
+        $this->dateFrom = '';
+        $this->dateTo = '';
 
         $this->resetPage();
     }
@@ -415,6 +417,14 @@ new class extends Component {
             $query->where('tbl_booking_details.status', $this->detailStatusFilter);
         }
 
+        if($this->dateFrom !== ''){
+            $query->where('tbl_booking_details.check_in_date', $this->dateFrom);
+        }
+        if($this->dateTo !== ''){
+            $query->where('tbl_booking_details.check_out_date', $this->dateTo);
+        }
+
+
         $sortMap = [
             'booking_id' => 'tbl_booking.booking_id',
             'b_ref_no' => 'tbl_booking.b_ref_no',
@@ -605,7 +615,7 @@ new class extends Component {
                 :count="$bookings->total()"
                 count-label="records"
             >
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <flux:input
                         wire:model.live.debounce.300ms="search"
                         label="Search"
@@ -626,6 +636,18 @@ new class extends Component {
                             <option value="{{ $detailStatus }}">{{ $detailStatus }}</option>
                         @endforeach
                     </flux:select>
+
+                    <flux:input
+                            wire:model.live="dateFrom"
+                            type="date"
+                            label="From"
+                        />
+
+                        <flux:input
+                            wire:model.live="dateTo"
+                            type="date"
+                            label="To"
+                        />
 
                     <flux:select wire:model.live="perPage" label="Rows per page">
                         <option value="10">10</option>
