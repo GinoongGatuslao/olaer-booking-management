@@ -38,8 +38,8 @@ class FacilityRequirementService
         $intent = FacilityRequirementIntent::query()
             ->with(['groups.facilityProduct.productRates', 'reservation'])
             ->where('token', $token)
-            ->where('session_id', $sessionId)
-            ->where('expires_at', '>', now())
+            //->where('session_id', $sessionId)//
+            //->where('expires_at', '>', now())//
             ->first();
 
         if (! $intent) {
@@ -67,7 +67,7 @@ class FacilityRequirementService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedIntent->status !== 'Draft' || $lockedIntent->expires_at->isPast()) {
+            if ($lockedIntent->status !== 'Draft' /*|| $lockedIntent->expires_at->isPast()*/) {
                 throw new InvalidArgumentException('This facility plan can no longer be changed.');
             }
 

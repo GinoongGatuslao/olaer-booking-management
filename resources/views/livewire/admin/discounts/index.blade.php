@@ -539,7 +539,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate discount master records.
                         </p>
-                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create discount</flux:button>
+                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create Discount</flux:button>
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -616,7 +616,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('discount_name')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Name {{ $this->sortIcon('discount_name') }}
+                                        NAME {{ $this->sortIcon('discount_name') }}
                                     </button>
                                 </th>
 
@@ -626,7 +626,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('discount_amount')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Discount {{ $this->sortIcon('discount_amount') }}
+                                        DISCOUNT {{ $this->sortIcon('discount_amount') }}
                                     </button>
                                 </th>
 
@@ -638,7 +638,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('discount_start')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Start {{ $this->sortIcon('discount_start') }}
+                                        START {{ $this->sortIcon('discount_start') }}
                                     </button>
                                 </th>
 
@@ -648,7 +648,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('discount_end')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        End {{ $this->sortIcon('discount_end') }}
+                                        END {{ $this->sortIcon('discount_end') }}
                                     </button>
                                 </th>
 
@@ -658,7 +658,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                                         wire:click="sortBy('status')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Status {{ $this->sortIcon('status') }}
+                                        STATUS {{ $this->sortIcon('status') }}
                                     </button>
                                 </th>
 
@@ -667,11 +667,11 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             </tr>
                         </thead>
 
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 ">
                             @forelse ($this->discounts as $discount)
                                 @php($timing = $this->timingLabel($discount))
 
-                                <tr wire:key="discount-row-{{ $discount->discount_id }}" class="{{ $editingId === (int) $discount->discount_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                                <tr wire:key="discount-row-{{ $discount->discount_id }}" class="{{ $editingId === (int) $discount->discount_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $discount->discount_name }}
                                     </td>
@@ -763,14 +763,6 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         </p>
                     </div>
 
-                    <flux:button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        wire:click="createNew"
-                    >
-                        New
-                    </flux:button>
                 </div>
 
                 <form wire:submit="save" class="mt-5 space-y-4">
@@ -885,7 +877,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <flux:button type="submit" variant="primary">
                             {{ $editingId !== null
                                 ? 'Save Changes'
-                                : 'Create Discount' }}
+                                : 'Save Discount' }}
                         </flux:button>
                     </div>
                 </form>

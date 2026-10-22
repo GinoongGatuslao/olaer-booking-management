@@ -361,6 +361,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
 ?>
 
 <div class="space-y-6">
+    <style>
+        @page { margin: 0; }
+        @media print {
+            body { background: white !important;}
+            header {
+                display: none !important;
+            }
+        }
+    </style>
     <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">

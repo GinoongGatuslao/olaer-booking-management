@@ -48,7 +48,6 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
         }
 
         $this->token = $intent->token;
-        $this->partyCount = $intent->party_count;
         $this->groups = $intent->groups->map(fn ($group): array => [
             'facility_product_id' => (string) $group->facility_product_id,
             'quantity' => $group->quantity,
@@ -57,12 +56,17 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             'check_out_date' => $group->check_out_date->toDateString(),
             'estimated_users' => $group->estimated_users,
         ])->all();
-
+        $this->updatePartyCount();
         if ($this->groups === []) {
             $this->addGroup();
         }
 
         $this->syncRoomOccupantRows();
+    }
+
+    private function updatePartyCount(): void
+    {
+        $this->partyCount = max(1, (int) collect($this->groups)->sum('estimated_users'));
     }
 
     #[Computed]
@@ -96,10 +100,11 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             'rate_code' => '',
             'check_in_date' => today()->toDateString(),
             'check_out_date' => today()->addDay()->toDateString(),
-            'estimated_users' => max(1, $this->partyCount),
+            'estimated_users' => 1,
         ];
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->updatePartyCount();
     }
 
     public function removeGroup(int $index): void
@@ -113,6 +118,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
         $this->resetErrorBag('groups');
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->updatePartyCount();
     }
 
     public function updatedGroups(): void
@@ -154,6 +160,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
 
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->updatePartyCount();
     }
 
     public function updatedPartyCount(): void
@@ -347,17 +354,16 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
 
     <form wire:submit="submit" class="space-y-6">
         <flux:card>
-            <flux:heading size="lg">Guest</flux:heading>
+            <flux:heading size="lg">Guest information</flux:heading>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
                 <x-required-input wire:model="firstName" name="firstName" label="First name" />
                 <flux:input wire:model="middleName" label="Middle name" />
                 <x-required-input wire:model="lastName" name="lastName" label="Last name" />
                 <x-required-input wire:model="email" name="email" type="email" label="Email" />
                 <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" />
-                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
-            </div>
-            <div class="mt-4 grid gap-4 md:grid-cols-4">
                 <x-required-input wire:model="province" name="province" label="Province" />
+            </div>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
                 <x-required-input wire:model="city" name="city" label="City/Municipality" />
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
@@ -381,11 +387,11 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
                     <div wire:key="cashier-reservation-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                        <div class="grid gap-4 lg:grid-cols-6">
-                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type / product" class="lg:col-span-2">
-                                <option value="">Choose product</option>
+                        <div class="grid gap-4 lg:grid-cols-5">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility name" class="lg:col-span-2">
+                                <option value="">Choose name</option>
                                 @foreach ($this->products as $candidate)
-                                    <option value="{{ $candidate->facility_product_id }}">{{ $candidate->facilityType?->facility_type }} — {{ $candidate->display_name }}</option>
+                                    <option value="{{ $candidate->facility_product_id }}"> {{ $candidate->display_name }}</option>
                                 @endforeach
                             </x-required-select>
                             <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">

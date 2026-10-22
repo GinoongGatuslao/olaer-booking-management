@@ -1562,7 +1562,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('facility_inspection_request_id')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Request {{ $this->sortIndicator('facility_inspection_request_id') }}
+                            REQUEST {{ $this->sortIndicator('facility_inspection_request_id') }}
                         </button>
                     </th>
 
@@ -1572,7 +1572,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('requested_at')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Requested {{ $this->sortIndicator('requested_at') }}
+                            REQUESTED {{ $this->sortIndicator('requested_at') }}
                         </button>
                     </th>
 
@@ -1582,7 +1582,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('b_ref_no')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Booking {{ $this->sortIndicator('b_ref_no') }}
+                            BOOKING {{ $this->sortIndicator('b_ref_no') }}
                         </button>
                     </th>
 
@@ -1592,7 +1592,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('guest_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Guest {{ $this->sortIndicator('guest_name') }}
+                            GUEST {{ $this->sortIndicator('guest_name') }}
                         </button>
                     </th>
 
@@ -1602,7 +1602,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('facility_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Facility {{ $this->sortIndicator('facility_name') }}
+                            FACILITY {{ $this->sortIndicator('facility_name') }}
                         </button>
                     </th>
 
@@ -1612,7 +1612,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('check_out_date')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Scheduled Departure {{ $this->sortIndicator('check_out_date') }}
+                            SCHEDULED DEPARTURE {{ $this->sortIndicator('check_out_date') }}
                         </button>
                     </th>
 
@@ -1624,7 +1624,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('assigned_to')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Assigned To {{ $this->sortIndicator('assigned_to') }}
+                            ASSIGNED TO {{ $this->sortIndicator('assigned_to') }}
                         </button>
                     </th>
 
@@ -1634,7 +1634,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             wire:click="sortBy('request_status')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Request Status {{ $this->sortIndicator('request_status') }}
+                            REQUEST STATUS {{ $this->sortIndicator('request_status') }}
                         </button>
                     </th>
 

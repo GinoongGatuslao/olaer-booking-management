@@ -25,6 +25,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
+    #[Url(as: 'date_from', except: '')]
+    public string $dateFrom = '';
+
+    #[Url(as: 'date_to', except: '')]
+    public string $dateTo = '';
+
     #[Url(as: 'status', except: 'Active')]
     public string $statusFilter = 'Active';
 
@@ -557,19 +563,19 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             wire:click="sortBy('r_ref_no')"
                             class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
                         >
-                            Ref {{ $this->getSortIcon('r_ref_no') }}
+                            REF {{ $this->getSortIcon('r_ref_no') }}
                         </button>
                     </th>
-                    <th class="px-4 py-3 font-semibold">Guest</th>
-                    <th class="px-4 py-3 font-semibold">Facility</th>
-                    <th class="px-4 py-3 font-semibold">Schedule</th>
+                    <th class="px-4 py-3 font-semibold">GUEST</th>
+                    <th class="px-4 py-3 font-semibold">FACILITY</th>
+                    <th class="px-4 py-3 font-semibold">SCHEDULE</th>
                     <th class="px-4 py-3">
                         <button
                             type="button"
                             wire:click="sortBy('total_price')"
                             class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
                         >
-                            Total {{ $this->getSortIcon('total_price') }}
+                            TOTAL {{ $this->getSortIcon('total_price') }}
                         </button>
                     </th>
                     <th class="px-4 py-3 font-semibold">Paid</th>
@@ -579,7 +585,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             wire:click="sortBy('amount_due')"
                             class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
                         >
-                            Due {{ $this->getSortIcon('amount_due') }}
+                            DUE {{ $this->getSortIcon('amount_due') }}
                         </button>
                     </th>
                     <th class="px-4 py-3">
@@ -588,7 +594,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             wire:click="sortBy('status')"
                             class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
                         >
-                            Status {{ $this->getSortIcon('status') }}
+                            STATUS {{ $this->getSortIcon('status') }}
                         </button>
                     </th>
                     <th class="px-4 py-3 text-right font-semibold">Actions</th>

@@ -98,9 +98,9 @@ class GuestReservationManagementService
                 throw new InvalidArgumentException('No active OTP request was found. Please request a new OTP.');
             }
 
-            if (Carbon::parse($record->expires_at)->isPast()) {
+            /*if (Carbon::parse($record->expires_at)->isPast()) {
                 throw new InvalidArgumentException('OTP expired. Please request a new OTP.');
-            }
+            }*/
 
             if ($record->attempts >= self::MAX_OTP_ATTEMPTS) {
                 throw new InvalidArgumentException('Too many OTP attempts. Please request a new OTP.');

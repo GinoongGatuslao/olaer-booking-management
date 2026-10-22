@@ -714,7 +714,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                             Search, filter, sort, and paginate fine master records.
                         </p>
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <flux:button type="button" wire:click="createNewFine" variant="primary">Create fine</flux:button>
+                            <flux:button type="button" wire:click="createNewFine" variant="primary">Create Fine</flux:button>
                             <flux:button type="button" wire:click="manageDamageTypes" variant="ghost">Manage damage types</flux:button>
                         </div>
                     </div>
@@ -773,14 +773,17 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     <table class="w-full min-w-[68rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
-
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('fine_name')">FINE{{ $this->sortIcon('fine_name') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('fine_type')">FINE TYPE{{ $this->sortIcon('fine_type') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('damage_type')">DAMAGE TYPE{{ $this->sortIcon('damage_type') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('fine_charge')">FINE CHARGE{{ $this->sortIcon('fine_charge') }}</button></th>
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
                         </thead>
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->fines as $fine)
-                                <tr wire:key="fine-row-{{ $fine->fine_id }}" class="{{ $editingFineId === (int) $fine->fine_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                                <tr wire:key="fine-row-{{ $fine->fine_id }}" class="{{ $editingFineId === (int) $fine->fine_id }}hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="max-w-sm px-5 py-4">
                                         <p class="font-medium">
                                             {{ $this->fineName($fine) }}
@@ -909,6 +912,14 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                                 </option>
                             @endforeach
                         </flux:select>
+                        <flux:input
+                            wire:model="fineCharge"
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            label="Fine charge"
+                            placeholder="200.00"
+                        />
                     @else
                         <flux:input
                             wire:model="situationalFine"
@@ -923,14 +934,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         />
                     @endif
 
-                    <flux:input
-                        wire:model="fineCharge"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        label="Fine charge"
-                        placeholder="200.00"
-                    />
+
 
                     <div class="flex justify-end gap-3 pt-2">
                         <flux:button
@@ -944,7 +948,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         <flux:button type="submit" variant="primary">
                             {{ $editingFineId !== null
                                 ? 'Save Changes'
-                                : 'Create Fine' }}
+                                : 'Save Fine' }}
                         </flux:button>
                     </div>
                 </form>

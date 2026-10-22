@@ -60,7 +60,6 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
 
         $this->token = $intent->token;
-        $this->partyCount = $intent->party_count;
         $this->groups = $intent->groups->map(fn ($group): array => [
             'facility_product_id' => (string) $group->facility_product_id,
             'quantity' => $group->quantity,
@@ -69,7 +68,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'check_out_date' => $group->check_out_date->toDateString(),
             'estimated_users' => $group->estimated_users,
         ])->all();
-
+        $this->updatePartyCount();
         if ($this->groups === []) {
             $this->addGroup();
         }
@@ -102,10 +101,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'rate_code' => '',
             'check_in_date' => today()->toDateString(),
             'check_out_date' => today()->addDay()->toDateString(),
-            'estimated_users' => max(1, $this->partyCount),
+            'estimated_users' => 1,
         ];
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
     public function removeGroup(int $index): void
@@ -120,6 +120,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
     public function updatedGroups(): void
@@ -161,14 +162,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
-    public function updatedPartyCount(): void
-    {
-        $this->syncRoomOccupantRows();
-        $this->planTotal = '';
-        $this->paymentAmount = '';
-    }
 
     public function savePlan(
         FacilityRequirementService $requirements,
@@ -378,8 +374,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         $this->roomOccupants = $rooms;
     }
+    private function updatePartyCount(): void
+    {
+        $this->partyCount = max(1, (int) collect($this->groups)->sum('estimated_users'));
+    }
 };
-
 ?>
 
 <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -404,7 +403,6 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     <flux:heading size="lg">Facility requirements</flux:heading>
                     <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
                 </div>
-                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
             </div>
 
             <div class="mt-6 space-y-4">
@@ -415,11 +413,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                     @php($availability = $this->availabilityFor($index))
                     @php($selectedProduct = $this->productFor($index))
                     <div wire:key="facility-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                        <div class="grid gap-4 lg:grid-cols-6">
-                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type and name" class="lg:col-span-2">
+                        <div class="grid gap-4 lg:grid-cols-5">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility name" class="lg:col-span-2">
                                 <option value="">Choose a facility</option>
                                 @foreach ($this->products as $product)
-                                    <option value="{{ $product->facility_product_id }}">{{ $product->facilityType?->facility_type }} — {{ $product->display_name }}</option>
+                                    <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                                 @endforeach
                             </x-required-select>
 
@@ -430,7 +428,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                                 @endforeach
                             </x-required-select>
                             <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated users" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated guests" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" wire:click="removeGroup({{ $index }})" class="w-full">Remove</flux:button>
                             </div>

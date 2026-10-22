@@ -2,6 +2,7 @@
 
 use App\Models\EntranceSlip;
 use App\Services\EntranceSlipCalculator;
+use App\Services\SecurityDashboardService;
 use App\Services\EntranceSlipWorkflowService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -70,6 +71,30 @@ class extends Component
             ->find($this->createdSlipId);
     }
 
+    #[Computed]
+    public function recentSlips()
+    {
+        return app(SecurityDashboardService::class)
+            ->myRecentSlips((int) auth()->id());
+    }
+
+    public function slipNumber(EntranceSlip $slip): string
+    {
+        return app(SecurityDashboardService::class)
+            ->formatSlipNumber($slip);
+    }
+
+    public function createdTime(?string $time): string
+    {
+        return app(SecurityDashboardService::class)
+            ->formatCreatedTime($time);
+    }
+
+    public function totalGuests(EntranceSlip $slip): int
+    {
+        return app(SecurityDashboardService::class)
+            ->totalGuests($slip);
+    }
     public function getDiscountsFor(
         string $categoryKey,
     ): Collection {
@@ -522,6 +547,108 @@ class extends Component
             @endif
         </aside>
     </div>
+    <flux:card>
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-lg font-semibold">My entrance slips today</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                    Recent slips created using your account.
+                </p>
+            </div>
+
+            @if (Route::has('security.entrance-slips.create'))
+                <flux:button
+                    href="{{ route('security.entrance-slips.create') }}"
+                    wire:navigate
+                    size="sm"
+                    variant="ghost"
+                >
+                    New Slip
+                </flux:button>
+            @endif
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[56rem] text-left text-sm">
+                <thead class="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
+                    <tr>
+                        <th class="px-2 py-3">Slip</th>
+                        <th class="px-2 py-3">Time</th>
+                        <th class="px-2 py-3">Guests</th>
+                        <th class="px-2 py-3">Breakdown</th>
+                        <th class="px-2 py-3">Total</th>
+                        <th class="px-2 py-3">Status</th>
+                        <th class="px-2 py-3">Handled by</th>
+                        <th class="px-2 py-3 text-right">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    @forelse ($this->recentSlips as $slip)
+                        <tr wire:key="security-slip-{{ $slip->entrance_slip_id }}">
+                            <td class="px-2 py-3 font-medium">
+                                {{ $this->slipNumber($slip) }}
+                            </td>
+
+                            <td class="px-2 py-3">
+                                {{ $this->createdTime($slip->time_created) }}
+                            </td>
+
+                            <td class="px-2 py-3 font-medium">
+                                {{ $this->totalGuests($slip) }}
+                            </td>
+
+                            <td class="px-2 py-3 text-xs text-zinc-500">
+                                A {{ $slip->no_of_adult }}
+                                · C {{ $slip->no_of_children }}
+                                · SC/PWD {{ $slip->no_of_PWD_SC }}
+                                <br>
+                                M {{ $slip->no_of_Male }}
+                                · F {{ $slip->no_of_Female }}
+                                <!--· T {{ $slip->no_of_Tourist }}-->
+                            </td>
+
+                            <td class="px-2 py-3 font-medium">
+                                ₱{{ number_format((float) $slip->total_price, 2) }}
+                            </td>
+
+                            <td class="px-2 py-3">
+                                <x-status-badge :status="$slip->status" />
+                            </td>
+
+                            <td class="px-2 py-3 text-zinc-500">
+                                {{ $slip->handledBy?->full_name ?? 'Waiting for cashier' }}
+                            </td>
+
+                            <td class="px-2 py-3 text-right">
+                                @if (Route::has('print.entrance-slip'))
+                                    <flux:button
+                                        href="{{ route('print.entrance-slip', $slip) }}"
+                                        target="_blank"
+                                        size="sm"
+                                        variant="ghost"
+                                    >
+                                        Print
+                                    </flux:button>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="px-2 py-6">
+                                <x-dashboard-empty-state
+                                    title="No entrance slips created today"
+                                    description="Create a slip when the next walk-in group arrives."
+                                    :href="Route::has('security.entrance-slips.create') ? route('security.entrance-slips.create') : null"
+                                    action="Create entrance slip"
+                                />
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </flux:card>
     <flux:modal wire:model="showCorrectionDialog" class="md:w-[34rem]">
         <div class="space-y-5">
             <div>

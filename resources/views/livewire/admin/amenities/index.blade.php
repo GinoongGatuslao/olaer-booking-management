@@ -441,7 +441,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate without loading every amenity at once.
                         </p>
-                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create amenity</flux:button>
+                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create Amenity</flux:button>
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -481,14 +481,17 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                     <table class="w-full min-w-[68rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                             <tr>
-
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_name')">NAME {{ $this->sortIcon('amenity_name') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_description')">DESCRIPTION{{ $this->sortIcon('amenity_description') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_type')">AMENITY TYPE{{ $this->sortIcon('amenity_type') }}</button></th>
+                                <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_price')">PRICE{{ $this->sortIcon('amenity_price') }}</button></th>
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
                         </thead>
 
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->amenities as $amenity)
-                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}" class="{{ $editingId === (int) $amenity->amenity_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                                <tr wire:key="amenity-row-{{ $amenity->amenity_id }}" class="{{ $editingId === (int) $amenity->amenity_id}} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }}
                                     </td>
@@ -624,7 +627,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         <flux:button type="submit" variant="primary">
                             {{ $editingId !== null
                                 ? 'Save Changes'
-                                : 'Create Amenity' }}
+                                : 'Save Amenity' }}
                         </flux:button>
                     </div>
                 </form>

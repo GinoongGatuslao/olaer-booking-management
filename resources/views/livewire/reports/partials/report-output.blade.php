@@ -238,7 +238,7 @@
                                     @endif
                                 @endforeach
                             </td>
-                            <td class="p-2">{{ $booking->no_of_extra_guests }}</td>
+                            <td class="p-2">{{ $booking->total_guest_count }}</td>
                             <td class="p-2">{{ $booking->status }}</td>
                             <td class="p-2 text-right">{{ $this->money($booking->total_price) }}</td>
                             <td class="p-2 text-right">{{ $this->money($booking->amount_due) }}</td>
@@ -391,7 +391,7 @@
                     <tr>
                         <th class="p-2">Facility</th>
                         <th class="p-2">Type</th>
-                        <th class="p-2">Size</th>
+                        <th class="p-2">Name</th>
                         <th class="p-2">Capacity</th>
                         <th class="p-2">Rates</th>
                     </tr>
@@ -426,16 +426,12 @@
     @endif
 
     @if ($reportType === 'facility_utilization')
-        <div class="mb-4 grid gap-3 md:grid-cols-2">
+        <div class="mb-4 grid gap-3 ">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Facilities With Booking Use</p>
                 <p class="text-xl font-bold">{{ $report['count'] }}</p>
             </div>
 
-            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Booked Facility Uses</p>
-                <p class="text-xl font-bold">{{ $report['total_bookings'] }}</p>
-            </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -444,7 +440,7 @@
                     <tr>
                         <th class="p-2">Facility</th>
                         <th class="p-2">Type</th>
-                        <th class="p-2">Size</th>
+                        <th class="p-2">Name</th>
                         <th class="p-2">Capacity</th>
                         <th class="p-2 text-right">Bookings</th>
                         <th class="p-2 text-right">Share of Uses</th>

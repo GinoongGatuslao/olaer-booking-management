@@ -651,47 +651,46 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                     <tr>
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('created_at')" class="font-semibold">
-                                Date and time {{ $this->sortIndicator('created_at') }}
+                                DATE AND TIME {{ $this->sortIndicator('created_at') }}
                             </button>
                         </th>
 
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('actor')" class="font-semibold">
-                                Actor {{ $this->sortIndicator('actor') }}
+                                ACTOR {{ $this->sortIndicator('actor') }}
                             </button>
                         </th>
 
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('module')" class="font-semibold">
-                                Module {{ $this->sortIndicator('module') }}
+                                MODULE {{ $this->sortIndicator('module') }}
                             </button>
                         </th>
 
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('action')" class="font-semibold">
-                                Action {{ $this->sortIndicator('action') }}
+                                ACTION {{ $this->sortIndicator('action') }}
                             </button>
                         </th>
 
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('subject_label')" class="font-semibold">
-                                Record / Description {{ $this->sortIndicator('subject_label') }}
+                                RECORD / DESCRIPTION {{ $this->sortIndicator('subject_label') }}
                             </button>
                         </th>
 
                         <th class="px-4 py-3">
                             <button wire:click="sortBy('ip_address')" class="font-semibold">
-                                Client {{ $this->sortIndicator('ip_address') }}
+                                CLIENT {{ $this->sortIndicator('ip_address') }}
                             </button>
                         </th>
 
-                        <th class="px-4 py-3">Changes</th>
                     </tr>
                 </thead>
 
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($this->logs as $log)
-                        <tr wire:key="activity-log-{{ $log->activity_log_id }}" class="align-top {{ $selectedLogId === (int) $log->activity_log_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                        <tr wire:key="activity-log-{{ $log->activity_log_id }}" class="align-top {{ $selectedLogId === (int) $log->activity_log_id }} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                             <td class="whitespace-nowrap px-4 py-4">
                                 <p class="font-medium">{{ $log->created_at?->format('M d, Y') }}</p>
                                 <p class="text-xs text-zinc-500">{{ $log->created_at?->format('h:i:s A') }}</p>
@@ -738,16 +737,11 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
 
                                 @if ($log->user_agent)
                                     <flux:button type="button" size="sm" variant="ghost" icon="information-circle" class="mt-2" wire:click="showDetails({{ $log->activity_log_id }})">
-                                        User agent
+                                        More Details
                                     </flux:button>
                                 @endif
                             </td>
 
-                            <td class="px-4 py-4">
-                                <flux:button type="button" size="sm" variant="ghost" icon="eye" wire:click="showDetails({{ $log->activity_log_id }})">
-                                    View details
-                                </flux:button>
-                            </td>
                         </tr>
                     @empty
                         <tr>

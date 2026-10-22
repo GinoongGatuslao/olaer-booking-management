@@ -201,7 +201,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             @forelse ($this->reservations() as $reservation)
                                 @php($detail = $reservation->details->first())
-                                <tr class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }}">
+                                <tr class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }} text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
                                     <td class="px-5 py-4 font-medium">{{ $reservation->r_ref_no }}</td>
                                     <td class="px-5 py-4">
                                         {{ $reservation->guest?->first_name }} {{ $reservation->guest?->last_name }}

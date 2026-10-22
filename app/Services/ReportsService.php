@@ -131,6 +131,7 @@ class ReportsService
         $this->applyBookingSearch($base, $search);
 
         $count = (clone $base)->count();
+        $totalGuests = (int) (clone $base)->sum('total_guest_count');
         $totalPrice = round(
             (float) (clone $base)->sum('total_price'),
             2,

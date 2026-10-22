@@ -939,7 +939,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 />
 
                 <flux:select
-                    wire:model="modeOfPaymentId"
+                    wire:model.live="modeOfPaymentId"
                     label="Mode of payment"
                 >
                     @foreach ($modeOfPayments as $mode)
@@ -948,13 +948,13 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                         </option>
                     @endforeach
                 </flux:select>
-
-                <flux:input
-                    wire:model="referenceNumber"
-                    label="GCash reference number"
-                    placeholder="Required for GCash"
-                />
-
+                @if($this->modeOfPaymentId === '2')
+                    <flux:input
+                        wire:model="referenceNumber"
+                        label="GCash reference number"
+                        placeholder="Required for GCash" 
+                    />
+                @endif
                 <div class="flex items-end">
                     <flux:button
                         wire:click="recordPayment"
@@ -1202,7 +1202,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 wire:click="sortHistoryBy('p_ref_no')"
                                 class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                             >
-                                Receipt {{ $this->sortIndicator('p_ref_no') }}
+                                RECEIPT {{ $this->sortIndicator('p_ref_no') }}
                             </button>
                         </th>
                         <th class="px-5 py-3">Transaction</th>
@@ -1214,7 +1214,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 wire:click="sortHistoryBy('amount_paid')"
                                 class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                             >
-                                Amount {{ $this->sortIndicator('amount_paid') }}
+                                AMOUNT {{ $this->sortIndicator('amount_paid') }}
                             </button>
                         </th>
                         <th class="px-5 py-3">
@@ -1222,7 +1222,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 wire:click="sortHistoryBy('date_paid')"
                                 class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                             >
-                                Date {{ $this->sortIndicator('date_paid') }}
+                                DATE {{ $this->sortIndicator('date_paid') }}
                             </button>
                         </th>
                         <th class="px-5 py-3">
@@ -1230,7 +1230,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 wire:click="sortHistoryBy('payment_status')"
                                 class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                             >
-                                Status {{ $this->sortIndicator('payment_status') }}
+                                STATUS {{ $this->sortIndicator('payment_status') }}
                             </button>
                         </th>
                         <th class="px-5 py-3">Handled by</th>

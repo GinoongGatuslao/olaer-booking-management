@@ -1,8 +1,12 @@
 <?php
 
+use App\Models\Amenity;
+use Illuminate\Validation\Rule;
 use App\Models\Facility;
 use App\Models\FacilityProduct;
 use App\Models\FacilityType;
+use App\Models\FacilityPrice;
+use App\Models\FacilityAmenity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -29,6 +33,25 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     public string $sortDirection = 'asc';
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
+
+    public ?int $editingId = null;
+    public string $facilityName = '';
+    public string $facilityTypeId = '';
+    public string $facilitySize = '';
+    public string $capacity = '';
+    public string $min_capacity = '';
+    public string $max_capacity = '';
+    public string $facilityStatus = 'Available';
+    public bool $statusLocked = false;
+    public string $presetName = '';
+    public array $priceRows = [
+    ];
+
+    public array $amenityRows = [
+        ['amenity_id' => '', 'amenity_quantity' => ''],
+    ];
+
+    public bool $showFacilityEditor = false;
 
     #[Computed]
     public function facilities(): LengthAwarePaginator
@@ -62,9 +85,414 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     }
 
     #[Computed]
+    public function facilityTypeGetter(){
+        return FacilityType::query()
+            ->where('facility_type_id', $this->facilityTypeId)
+            ->value('facility_type');
+    }
+
+    public function addAmenityRow(): void
+    {
+        $this->amenityRows[] = [
+            'amenity_id' => '',
+            'amenity_quantity' => '',
+        ];
+    }
+
+    public function addPriceRow(): void
+    {
+        $this->priceRows = [];
+
+        $type = $this->facilityTypeGetter();
+
+        if ($type == 'Cottage' || $type == 'Function Hall') {
+            $this->priceRows = [
+                ['rate_type' => 'Day Rate', 'facility_price' => ''],
+                ['rate_type' => 'Night Rate', 'facility_price' => ''],
+                ['rate_type' => 'Both', 'facility_price' => ''],
+            ];
+        } else if ($type == 'Room') {
+            $this->priceRows = [
+            ['rate_type' => 'Overnight', 'facility_price' => ''],
+            ];
+        } else {
+            $this->priceRows = [
+                ['rate_type' => '', 'facility_price' => ''],
+            ];
+        }
+    }
+
+    public function removeAmenityRow(int $index): void
+    {
+        unset($this->amenityRows[$index]);
+        $this->amenityRows = array_values($this->amenityRows);
+
+        if ($this->amenityRows === []) {
+            $this->addAmenityRow();
+        }
+    }
+
+    public function updatedFacilityTypeId(): void
+    {
+        $this->addPriceRow();
+    }
+
+    public function save(): void
+    {
+        $validated = $this->validate([
+            'editingId' => ['nullable', 'integer', 'exists:tbl_facility,facility_id'],
+            'facilityName' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('tbl_facility', 'facility_name')
+                    ->ignore($this->editingId, 'facility_id'),
+            ],
+            'facilityTypeId' => [
+                'required',
+                'integer',
+                'exists:tbl_facility_type,facility_type_id',
+            ],
+            'facilitySize' => ['required', 'string', 'max:50'],
+            'min_capacity' => ['required', 'string', 'max:50'],
+            'max_capacity' => ['required', 'string', 'max:50'],
+            'facilityStatus' => [
+                'required',
+                Rule::in(['Available', 'Unavailable', 'Booked', 'Occupied']),
+            ],
+            'priceRows' => ['required', 'array', 'min:1'],
+            'priceRows.*.rate_type' => ['nullable', 'string', 'max:20'],
+            'priceRows.*.facility_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:999999.99',
+            ],
+            'amenityRows' => ['nullable', 'array'],
+            'amenityRows.*.amenity_id' => [
+                'nullable',
+                'integer',
+                'exists:tbl_amenity,amenity_id',
+            ],
+            'amenityRows.*.amenity_quantity' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:9999',
+            ],
+        ], [
+            'facilityName.required' => 'Facility number is required.',
+            'facilityName.unique' => 'This facility number is already used.',
+            'facilityTypeId.required' => 'Facility type is required.',
+            'facilityTypeId.exists' => 'Selected facility type does not exist.',
+            'facilitySize.required' => 'Facility name is required.',
+            'capacity.required' => 'Capacity is required.',
+            'facilityStatus.in' => 'Select a valid facility status.',
+            'priceRows.required' => 'Select a facility type first.',
+            'priceRows.*.facility_price.numeric' => 'Facility price must be a valid number.',
+            'amenityRows.*.amenity_quantity.integer' => 'Amenity quantity must be a whole number.',
+        ]);
+
+        $cleanPrices = collect($validated['priceRows'])
+            ->map(fn (array $row): array => [
+                'rate_type' => trim((string) ($row['rate_type'] ?? '')),
+                'facility_price' => $row['facility_price'] ?? null,
+            ])
+            ->filter(fn (array $row): bool => $row['rate_type'] !== '' || filled($row['facility_price']))
+            ->values();
+
+        if ($cleanPrices->isEmpty()) {
+            $this->addError('priceRows', 'Add at least one valid price.');
+            return;
+        }
+
+        foreach ($cleanPrices as $index => $row) {
+            if ($row['rate_type'] === '' || ! filled($row['facility_price'])) {
+                $this->addError(
+                    'priceRows.'.$index.'.rate_type',
+                    'Each price row needs a rate type and price.',
+                );
+
+                return;
+            }
+        }
+
+        if ($cleanPrices->pluck('rate_type')->count() !== $cleanPrices->pluck('rate_type')->unique()->count()) {
+            $this->addError('priceRows', 'Rate types must not be duplicated.');
+            return;
+        }
+
+        $cleanAmenities = collect($validated['amenityRows'] ?? [])
+            ->map(fn (array $row): array => [
+                'amenity_id' => $row['amenity_id'] ?? null,
+                'amenity_quantity' => $row['amenity_quantity'] ?? null,
+            ])
+            ->filter(fn (array $row): bool => filled($row['amenity_id']) || filled($row['amenity_quantity']))
+            ->values();
+
+        foreach ($cleanAmenities as $index => $row) {
+            if (! filled($row['amenity_id']) || ! filled($row['amenity_quantity'])) {
+                $this->addError(
+                    'amenityRows.'.$index.'.amenity_id',
+                    'Each amenity row needs an amenity and quantity.',
+                );
+
+                return;
+            }
+        }
+
+        if ($cleanAmenities->pluck('amenity_id')->count() !== $cleanAmenities->pluck('amenity_id')->unique()->count()) {
+            $this->addError('amenityRows', 'Do not add the same amenity more than once.');
+            return;
+        }
+
+        $currentFacility = $this->editingId !== null
+            ? Facility::query()->findOrFail($this->editingId)
+            : null;
+
+        $statusIsLocked = $currentFacility !== null
+            && in_array($currentFacility->facility_status, ['Booked', 'Occupied'], true);
+
+        if (! $statusIsLocked && ! in_array($validated['facilityStatus'], ['Available', 'Unavailable'], true)) {
+            $this->addError(
+                'facilityStatus',
+                'Only booking and check-in workflows may set Booked or Occupied.',
+            );
+
+            return;
+        }
+
+        DB::transaction(function () use (
+            $validated,
+            $cleanPrices,
+            $cleanAmenities,
+            $currentFacility,
+            $statusIsLocked,
+        ): void {
+            $payload = [
+                'facility_name' => trim($validated['facilityName']),
+                'facility_type_id' => (int) $validated['facilityTypeId'],
+                'facility_size' => trim($validated['facilitySize']),
+                'min_capacity' => (int)trim($validated['min_capacity']),
+                'max_capacity' => (int)trim($validated['max_capacity']),
+                'facility_status' => $statusIsLocked
+                    ? $currentFacility->facility_status
+                    : $validated['facilityStatus'],
+            ];
+
+            if ($currentFacility !== null) {
+                $currentFacility->update($payload);
+                $facility = $currentFacility->refresh();
+            } else {
+                $facility = Facility::query()->create($payload);
+            }
+
+            FacilityPrice::query()
+                ->where('facility_id', $facility->facility_id)
+                ->delete();
+
+            foreach ($cleanPrices as $row) {
+                FacilityPrice::query()->create([
+                    'facility_id' => $facility->facility_id,
+                    'rate_type' => $row['rate_type'],
+                    'facility_price' => round((float) $row['facility_price'], 2),
+                ]);
+            }
+
+            FacilityAmenity::query()
+                ->where('facility_id', $facility->facility_id)
+                ->delete();
+
+            foreach ($cleanAmenities as $row) {
+                FacilityAmenity::query()->create([
+                    'facility_id' => $facility->facility_id,
+                    'amenity_id' => (int) $row['amenity_id'],
+                    'amenity_quantity' => (int) $row['amenity_quantity'],
+                ]);
+            }
+        });
+
+        session()->flash(
+            'success',
+            $this->editingId !== null
+                ? 'Facility updated successfully.'
+                : 'Facility created successfully.',
+        );
+        $this->showFacilityEditor = false;
+
+        $this->resetFacilityForm();
+    }
+
+    #[Computed]
     public function facilityTypes(): Collection
     {
         return FacilityType::query()->orderBy('facility_type')->get();
+    }
+
+    public function createNewFacility(): void
+    {
+        $this->resetFacilityForm();
+        $this->showFacilityEditor = true;
+    }
+    
+    public function cancelFacilityEdit(): void
+    {
+        session()->flash('success', 'Facility edit cancelled. No changes were saved.');
+        $this->showFacilityEditor = false;
+        $this->resetFacilityForm();
+    }
+
+    public function startEditing(int $facilityId): void
+    {
+        $facility = Facility::query()
+            ->with(['prices', 'facilityAmenities'])
+            ->findOrFail($facilityId);
+
+        $existingPrices = $facility->prices
+            ->keyBy(fn (FacilityPrice $price): string => (string) $price->rate_type);
+        
+
+        $this->showFacilityEditor = true;
+
+        $this->editingId = (int) $facility->facility_id;
+        $this->facilityName = (string) $facility->facility_name;
+        $this->facilityTypeId = (string) $facility->facility_type_id;
+        $this->facilitySize = (string) $facility->facility_size;
+        $this->min_capacity = (string) $facility->min_capacity;
+        $this->max_capacity = (string) $facility->max_capacity;
+        $this->facilityStatus = (string) $facility->facility_status;
+        $this->statusLocked = in_array($facility->facility_status, ['Booked', 'Occupied'], true);
+        $type = $this->facilityTypeGetter();
+        if ($type === 'Cottage' || $type === 'Function Hall') {
+            $expectedRates = ['Day Rate', 'Night Rate', 'Both']; // Or 'Whole Day Rate' depending on your DB enum
+        } elseif ($type === 'Room') {
+            $expectedRates = ['Overnight'];
+        } else {
+            $expectedRates = ['Standard Rate'];
+        }
+        $this->priceRows = collect($expectedRates)
+            ->map(function (string $rateType) use ($existingPrices): array {
+                $existing = $existingPrices->get($rateType);
+
+            return [
+                'rate_type' => $rateType,
+                'facility_price' => $existing !== null 
+                    ? number_format((float) $existing->facility_price, 2, '.', '') 
+                    : '',
+            ];
+        })
+    ->values()
+    ->all();
+
+        if ($this->priceRows === []) {
+            $this->priceRows = [
+            ];
+        }
+
+        $this->amenityRows = $facility->facilityAmenities
+            ->map(fn (FacilityAmenity $facilityAmenity): array => [
+                'amenity_id' => (string) $facilityAmenity->amenity_id,
+                'amenity_quantity' => (string) $facilityAmenity->amenity_quantity,
+            ])
+            ->values()
+            ->all();
+
+        if ($this->amenityRows === []) {
+            $this->amenityRows = [
+                ['amenity_id' => '', 'amenity_quantity' => ''],
+            ];
+        }
+
+        $this->resetValidation();
+    }
+    
+    #[Computed]
+    public function amenities()
+    {
+        return Amenity::query()
+            ->with('amenityName')
+            ->get()
+            ->sortBy(fn (Amenity $amenity): string => $amenity->amenityName?->amenity_name ?? '')
+            ->values();
+    }
+    public function cloneFacility(int $facilityId): void
+    {
+        $this->editingId = null;
+        $facility = Facility::query()
+            ->with(['prices', 'facilityAmenities'])
+            ->findOrFail($facilityId);
+        $existingPrices = $facility->prices
+            ->keyBy(fn (FacilityPrice $price): string => (string) $price->rate_type);
+
+        $this->showFacilityEditor = true;
+        $this->facilityName = '';
+        $this->facilityTypeId = (string) $facility->facility_type_id;
+        $this->facilitySize = (string) $facility->facility_size;
+        $this->min_capacity = (string) $facility->min_capacity;
+        $this->max_capacity = (string) $facility->max_capacity;
+        $this->facilityStatus = (string) $facility->facility_status;
+        $type = $this->facilityTypeGetter();
+        if ($type === 'Cottage' || $type === 'Function Hall') {
+            $expectedRates = ['Day Rate', 'Night Rate', 'Both']; 
+        } elseif ($type === 'Room') {
+            $expectedRates = ['Overnight'];
+        } else {
+            $expectedRates = ['Standard Rate'];
+        }
+        $this->priceRows = collect($expectedRates)
+            ->map(function (string $rateType) use ($existingPrices): array {
+                $existing = $existingPrices->get($rateType);
+
+            return [
+                'rate_type' => $rateType,
+                'facility_price' => $existing !== null 
+                    ? number_format((float) $existing->facility_price, 2, '.', '') 
+                    : '',
+            ];
+        })
+    ->values()
+    ->all();
+
+        if ($this->priceRows === []) {
+            $this->priceRows = [
+            ];
+        }
+
+        $this->amenityRows = $facility->facilityAmenities
+            ->map(fn (FacilityAmenity $facilityAmenity): array => [
+                'amenity_id' => (string) $facilityAmenity->amenity_id,
+                'amenity_quantity' => (string) $facilityAmenity->amenity_quantity,
+            ])
+            ->values()
+            ->all();
+
+        if ($this->amenityRows === []) {
+            $this->amenityRows = [
+                ['amenity_id' => '', 'amenity_quantity' => ''],
+            ];
+        }
+
+        $this->resetValidation();
+    }
+
+    public function resetFacilityForm(): void
+    {
+        $this->editingId = null;
+        $this->facilityName = '';
+        $this->facilityTypeId = '';
+        $this->facilitySize = '';
+        $this->min_capacity = '';
+        $this->max_capacity = '';
+        $this->facilityStatus = 'Available';
+        $this->statusLocked = false;
+
+        $this->priceRows = [];
+
+        $this->amenityRows = [
+            ['amenity_id' => '', 'amenity_quantity' => ''],
+        ];
+
+        $this->resetValidation();
     }
 
     public function updatedSearch(): void { $this->resetPage(); }
@@ -115,7 +543,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Physical facilities use numeric capacity guidance and normalized product/rate configuration.</p>
         </div>
         <div class="flex gap-2">
-            <flux:button href="{{ route('admin.facilities.create') }}" wire:navigate variant="primary">Add facilities</flux:button>
+            <flux:button type="button" wire:click="createNewFacility" variant="primary">Create Facility</flux:button>
             <flux:button href="{{ route('admin.dashboard') }}" wire:navigate variant="ghost">Back to Dashboard</flux:button>
         </div>
     </div>
@@ -153,25 +581,28 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             <table class="w-full min-w-[62rem] text-left text-sm">
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <tr>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_number')" class="font-semibold">Number {{ $this->sortIcon('facility_number') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold">Name {{ $this->sortIcon('facility_name') }}</button></th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold">NUMBER {{ $this->sortIcon('facility_name') }}</button></th>
                         <th class="px-5 py-3 font-semibold">Type</th>
-                        <th class="px-5 py-3 font-semibold">Facility category</th>
-                        <th class="px-5 py-3 font-semibold">Capacity guidance</th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_status')" class="font-semibold">Status {{ $this->sortIcon('facility_status') }}</button></th>
+                        <th class="px-5 py-3 font-semibold">Facility NAME</th>
+                        <th class="px-5 py-3 font-semibold">Capacity</th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_status')" class="font-semibold">STATUS {{ $this->sortIcon('facility_status') }}</button></th>
                         <th class="px-5 py-3 text-right font-semibold">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($this->facilities as $facility)
-                        <tr wire:key="facility-{{ $facility->facility_id }}">
-                            <td class="px-5 py-4 font-mono text-xs">{{ $facility->facility_number ?? 'Not assigned' }}</td>
+                        <tr wire:key="facility-{{ $facility->facility_id }}" class="hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                             <td class="px-5 py-4 font-medium">{{ $facility->facility_name }}</td>
                             <td class="px-5 py-4">{{ $facility->facilityType?->facility_type }}</td>
                             <td class="px-5 py-4">{{ $facility->facilityProduct?->display_name ?? $facility->facility_size }}</td>
-                            <td class="px-5 py-4">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum '.$facility->max_capacity : 'Recommended '.$facility->min_capacity.'–'.$facility->max_capacity }}</td>
+                            <td class="px-5 py-4 text-left">{{ $facility->facilityProduct?->strict_maximum ? ''.$facility->min_capacity.'–'.$facility->max_capacity : ''.$facility->min_capacity.'–'.$facility->max_capacity }}</td>
                             <td class="px-5 py-4"><flux:badge color="{{ $this->statusColor($facility->facility_status) }}">{{ $facility->facility_status }}</flux:badge></td>
-                            <td class="px-5 py-4 text-right"><flux:button href="{{ route('admin.facilities.edit', $facility) }}" wire:navigate icon="pencil-square" size="sm" variant="ghost">Edit</flux:button></td>
+                            <td class="px-5 py-4 text-right">
+                                <x-table-actions label="Actions for {{ $facility->facility_name }}">
+                                    <flux:menu.item icon="pencil-square" wire:click="startEditing({{ $facility->facility_id }})">Edit facility</flux:menu.item>
+                                    <flux:menu.item icon="document-duplicate" wire:click="cloneFacility({{ $facility->facility_id }})">Clone facility</flux:menu.item>
+                                </x-table-actions>  
+                            </td>
                         </tr>
                     @empty
                         <tr><td colspan="7" class="px-5 py-12 text-center text-zinc-500">No facility matches the filters.</td></tr>
@@ -181,4 +612,171 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         </div>
         <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">{{ $this->facilities->links() }}</div>
     </flux:card>
+    <flux:modal wire:model="showFacilityEditor" class="md:w-[38rem] max-h-[90vh] overflow-y-auto">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <h2 class="font-semibold">
+                            {{ $editingId !== null ? 'Edit facility' : 'Create facility' }}
+                        </h2>
+                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                            Operational statuses Booked and Occupied remain controlled by transaction workflows.
+                        </p>
+                    </div>
+                </div>
+
+                <form wire:submit="save" class="space-y-5">
+                    <flux:input
+                        wire:model="facilityName"
+                        label="Facility number"
+                        placeholder="Example: C300-056"
+                    />
+
+                    <flux:select wire:model.live="facilityTypeId" label="Facility type">
+                        <flux:select.option value="">Select facility type</flux:select.option>
+                            @foreach ($this->facilityTypes as $type)
+                                <flux:select.option value="{{ $type->facility_type_id }}">
+                                    {{ $type->facility_type }}
+                        </flux:select.option>
+                            @endforeach
+                    </flux:select>
+
+                    <div class="grid gap-4">
+                        <flux:input
+                            wire:model="facilitySize"
+                            label="Facility name"
+                            placeholder="Example: Small"
+                        />
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <flux:input
+                            wire:model="min_capacity"
+                            label="Minimum Capacity"
+                            placeholder="Example: 1"
+                            type="number"
+                            min="1"
+                        />
+
+                        <flux:input
+                            wire:model="max_capacity"
+                            label="Maximum Capacity"
+                            placeholder="Example: 25"
+                            type="number"
+                            min="2"
+                        />
+                    </div>
+
+                    <flux:select
+                        wire:model="facilityStatus"
+                        label="Operational availability"
+                        :disabled="$statusLocked"
+                    >
+                        @if ($statusLocked)
+                            <option value="{{ $facilityStatus }}">{{ $facilityStatus }}</option>
+                        @else
+                            <option value="Available">Available</option>
+                            <option value="Unavailable">Unavailable</option>
+                        @endif
+                    </flux:select>
+
+                    @if ($statusLocked)
+                        <p class="text-xs text-amber-700 dark:text-amber-300">
+                            This facility is {{ $facilityStatus }}. Booking/check-in workflows control this status.
+                        </p>
+                    @endif
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold">Facility prices</h3>
+                                <p class="text-xs text-zinc-500">Rate types appear after selecting a facility type.</p>
+                            </div>
+                        </div>
+
+                        @error('priceRows')
+                            <p class="text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        <h3 class="text-sm font-semibold">Rate type:</h3>
+                        @foreach ($priceRows as $index => $row)
+        <div wire:key="price-row-{{ $index }}" class="grid items-center gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1fr_1fr] dark:border-zinc-800">
+            <div>
+                <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                    {{ $row['rate_type'] ?: 'Standard Rate' }}
+                </span>
+            </div>
+
+            <!-- Price Input -->
+            <flux:input
+                wire:model="priceRows.{{ $index }}.facility_price"
+                type="number"
+                step="0.01"
+                min="0"
+                label="Price"
+                placeholder="0.00"
+            />
+        </div>
+    @endforeach
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold">Inclusive amenities</h3>
+                                <p class="text-xs text-zinc-500">Items normally included in this facility.</p>
+                            </div>
+
+                            <flux:button type="button" wire:click="addAmenityRow" size="sm" variant="ghost">
+                                Add Amenity
+                            </flux:button>
+                        </div>
+
+                        @error('amenityRows')
+                            <p class="text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+
+                        @foreach ($amenityRows as $index => $row)
+                            <div wire:key="amenity-row-{{ $index }}" class="grid gap-2 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1fr_8rem_auto] dark:border-zinc-800">
+                                <flux:select
+                                    wire:model="amenityRows.{{ $index }}.amenity_id"
+                                    label="Amenity"
+                                >
+                                    <option value="">Select amenity</option>
+                                    @foreach ($this->amenities as $amenity)
+                                        <option value="{{ $amenity->amenity_id }}">
+                                            {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }}
+                                            — {{ $amenity->amenity_description }}
+                                        </option>
+                                    @endforeach
+                                </flux:select>
+
+                                <flux:input
+                                    wire:model="amenityRows.{{ $index }}.amenity_quantity"
+                                    type="number"
+                                    min="1"
+                                    label="Quantity"
+                                />
+
+                                <div class="flex items-end">
+                                    <flux:button
+                                        type="button"
+                                        wire:click="removeAmenityRow({{ $index }})"
+                                        size="sm"
+                                        variant="ghost"
+                                    >
+                                        Remove
+                                    </flux:button>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div class="flex justify-end gap-3 pt-2">
+                        <flux:button wire:click="cancelFacilityEdit" type="button" variant="ghost">
+                            Cancel
+                        </flux:button>
+                        <flux:button type="submit" variant="primary">
+                            {{ $editingId !== null ? 'Save Changes' : 'Save Facility' }}
+                        </flux:button>
+                    </div>
+                </form>
+        </flux:modal>
 </div>

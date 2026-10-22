@@ -62,7 +62,6 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         }
 
         $this->token = $intent->token;
-        $this->partyCount = $intent->party_count;
         $this->groups = $intent->groups->map(fn ($group): array => [
             'facility_product_id' => (string) $group->facility_product_id,
             'quantity' => $group->quantity,
@@ -71,12 +70,17 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'check_out_date' => $group->check_out_date->toDateString(),
             'estimated_users' => $group->estimated_users,
         ])->all();
-
+        $this->updatePartyCount();
         if ($this->groups === []) {
             $this->addGroup();
         }
 
         $this->syncRoomOccupantRows();
+    }
+
+    private function updatePartyCount(): void
+    {
+        $this->partyCount = max(1, (int) collect($this->groups)->sum('estimated_users'));
     }
 
     #[Computed]
@@ -110,11 +114,12 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'rate_code' => '',
             'check_in_date' => today()->toDateString(),
             'check_out_date' => today()->addDay()->toDateString(),
-            'estimated_users' => max(1, $this->partyCount),
+            'estimated_users' => 1,
         ];
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
     public function removeGroup(int $index): void
@@ -129,6 +134,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
     public function updatedGroups(): void
@@ -171,6 +177,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
         $this->paymentAmount = '';
+        $this->updatePartyCount();
     }
 
     public function addAmenity(): void
@@ -467,17 +474,16 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
 
     <form wire:submit="submit" class="space-y-6">
         <flux:card>
-            <flux:heading size="lg">Guest</flux:heading>
+            <flux:heading size="lg">Guest information</flux:heading>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
                 <x-required-input wire:model="firstName" name="firstName" label="First name" />
                 <flux:input wire:model="middleName" label="Middle name" />
                 <x-required-input wire:model="lastName" name="lastName" label="Last name" />
                 <x-required-input wire:model="email" name="email" type="email" label="Email" />
                 <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" />
-                <x-required-input wire:model.live="partyCount" name="partyCount" type="number" min="1" max="500" label="Total unique guests" />
-            </div>
-            <div class="mt-4 grid gap-4 md:grid-cols-4">
                 <x-required-input wire:model="province" name="province" label="Province" />
+            </div>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
                 <x-required-input wire:model="city" name="city" label="City/Municipality" />
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
@@ -501,11 +507,11 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
                     <div wire:key="cashier-booking-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                        <div class="grid gap-4 lg:grid-cols-6">
-                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility type / product" class="lg:col-span-2">
-                                <option value="">Choose product</option>
+                        <div class="grid gap-4 lg:grid-cols-5">
+                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility name" class="lg:col-span-2">
+                                <option value="">Choose name</option>
                                 @foreach ($this->products as $candidate)
-                                    <option value="{{ $candidate->facility_product_id }}">{{ $candidate->facilityType?->facility_type }} — {{ $candidate->display_name }}</option>
+                                    <option value="{{ $candidate->facility_product_id }}"> {{ $candidate->display_name }}</option>
                                 @endforeach
                             </x-required-select>
                             <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
@@ -583,59 +589,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
                 <flux:input wire:model="referenceNumber" label="Reference number" />
                 <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
             </div>
-            <label class="mt-4 flex items-start gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                <input wire:model.live="walkIn" type="checkbox" class="mt-1 rounded border-zinc-300" />
-                <span>
-                    <span class="block font-medium">Walk-In booking</span>
-                    <span class="block text-sm text-zinc-500">Create as immediately active/checked-in after the core payment succeeds.</span>
-                </span>
-            </label>
-            @if ($walkIn)
-                <div class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                    <div>
-                        <p class="font-medium">Entrance / admission</p>
-                        <p class="text-sm text-zinc-500">Category total and Male + Female must each equal the booking party count. Tourist is hidden from presentation and stored as zero for this workflow.</p>
-                    </div>
-                    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                        <x-required-input wire:model.live="adultCount" name="adultCount" type="number" min="0" label="Adults" />
-                        <x-required-input wire:model.live="childrenCount" name="childrenCount" type="number" min="0" label="Children" />
-                        <x-required-input wire:model.live="pwdScCount" name="pwdScCount" type="number" min="0" label="PWD / Senior" />
-                        <x-required-input wire:model="maleCount" name="maleCount" type="number" min="0" label="Male" />
-                        <x-required-input wire:model="femaleCount" name="femaleCount" type="number" min="0" label="Female" />
-                    </div>
-                    <div class="mt-3 flex flex-wrap gap-3 text-sm">
-                        <span class="font-medium">Facility core: ₱{{ number_format((float) ($planTotal ?: 0), 2) }}</span>
-                        <span class="font-medium">Admission: ₱{{ number_format((float) $this->admissionTotal(), 2) }}</span>
-                        <span class="font-semibold">Required before admission: ₱{{ number_format((float) $this->requiredCoreTotal(), 2) }}</span>
-                    </div>
-                </div>
 
-                <div class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
-                            <p class="font-medium">Optional amenities</p>
-                            <p class="text-sm text-zinc-500">These may remain unpaid after admission and become the active booking balance.</p>
-                        </div>
-                        <flux:button type="button" size="sm" variant="ghost" wire:click="addAmenity">Add amenity</flux:button>
-                    </div>
-                    <div class="mt-4 space-y-3">
-                        @foreach ($amenities as $index => $item)
-                            <div wire:key="walkin-amenity-{{ $index }}" class="grid gap-3 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
-                                <flux:select wire:model="amenities.{{ $index }}.amenity_id" label="Amenity">
-                                    <option value="">Choose amenity</option>
-                                    @foreach (Amenity::query()->with('amenityName')->whereRaw('LOWER(amenity_type) = ?', ['rentable'])->orderBy('amenity_description')->get() as $amenity)
-                                        <option value="{{ $amenity->amenity_id }}">{{ $amenity->amenityName?->amenity_name ?? $amenity->amenity_description }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }}</option>
-                                    @endforeach
-                                </flux:select>
-                                <flux:input wire:model="amenities.{{ $index }}.quantity" type="number" min="1" max="100" label="Quantity" />
-                                <div class="flex items-end">
-                                    <flux:button type="button" variant="ghost" wire:click="removeAmenity({{ $index }})">Remove</flux:button>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
         </flux:card>
 
         @if ($errors->any())

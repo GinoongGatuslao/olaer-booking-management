@@ -16,6 +16,12 @@ new class extends Component {
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
+    #[Url(as: 'date_from', except: '')]
+    public string $dateFrom = '';
+
+    #[Url(as: 'date_to', except: '')]
+    public string $dateTo = '';
+
     #[Url(as: 'booking_status', except: '')]
     public string $bookingStatusFilter = '';
 
@@ -645,29 +651,27 @@ new class extends Component {
         <table class="w-full min-w-[86rem] text-left text-sm">
             <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                 <tr>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_id')" class="font-semibold hover:text-brand-text dark:hover:text-white">ID {{ $this->sortIndicator('booking_id') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('b_ref_no')" class="font-semibold hover:text-brand-text dark:hover:text-white">Reference {{ $this->sortIndicator('b_ref_no') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('guest_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">Facility {{ $this->sortIndicator('facility_name') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_date')" class="font-semibold hover:text-brand-text dark:hover:text-white">Booked On {{ $this->sortIndicator('booking_date') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('b_ref_no')" class="font-semibold hover:text-brand-text dark:hover:text-white">REFERENCE {{ $this->sortIndicator('b_ref_no') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('guest_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">GUEST {{ $this->sortIndicator('guest_name') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY {{ $this->sortIndicator('facility_name') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_date')" class="font-semibold hover:text-brand-text dark:hover:text-white">BOOKED ON {{ $this->sortIndicator('booking_date') }}</button></th>
                     <th class="px-5 py-3 font-semibold">Date Range</th>
                     <th class="px-5 py-3 font-semibold">Rate</th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">Total {{ $this->sortIndicator('total_price') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">Due {{ $this->sortIndicator('amount_due') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">Booking Status {{ $this->sortIndicator('booking_status') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('status')" class="font-semibold hover:text-brand-text dark:hover:text-white">Facility Status {{ $this->sortIndicator('status') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">TOTAL {{ $this->sortIndicator('total_price') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">DUE {{ $this->sortIndicator('amount_due') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">BOOKING STATUS {{ $this->sortIndicator('booking_status') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('status')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY STATUS {{ $this->sortIndicator('status') }}</button></th>
                     <th class="px-5 py-3 text-right font-semibold">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                 @forelse ($bookings as $booking)
                     <tr wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}" class="text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
-                        <td class="px-5 py-4">{{ $booking->booking_id }}</td>
                         <td class="px-5 py-4 font-semibold">{{ $booking->b_ref_no }}</td>
                         <td class="px-5 py-4">{{ trim($booking->guest_name) }}</td>
                         <td class="px-5 py-4">{{ $booking->facility_name ?? 'No facility' }}</td>
-                        <td class="px-5 py-4">{{ $booking->booking_date }}</td>
-                        <td class="px-5 py-4 whitespace-nowrap">{{ $booking->check_in_date }} → {{ $booking->check_out_date }}</td>
+                        <td class="px-5 py-4">{{ \Carbon\Carbon::parse($booking->booking_date)->format('M d, Y')}}</td>
+                        <td class="px-5 py-4 whitespace-nowrap">{{ \Carbon\Carbon::parse($booking->check_in_date)->format('M d, Y')}} → {{ \Carbon\Carbon::parse($booking->check_out_date)->format('M d, Y')}}</td>
                         <td class="px-5 py-4">{{ $booking->rate_type }}</td>
                         <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->total_price, 2) }}</td>
                         <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->amount_due, 2) }}</td>

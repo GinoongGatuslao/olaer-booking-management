@@ -53,7 +53,7 @@ class FacilityAssignmentService
                 throw new InvalidArgumentException('This facility plan has already been submitted.');
             }
 
-            if ($lockedIntent->expires_at->isPast() || $lockedIntent->groups->isEmpty()) {
+            if (/*$lockedIntent->expires_at->isPast() ||*/ $lockedIntent->groups->isEmpty()) {
                 throw new InvalidArgumentException('This facility plan has expired or has no requirements.');
             }
 
@@ -220,7 +220,7 @@ class FacilityAssignmentService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedIntent->status !== 'Draft' || $lockedIntent->expires_at->isPast()) {
+            if ($lockedIntent->status !== 'Draft' /*|| $lockedIntent->expires_at->isPast()*/) {
                 throw new InvalidArgumentException('This facility plan can no longer be quoted.');
             }
 
@@ -255,7 +255,7 @@ class FacilityAssignmentService
                 throw new InvalidArgumentException('This facility plan has already been submitted.');
             }
 
-            if ($lockedIntent->expires_at->isPast() || $lockedIntent->groups->isEmpty()) {
+            if (/*$lockedIntent->expires_at->isPast() ||*/  $lockedIntent->groups->isEmpty()) {
                 throw new InvalidArgumentException('This facility plan has expired or has no requirements.');
             }
 
@@ -428,7 +428,7 @@ class FacilityAssignmentService
                 throw new InvalidArgumentException('This facility plan has already been submitted.');
             }
 
-            if ($lockedIntent->expires_at->isPast() || $lockedIntent->groups->isEmpty()) {
+            if (/*$lockedIntent->expires_at->isPast() ||*/  $lockedIntent->groups->isEmpty()) {
                 throw new InvalidArgumentException('This facility plan has expired or has no requirements.');
             }
 

@@ -812,7 +812,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('b_ref_no')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Ref {{ $this->sortIndicator('b_ref_no') }}
+                            REF {{ $this->sortIndicator('b_ref_no') }}
                         </button>
                     </th>
 
@@ -822,7 +822,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('guest_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Guest {{ $this->sortIndicator('guest_name') }}
+                            GUEST {{ $this->sortIndicator('guest_name') }}
                         </button>
                     </th>
 
@@ -832,7 +832,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('facility_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Facility {{ $this->sortIndicator('facility_name') }}
+                            FACILITY {{ $this->sortIndicator('facility_name') }}
                         </button>
                     </th>
 
@@ -842,7 +842,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('check_in_date')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Check-in {{ $this->sortIndicator('check_in_date') }}
+                            CHECK-IN {{ $this->sortIndicator('check_in_date') }}
                         </button>
                     </th>
 
@@ -852,7 +852,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('check_out_date')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Check-out {{ $this->sortIndicator('check_out_date') }}
+                            CHECK-OUT {{ $this->sortIndicator('check_out_date') }}
                         </button>
                     </th>
 
@@ -862,7 +862,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:click="sortBy('amount_due')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Balance {{ $this->sortIndicator('amount_due') }}
+                            BALANCE {{ $this->sortIndicator('amount_due') }}
                         </button>
                     </th>
 

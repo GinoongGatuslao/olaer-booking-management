@@ -33,8 +33,6 @@
                 <p class="text-sm text-zinc-600">Booking Management with Billing System</p>
                 <p class="mt-1 text-xs text-zinc-500">Generated: {{ now()->format('M d, Y h:i A') }}</p>
             </header>
-
-            {{ $slot }}
         </section>
     </main>
 </body>

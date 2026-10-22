@@ -383,7 +383,7 @@ new class extends Component {
                             wire:click="sortBy('b_ref_no')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Reference {{ $this->sortIndicator('b_ref_no') }}
+                            REFERENCE {{ $this->sortIndicator('b_ref_no') }}
                         </button>
                     </th>
 
@@ -393,7 +393,7 @@ new class extends Component {
                             wire:click="sortBy('guest_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Guest {{ $this->sortIndicator('guest_name') }}
+                            GUEST {{ $this->sortIndicator('guest_name') }}
                         </button>
                     </th>
 
@@ -403,7 +403,7 @@ new class extends Component {
                             wire:click="sortBy('facility_name')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Facility {{ $this->sortIndicator('facility_name') }}
+                            FACILITY {{ $this->sortIndicator('facility_name') }}
                         </button>
                     </th>
 
@@ -415,7 +415,7 @@ new class extends Component {
                             wire:click="sortBy('check_in_date')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Check-in {{ $this->sortIndicator('check_in_date') }}
+                            CHECK-IN {{ $this->sortIndicator('check_in_date') }}
                         </button>
                     </th>
 
@@ -425,7 +425,7 @@ new class extends Component {
                             wire:click="sortBy('check_out_date')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Check-out {{ $this->sortIndicator('check_out_date') }}
+                            CHECK-OUT {{ $this->sortIndicator('check_out_date') }}
                         </button>
                     </th>
 
@@ -435,7 +435,7 @@ new class extends Component {
                             wire:click="sortBy('amount_due')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Due {{ $this->sortIndicator('amount_due') }}
+                            DUE {{ $this->sortIndicator('amount_due') }}
                         </button>
                     </th>
 
@@ -445,7 +445,7 @@ new class extends Component {
                             wire:click="sortBy('status')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            Status {{ $this->sortIndicator('status') }}
+                            STATUS {{ $this->sortIndicator('status') }}
                         </button>
                     </th>
 

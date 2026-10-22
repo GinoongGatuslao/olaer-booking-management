@@ -73,14 +73,12 @@ $login = function () {
             <div>
                 <flux:input wire:model="username" label="Username" autocomplete="username" autofocus />
                 @error('username')
-                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                 @enderror
             </div>
 
             <div>
                 <flux:input wire:model="password" type="password" label="Password" autocomplete="current-password" />
                 @error('password')
-                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                 @enderror
             </div>
             <div class="flex justify-between">

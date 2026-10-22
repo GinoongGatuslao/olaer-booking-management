@@ -583,7 +583,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                         wire:click="sortBy('entrance_slip_id')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Slip {{ $this->sortIndicator('entrance_slip_id') }}
+                                        SLIP {{ $this->sortIndicator('entrance_slip_id') }}
                                     </button>
                                 </th>
 
@@ -592,7 +592,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                         wire:click="sortBy('date_created')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Created {{ $this->sortIndicator('date_created') }}
+                                        CREATED {{ $this->sortIndicator('date_created') }}
                                     </button>
                                 </th>
 
@@ -601,7 +601,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                         wire:click="sortBy('total_guests')"
                                         class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Guests {{ $this->sortIndicator('total_guests') }}
+                                        GUESTS {{ $this->sortIndicator('total_guests') }}
                                     </button>
                                 </th>
 
@@ -640,7 +640,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             </tr>
                         </thead>
 
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
                             @forelse ($this->slips as $slip)
                                 <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}" class="{{ $selectedSlipId === (int) $slip->entrance_slip_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">

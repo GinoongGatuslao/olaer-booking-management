@@ -130,10 +130,8 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     ->select('role_name')
                     ->whereColumn('tbl_role.role_id', 'tbl_user.role_id'),
                 $sortDirection,
-            )->orderBy('last_name')->orderBy('first_name'),
-            default => $query->orderBy('last_name', $sortDirection)
-                ->orderBy('first_name', $sortDirection)
-                ->orderBy('middle_name', $sortDirection),
+            )->orderBy('first_name'),
+            default => $query->orderBy('first_name', $sortDirection)
         };
 
         return $query->paginate($perPage);
@@ -592,7 +590,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                             </div>
 
                             <div class="flex flex-wrap items-end gap-2">
-                                <flux:button type="button" wire:click="createNewUser" variant="primary">Create staff account</flux:button>
+                                <flux:button type="button" wire:click="createNewUser" variant="primary">Create Staff Account</flux:button>
                                 <div class="w-28">
                                     <flux:select wire:model.live="perPage" label="Rows">
                                         <option value="10">10</option>
@@ -644,7 +642,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('full_name')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Name {{ $this->sortIcon('full_name') }}
+                                        NAME {{ $this->sortIcon('full_name') }}
                                     </button>
                                 </th>
 
@@ -654,7 +652,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('username')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Username {{ $this->sortIcon('username') }}
+                                        USERNAME {{ $this->sortIcon('username') }}
                                     </button>
                                 </th>
 
@@ -664,7 +662,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('role')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Role {{ $this->sortIcon('role') }}
+                                        ROLE {{ $this->sortIcon('role') }}
                                     </button>
                                 </th>
 
@@ -674,7 +672,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('status')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Status {{ $this->sortIcon('status') }}
+                                        STATUS {{ $this->sortIcon('status') }}
                                     </button>
                                 </th>
 
@@ -684,7 +682,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('email')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Email {{ $this->sortIcon('email') }}
+                                        EMAIL {{ $this->sortIcon('email') }}
                                     </button>
                                 </th>
 
@@ -694,17 +692,17 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                         wire:click="sortBy('contact_no')"
                                         class="inline-flex items-center gap-1 font-semibold hover:text-zinc-950 dark:hover:text-white"
                                     >
-                                        Contact {{ $this->sortIcon('contact_no') }}
+                                        CONTACT {{ $this->sortIcon('contact_no') }}
                                     </button>
                                 </th>
 
-                                <th class="px-5 py-3 text-right font-semibold">Actions</th>
+                                <th class="px-5 py-3 text-right font-semibold">ACTIONS</th>
                             </tr>
                         </thead>
 
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 ">
                             @forelse ($this->users as $user)
-                                <tr wire:key="user-row-{{ $user->user_id }}" class="align-top {{ $editingUserId === (int) $user->user_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                                <tr wire:key="user-row-{{ $user->user_id }}" class="align-top {{ $editingUserId === (int) $user->user_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : ''}} hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50">
                                     <td class="max-w-sm px-5 py-4">
                                         <p class="font-medium">
                                             {{ $this->fullName($user) }}
@@ -793,11 +791,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         </p>
                     </div>
 
-                    @if ($editingUserId !== null)
-                        <flux:button wire:click="createNewUser" size="sm" variant="ghost">
-                            New
-                        </flux:button>
-                    @endif
                 </div>
 
                 <form wire:submit="saveUser" class="space-y-4">
@@ -883,7 +876,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         </flux:button>
 
                         <flux:button type="submit" variant="primary">
-                            {{ $editingUserId !== null ? 'Save Changes' : 'Create Account' }}
+                            {{ $editingUserId !== null ? 'Save Changes' : 'Save Account' }}
                         </flux:button>
                     </div>
                 </form>

@@ -805,7 +805,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:click="sortBy('amenity_request_id')"
                             class="font-semibold hover:text-brand-text dark:hover:text-white"
                         >
-                            Request {{ $this->sortIndicator('amenity_request_id') }}
+                            REQUEST {{ $this->sortIndicator('amenity_request_id') }}
                         </button>
                     </th>
 
@@ -815,7 +815,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:click="sortBy('date_created')"
                             class="font-semibold hover:text-brand-text dark:hover:text-white"
                         >
-                            Created {{ $this->sortIndicator('date_created') }}
+                            CREATED {{ $this->sortIndicator('date_created') }}
                         </button>
                     </th>
 
@@ -828,7 +828,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:click="sortBy('total_price')"
                             class="font-semibold hover:text-brand-text dark:hover:text-white"
                         >
-                            Request Value {{ $this->sortIndicator('total_price') }}
+                            REQUEST VALUE {{ $this->sortIndicator('total_price') }}
                         </button>
                     </th>
 
@@ -841,7 +841,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:click="sortBy('amenity_request_status')"
                             class="font-semibold hover:text-brand-text dark:hover:text-white"
                         >
-                            Status {{ $this->sortIndicator('amenity_request_status') }}
+                            STATUS {{ $this->sortIndicator('amenity_request_status') }}
                         </button>
                     </th>
 
@@ -851,7 +851,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:click="sortBy('delivered_at')"
                             class="font-semibold hover:text-brand-text dark:hover:text-white"
                         >
-                            Delivered {{ $this->sortIndicator('delivered_at') }}
+                            DELIVERED {{ $this->sortIndicator('delivered_at') }}
                         </button>
                     </th>
 

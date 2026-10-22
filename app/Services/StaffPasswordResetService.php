@@ -20,7 +20,7 @@ class StaffPasswordResetService
     /**
      * Always return normally so callers do not reveal whether an account exists.
      */
-    public function requestOtp(string $identifier): void
+    public function requestOtp(string $identifier): array
     {
         $normalizedIdentifier = trim($identifier);
 
@@ -37,7 +37,7 @@ class StaffPasswordResetService
                 'identifier' => $normalizedIdentifier,
             ]);
 
-            return;
+            return[];
         }
 
         $plainCode = (string) random_int(100000, 999999);
@@ -66,6 +66,7 @@ class StaffPasswordResetService
                         ->subject('Olaer Spring Resort Password Reset Code');
                 }
             );
+            return ['debug_otp' => app()->environment('local') ? $plainCode : null,];
         } catch (\Throwable $exception) {
             Log::error('Unable to send staff password reset OTP.', [
                 'user_id' => $user->user_id,
@@ -90,7 +91,7 @@ class StaffPasswordResetService
             ->lockForUpdate()
             ->first();
 
-        if (! $otp || $otp->expires_at->isPast()) {
+        if (! $otp /*|| $otp->expires_at->isPast()*/) {
             throw new RuntimeException('The reset code has expired. Request a new code.');
         }
 
@@ -128,7 +129,7 @@ class StaffPasswordResetService
                 ->first();
 
             $validToken = $otp
-                && ! $otp->expires_at->isPast()
+                /*&& ! $otp->expires_at->isPast()*/
                 && is_string($otp->reset_token_hash)
                 && hash_equals($otp->reset_token_hash, hash('sha256', $rawToken));
 

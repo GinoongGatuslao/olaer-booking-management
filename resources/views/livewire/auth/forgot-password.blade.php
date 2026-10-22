@@ -27,6 +27,9 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
 
     public string $statusMessage = '';
 
+    #[Locked]
+    public ?string $debugOtp = null;
+
     public function requestCode(StaffPasswordResetService $service): void
     {
         $this->identifier = trim($this->identifier);
@@ -50,6 +53,10 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
 
         try {
             $service->requestOtp($this->identifier);
+            $result = $service->requestOtp($this->identifier);
+                $this->debugOtp = app()->environment('local')
+                ? $result['debug_otp']
+                : null;
         } catch (\RuntimeException $exception) {
             $this->addError('identifier', $exception->getMessage());
 
@@ -163,6 +170,11 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         @elseif ($step === 'verify')
             <form wire:submit="verifyCode" class="space-y-5">
                 <div>
+                        @if ($debugOtp)
+                            <div class="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                                Local testing code: <strong>{{ $debugOtp }}</strong>
+                            </div>
+                        @endif
                     <flux:input
                         wire:model="otp"
                         label="Six-digit reset code"

@@ -1049,7 +1049,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 wire:click="sortBy('amenity_request_id')"
                                 class="font-semibold"
                             >
-                                Request {{ $this->sortIndicator('amenity_request_id') }}
+                                REQUEST {{ $this->sortIndicator('amenity_request_id') }}
                             </button>
                         </th>
 
@@ -1058,7 +1058,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 wire:click="sortBy('date_created')"
                                 class="font-semibold"
                             >
-                                Created {{ $this->sortIndicator('date_created') }}
+                                CREATED {{ $this->sortIndicator('date_created') }}
                             </button>
                         </th>
 
@@ -1070,7 +1070,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 wire:click="sortBy('total_price')"
                                 class="font-semibold"
                             >
-                                Total {{ $this->sortIndicator('total_price') }}
+                                TOTAL {{ $this->sortIndicator('total_price') }}
                             </button>
                         </th>
 
@@ -1079,7 +1079,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 wire:click="sortBy('amenity_request_status')"
                                 class="font-semibold"
                             >
-                                Status {{ $this->sortIndicator('amenity_request_status') }}
+                                STATUS {{ $this->sortIndicator('amenity_request_status') }}
                             </button>
                         </th>
 
@@ -1091,7 +1091,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                     @forelse ($requests as $request)
-                        <tr wire:key="cashier-amenity-request-{{ $request->amenity_request_id }}" class="align-top">
+                        <tr wire:key="cashier-amenity-request-{{ $request->amenity_request_id }}" class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60" >
                             <td class="px-4 py-4 font-medium">
                                 #{{ $request->amenity_request_id }}
                             </td>

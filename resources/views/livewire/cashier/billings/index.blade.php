@@ -230,11 +230,11 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                 <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
                     <thead class="bg-zinc-50 text-xs uppercase text-zinc-500 dark:bg-zinc-950/60">
                         <tr>
-                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('date')">Date {{ $this->sortIndicator('date') }}</button></th>
-                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('transaction_type')">Type {{ $this->sortIndicator('transaction_type') }}</button></th>
-                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('guest_name')">Guest {{ $this->sortIndicator('guest_name') }}</button></th>
-                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount')">Total {{ $this->sortIndicator('amount') }}</button></th>
-                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount_due')">Balance {{ $this->sortIndicator('amount_due') }}</button></th>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('date')">DATE {{ $this->sortIndicator('date') }}</button></th>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('transaction_type')">TYPE {{ $this->sortIndicator('transaction_type') }}</button></th>
+                            <th class="px-4 py-3 text-left"><button wire:click="sortBy('guest_name')">GUEST {{ $this->sortIndicator('guest_name') }}</button></th>
+                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount')">TOTAL {{ $this->sortIndicator('amount') }}</button></th>
+                            <th class="px-4 py-3 text-right"><button wire:click="sortBy('amount_due')">BALANCE {{ $this->sortIndicator('amount_due') }}</button></th>
                             <th class="px-4 py-3 text-left">Status</th>
                             <th class="px-4 py-3 text-right">Action</th>
                         </tr>
@@ -249,7 +249,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                                     'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' => $selected,
                                 ])
                             >
-                                <td class="whitespace-nowrap px-4 py-3">{{ $record->transaction_date }}</td>
+                                <td class="whitespace-nowrap px-4 py-3">{{ \Carbon\Carbon::parse($record->transaction_date)->format('M d, Y')}}</td>
                                 <td class="px-4 py-3">
                                     <flux:badge color="{{ $record->transaction_type === 'booking' ? 'blue' : 'amber' }}">
                                         {{ ucfirst($record->transaction_type) }}
