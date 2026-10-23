@@ -345,7 +345,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:100'],
+            'email' => ['required', 'email', 'max:100', 'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/'],
             'contactNo' => ['required', 'string', 'max:20'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
@@ -580,13 +580,19 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             <flux:heading size="lg">Payment & admission</flux:heading>
             <flux:text>Core facility charges—and Walk-In admission charges when applicable—must be fully paid before admission. Amenities may remain outstanding.</flux:text>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <x-required-select wire:model="modeOfPaymentId" name="modeOfPaymentId" label="Mode of payment">
+                <x-required-select wire:model.live="modeOfPaymentId" name="modeOfPaymentId" label="Mode of payment">
                     <option value="">Choose payment mode</option>
                     @foreach (ModeOfPayment::query()->orderBy('mode_of_payment')->get() as $mode)
                         <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
                     @endforeach
                 </x-required-select>
-                <flux:input wire:model="referenceNumber" label="Reference number" />
+                @if($this->modeOfPaymentId === '2')
+                    <flux:input
+                        wire:model="referenceNumber"
+                        label="GCash reference number"
+                        placeholder="Required for GCash" 
+                    />
+                @endif
                 <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
             </div>
 

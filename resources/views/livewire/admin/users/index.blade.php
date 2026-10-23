@@ -54,6 +54,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     public string $purok = '';
     public string $password = '';
     public string $passwordConfirmation = '';
+    public bool $isDisabled = false;
 
     public function mount(): void
     {
@@ -233,6 +234,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         $this->purok = (string) ($user->address?->purok ?? '');
         $this->password = '';
         $this->passwordConfirmation = '';
+        $this->isDisabled = true;
 
         $this->resetValidation();
         $this->showEditor = true;
@@ -262,6 +264,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         $this->purok = '';
         $this->password = '';
         $this->passwordConfirmation = '';
+        $this->isDisabled = false;
 
         $this->resetValidation();
     }
@@ -284,6 +287,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 'required',
                 'email',
                 'max:50',
+                'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/',
                 Rule::unique('tbl_user', 'email')
                     ->ignore($this->editingUserId, 'user_id'),
             ],
@@ -802,7 +806,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     <flux:input wire:model="lastName" label="Last name" />
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:input wire:model="username" label="Username" />
+                        <flux:input wire:model="username" label="Username*" :disabled="$isDisabled"/>
                         <flux:input wire:model="email" type="email" label="Email" />
                     </div>
 

@@ -53,7 +53,8 @@ class FacilitySeeder extends Seeder
                     maxCapacity: $group['max'],
                     prices: [
                         'Day Rate' => $group['price'],
-                        'Night Rate' => $group['price'],
+                        'Night Rate' => $group['price'] + 100,
+                        'Both' => $group['price'] + 100,
                     ]
                 );
             }
@@ -98,6 +99,7 @@ class FacilitySeeder extends Seeder
                 prices: [
                     'Day Rate' => $hall['price'],
                     'Night Rate' => $hall['price'],
+                    'Both' => $hall['price'] * 2,
                 ]
             );
         }

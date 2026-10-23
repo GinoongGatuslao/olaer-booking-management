@@ -291,7 +291,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:50'],
+            'email' => ['required', 'email', 'max:50', 'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/'],
             'contactNo' => ['required', 'regex:/^09[0-9]{9}$/'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],

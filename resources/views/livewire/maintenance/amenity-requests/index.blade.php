@@ -799,15 +799,6 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         <table class="w-full min-w-[84rem] text-left text-sm">
             <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                 <tr>
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('amenity_request_id')"
-                            class="font-semibold hover:text-brand-text dark:hover:text-white"
-                        >
-                            REQUEST {{ $this->sortIndicator('amenity_request_id') }}
-                        </button>
-                    </th>
 
                     <th class="px-4 py-3">
                         <button
@@ -862,9 +853,6 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             <tbody class="divide-y divide-brand-border/70 dark:divide-zinc-800">
                 @forelse ($requests as $request)
                     <tr wire:key="maintenance-amenity-request-{{ $request->amenity_request_id }}" class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
-                        <td class="px-4 py-4 font-medium">
-                            #{{ $request->amenity_request_id }}
-                        </td>
 
                         <td class="px-4 py-4">
                             {{ $request->date_created?->format('M d, Y') ?? 'N/A' }}

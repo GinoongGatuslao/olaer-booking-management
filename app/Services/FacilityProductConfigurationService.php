@@ -34,7 +34,7 @@ class FacilityProductConfigurationService
         if (! $product instanceof FacilityProduct
             || ! $product->is_active
             || (int) $product->facility_type_id !== (int) $facility->facility_type_id
-            || ! $this->hasValidConfiguration($product)
+            /*|| ! $this->hasValidConfiguration($product)*/
         ) {
             throw new InvalidArgumentException(
                 'The selected facility is not configured for new transactions. Please choose another facility or contact resort staff.',
@@ -84,7 +84,7 @@ class FacilityProductConfigurationService
             'Overnight' => FacilityRateCode::Overnight,
             'Whole Day' => FacilityRateCode::WholeDay,
             default => throw new InvalidArgumentException(
-                'The selected rate is not configured for this facility. Please choose another rate or contact resort staff.',
+                'The selected rate is not configured for this facility. Please choose another rate or contact resort staff.', 
             ),
         };
     }
@@ -177,7 +177,11 @@ class FacilityProductConfigurationService
                 FacilityRateCode::Both,
             ],
             FacilityProductCode::FunctionHall1,
-            FacilityProductCode::FunctionHall2 => [FacilityRateCode::WholeDay],
+            FacilityProductCode::FunctionHall2 => [
+                FacilityRateCode::Day,
+                FacilityRateCode::Night,
+                FacilityRateCode::Both,
+            ],
         };
 
         if ($this->isRoomProduct($product)) {

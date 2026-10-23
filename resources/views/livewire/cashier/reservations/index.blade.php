@@ -659,7 +659,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                             @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
                                                 <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
                                                     <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
-                                                    <flux:menu.item icon="arrows-right-left" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'transfer')">Transfer</flux:menu.item>
                                                     @if ($detail->roomOccupants->isNotEmpty())
                                                         <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
                                                     @endif

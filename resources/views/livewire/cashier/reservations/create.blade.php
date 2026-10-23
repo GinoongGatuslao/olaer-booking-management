@@ -255,7 +255,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:100'],
+            'email' => ['required', 'email', 'max:100', 'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/'],
             'contactNo' => ['required', 'string', 'max:20'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],

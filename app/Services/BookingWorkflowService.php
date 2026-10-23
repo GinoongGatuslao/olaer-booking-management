@@ -459,113 +459,113 @@ class BookingWorkflowService
     }
 
     public function extendCottageDayRate(int $bookingDetailsId): void
-    {
-        DB::transaction(function () use ($bookingDetailsId): void {
-            $detail = BookingDetail::query()
-                ->with(['booking', 'facility.facilityType'])
-                ->lockForUpdate()
-                ->findOrFail($bookingDetailsId);
+{
+    DB::transaction(function () use ($bookingDetailsId): void {
+        $detail = BookingDetail::query()
+            ->with(['booking', 'facility.facilityType'])
+            ->lockForUpdate()
+            ->findOrFail($bookingDetailsId);
 
-            $booking = Booking::query()
-                ->lockForUpdate()
-                ->findOrFail((int) $detail->booking_id);
+        $booking = Booking::query()
+            ->lockForUpdate()
+            ->findOrFail((int) $detail->booking_id);
 
-            $detail->setRelation('booking', $booking);
+        $detail->setRelation('booking', $booking);
 
-            $this->scheduleLock->lockOne(
-                (int) $detail->facility_id,
-            );
+        $this->scheduleLock->lockOne(
+            (int) $detail->facility_id,
+        );
 
-            $this->guardEditableBookingDetail($detail);
+        $this->guardEditableBookingDetail($detail);
 
-            $product = $this->products->productFor($detail->facility);
+        $product = $this->products->productFor($detail->facility);
 
-            if (! str_starts_with($product->product_code->value, 'COTTAGE_')) {
-                throw new InvalidArgumentException('Only cottage bookings can use the day-rate extension rule.');
-            }
+        if (! str_starts_with($product->product_code->value, 'COTTAGE_') && ! str_starts_with($product->product_code->value, 'FUNCTION_') ) {
+            throw new InvalidArgumentException('Only cottage or function hall bookings can use the day-rate extension rule.');
+        }
 
-            if ($detail->getRawOriginal('rate_code') !== 'DAY') {
-                throw new InvalidArgumentException('Only Day Rate cottage bookings can be extended using this rule.');
-            }
+        if ($detail->getRawOriginal('rate_code') !== 'DAY') {
+            throw new InvalidArgumentException('Only Day Rate cottage or function hall bookings can be extended using this rule.');
+        }
 
-            $extraGuests = BookingExtraGuest::query()
-                ->where('booking_details_id', $detail->booking_details_id)
-                ->lockForUpdate()
-                ->get();
+        $extraGuests = BookingExtraGuest::query()
+            ->where('booking_details_id', $detail->booking_details_id)
+            ->lockForUpdate()
+            ->get();
 
-            if ($extraGuests->isNotEmpty() || ! $this->money->equals($detail->extra_guest_fee ?? '0.00', '0.00')) {
-                throw new InvalidArgumentException('Cottage details cannot contain room extra-guest charges or records.');
-            }
+        if ($extraGuests->isNotEmpty() || ! $this->money->equals($detail->extra_guest_fee ?? '0.00', '0.00')) {
+            throw new InvalidArgumentException('Cottage details cannot contain room extra-guest charges or records.');
+        }
 
-            if (
-                $detail->base_price === null
-                || $detail->discount_amount === null
-                || $detail->extra_guest_fee === null
-            ) {
-                throw new InvalidArgumentException('The existing cottage pricing snapshot is incomplete and cannot be extended safely.');
-            }
+        if (
+            $detail->base_price === null
+            || $detail->discount_amount === null
+            || $detail->extra_guest_fee === null
+        ) {
+            throw new InvalidArgumentException('The existing cottage pricing snapshot is incomplete and cannot be extended safely.');
+        }
 
-            $discountAmount = $this->money->normalize($detail->discount_amount);
-            $existingLineTotal = $this->money->subtract(
-                $this->money->add($detail->base_price, $detail->extra_guest_fee),
-                $discountAmount,
-            );
+        $discountAmount = $this->money->normalize($detail->discount_amount);
+        $existingLineTotal = $this->money->subtract(
+            $this->money->add($detail->base_price, $detail->extra_guest_fee),
+            $discountAmount,
+        );
 
-            if (
-                $this->money->compare($existingLineTotal, '0.00') === -1
-                || ($detail->line_total !== null && ! $this->money->equals($detail->line_total, $existingLineTotal))
-            ) {
-                throw new InvalidArgumentException('The existing cottage pricing snapshot does not reconcile and cannot be extended safely.');
-            }
+        if (
+            $this->money->compare($existingLineTotal, '0.00') === -1
+            || ($detail->line_total !== null && ! $this->money->equals($detail->line_total, $existingLineTotal))
+        ) {
+            throw new InvalidArgumentException('The existing cottage pricing snapshot does not reconcile and cannot be extended safely.');
+        }
 
-            $nightRate = $this->products->rateFor($detail->facility, 'Night');
-            $bothRate = $this->products->rateFor($detail->facility, 'Both');
-            $newBasePrice = $this->money->add($detail->base_price, $nightRate->amount);
+        // Use the Both rate directly as the new base price.
+        $bothRate = $this->products->rateFor($detail->facility, 'Both');
+        $newBasePrice = $this->money->normalize($bothRate->amount);
 
-            if (! $this->money->equals($newBasePrice, $bothRate->amount)) {
-                throw new InvalidArgumentException('The approved Both rate must equal the booked Day base plus the current Night rate.');
-            }
+        $newLineTotal = $this->money->subtract(
+            $this->money->add($newBasePrice, '0.00'),
+            $discountAmount,
+        );
+        $priceDifference = $this->money->subtract($newLineTotal, $existingLineTotal);
 
-            $newLineTotal = $this->money->add($existingLineTotal, $nightRate->amount);
-            $discountRate = $this->money->equals($discountAmount, '0.00')
-                ? '0.000000'
-                : null;
-            $snapshot = $this->products->detailSnapshot(
-                facility: $detail->facility,
-                rate: $bothRate,
-                guestCount: (int) ($detail->guest_count ?? $booking->total_guest_count),
-                basePrice: $newBasePrice,
-                discountRate: $discountRate,
-                discountAmount: $discountAmount,
-                extraGuestFee: '0.00',
-                lineTotal: $newLineTotal,
-            );
+        $discountRate = $this->money->equals($discountAmount, '0.00')
+            ? '0.000000'
+            : null;
+        $snapshot = $this->products->detailSnapshot(
+            facility: $detail->facility,
+            rate: $bothRate,
+            guestCount: (int) ($detail->guest_count ?? $booking->total_guest_count),
+            basePrice: $newBasePrice,
+            discountRate: $discountRate,
+            discountAmount: $discountAmount,
+            extraGuestFee: '0.00',
+            lineTotal: $newLineTotal,
+        );
 
-            $this->scheduleBlocks->extendCottageDayToBoth($detail);
+        $this->scheduleBlocks->extendCottageDayToBoth($detail);
 
-            $detail->update([
-                'rate_type' => $this->products->canonicalRateType($bothRate),
-                'status' => 'Extended',
-                ...$snapshot,
-            ]);
+        $detail->update([
+            'rate_type' => $this->products->canonicalRateType($bothRate),
+            'status' => 'Extended',
+            ...$snapshot,
+        ]);
 
-            $booking->update([
-                'total_price' => $this->money->add(
-                    $booking->total_price,
-                    $nightRate->amount,
-                ),
-                'amount_due' => $this->money->add(
-                    $booking->amount_due,
-                    $nightRate->amount,
-                ),
-            ]);
-        });
-    }
+        $booking->update([
+            'total_price' => $this->money->add(
+                $booking->total_price,
+                $priceDifference,
+            ),
+            'amount_due' => $this->money->add(
+                $booking->amount_due,
+                $priceDifference,
+            ),
+        ]);
+    });
+}
 
     private function guardEditableBookingDetail(BookingDetail $detail): void
     {
         $lockedDetailStatuses = [
-            'Checked-in',
             'Checked-out',
             'Cancelled',
             'Payment Rejected',

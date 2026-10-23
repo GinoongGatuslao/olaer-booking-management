@@ -273,6 +273,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                 'facility_name' => trim($validated['facilityName']),
                 'facility_type_id' => (int) $validated['facilityTypeId'],
                 'facility_size' => trim($validated['facilitySize']),
+                'capacity' => (string)trim($validated['min_capacity']) .'-'. trim($validated['max_capacity']),
                 'min_capacity' => (int)trim($validated['min_capacity']),
                 'max_capacity' => (int)trim($validated['max_capacity']),
                 'facility_status' => $statusIsLocked

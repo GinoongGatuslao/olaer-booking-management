@@ -140,8 +140,8 @@ class FacilityProductSeeder extends Seeder
             'strict_maximum' => null,
             'rates' => [
                 ['code' => FacilityRateCode::Day, 'display_name' => 'Day', 'amount' => $slotAmount],
-                ['code' => FacilityRateCode::Night, 'display_name' => 'Night', 'amount' => $slotAmount],
-                ['code' => FacilityRateCode::Both, 'display_name' => 'Both', 'amount' => $slotAmount * 2],
+                ['code' => FacilityRateCode::Night, 'display_name' => 'Night', 'amount' => $slotAmount + 100],
+                ['code' => FacilityRateCode::Both, 'display_name' => 'Both', 'amount' => $slotAmount + 100],
             ],
         ];
     }
@@ -172,14 +172,16 @@ class FacilityProductSeeder extends Seeder
             'facility_type' => 'Function Hall',
             'display_name' => $displayName,
             'size_label' => $displayName,
-            'schedule_policy' => FacilitySchedulePolicy::WholeCalendarDay,
+            'schedule_policy' => FacilitySchedulePolicy::DatedSlots,
             'capacity_policy' => FacilityCapacityPolicy::RecommendedInformational,
             'suggested_minimum' => null,
             'suggested_maximum' => $suggestedMaximum,
             'included_guest_count' => null,
             'strict_maximum' => null,
             'rates' => [
-                ['code' => FacilityRateCode::WholeDay, 'display_name' => 'Whole Day', 'amount' => $amount],
+                ['code' => FacilityRateCode::Day, 'display_name' => 'Day', 'amount' => $amount],
+                ['code' => FacilityRateCode::Night, 'display_name' => 'Night', 'amount' => $amount],
+                ['code' => FacilityRateCode::Both, 'display_name' => 'Both', 'amount' => $amount * 2],
             ],
         ];
     }

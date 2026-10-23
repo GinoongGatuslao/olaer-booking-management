@@ -836,6 +836,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         {{ $amenity->amenityName?->amenity_name }}
                                         —
                                         ₱{{ number_format((float) $amenity->amenity_price, 2) }}
+                                        —
+                                        {{ $amenity->amenity_description }}
                                     </option>
                                 @endforeach
                             </flux:select>
@@ -1046,15 +1048,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     <tr>
                         <th class="px-4 py-3">
                             <button
-                                wire:click="sortBy('amenity_request_id')"
-                                class="font-semibold"
-                            >
-                                REQUEST {{ $this->sortIndicator('amenity_request_id') }}
-                            </button>
-                        </th>
-
-                        <th class="px-4 py-3">
-                            <button
                                 wire:click="sortBy('date_created')"
                                 class="font-semibold"
                             >
@@ -1092,9 +1085,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                     @forelse ($requests as $request)
                         <tr wire:key="cashier-amenity-request-{{ $request->amenity_request_id }}" class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60" >
-                            <td class="px-4 py-4 font-medium">
-                                #{{ $request->amenity_request_id }}
-                            </td>
 
                             <td class="px-4 py-4">
                                 {{ $request->date_created?->format('M d, Y') ?? 'N/A' }}
