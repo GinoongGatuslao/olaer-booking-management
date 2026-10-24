@@ -465,7 +465,7 @@ class extends Component
 
                 <div class="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                     <div class="flex items-center justify-between text-base font-semibold">
-                        <span>Amount due</span>
+                        <span>Balance</span>
                         <span>
                             ₱{{ number_format((float) $this->calculation['amount_due'], 2) }}
                         </span>

@@ -66,14 +66,14 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
         <x-dashboard-stat-card
             label="Revenue today"
             :value="'₱'.number_format($this->overview['today_revenue'], 2)"
-            description="Verified payments received today."
+            description="Amount paid received today."
             tone="success"
         />
 
         <x-dashboard-stat-card
             label="Revenue this month"
             :value="'₱'.number_format($this->overview['month_revenue'], 2)"
-            description="Verified payments in the current month."
+            description="Amount paid in the current month."
             tone="secondary"
         />
 

@@ -64,9 +64,37 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
         $this->syncRoomOccupantRows();
     }
 
+    /** @return array<string, string> */
+protected function messages(): array
+{
+    return [
+        'groups.*.estimated_users.required' => 'Please enter the number of guests.',
+        'groups.*.estimated_users.integer'  => 'Guests must be a whole number.',
+        'groups.*.estimated_users.min'      => 'There must be at least 1 guest.',
+        'groups.*.estimated_users.max'      => 'You can book up to 500 guests.',
+        'groups.*.quantity.required'        => 'Please enter a quantity.',
+    ];
+}
+
+    /** @return array<string, string> */
+    protected function validationAttributes(): array
+    {
+        return [
+            'groups.*.estimated_users'    => 'estimated guests',
+            'groups.*.quantity'           => 'quantity',
+            'groups.*.facility_product_id' => 'facility',
+            'groups.*.rate_code'          => 'schedule',
+            'groups.*.check_in_date'      => 'check-in date',
+            'groups.*.check_out_date'     => 'check-out date',
+            'contactNo'                   => 'contact number',
+            'referenceNumber'             => 'GCash reference number',
+        ];
+    }
+
     private function updatePartyCount(): void
     {
-        $this->partyCount = max(1, (int) collect($this->groups)->sum('estimated_users'));
+        $this->partyCount = max(1, (int) collect($this->groups)
+            ->sum(fn (array $group): int => (int) ($group['estimated_users'] ?? 0)));
     }
 
     #[Computed]
@@ -401,7 +429,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                                 @endforeach
                             </x-required-select>
                             <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated users" />
+                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated guests" />
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
                             </div>

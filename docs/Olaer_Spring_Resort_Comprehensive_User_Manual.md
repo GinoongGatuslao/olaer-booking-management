@@ -103,7 +103,7 @@ The linked Entrance Slip is settled through the booking core payment and the Boo
 
 ### GCash Verification
 
-Review reference/proof, then Verify or Reject. Only Verified payments reduce settled balance. Duplicate references are protected.
+Review reference/proof, then Verify or Reject. Only Amount paid reduce settled balance. Duplicate references are protected.
 
 ### Billing Statement
 

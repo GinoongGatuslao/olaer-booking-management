@@ -253,7 +253,7 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                             <p class="text-xs font-semibold uppercase text-zinc-500">Reservation</p>
                             <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">Reservation date: {{ optional($reservation->reservation_date)->format('M d, Y') }}</p>
                             <p class="text-sm text-zinc-700 dark:text-zinc-300">Total: ₱{{ number_format((float) $reservation->total_price, 2) }}</p>
-                            <p class="text-sm text-zinc-700 dark:text-zinc-300">Amount due: ₱{{ number_format((float) $reservation->amount_due, 2) }}</p>
+                            <p class="text-sm text-zinc-700 dark:text-zinc-300"> Balance: ₱{{ number_format((float) $reservation->amount_due, 2) }}</p>
                         </div>
                     </div>
 
@@ -319,7 +319,7 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                             <p class="text-xs font-semibold uppercase text-zinc-500">Booking</p>
                             <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">Booking date: {{ optional($booking->booking_date)->format('M d, Y') }}</p>
                             <p class="text-sm text-zinc-700 dark:text-zinc-300">Total: ₱{{ number_format((float) $booking->total_price, 2) }}</p>
-                            <p class="text-sm text-zinc-700 dark:text-zinc-300">Amount due: ₱{{ number_format((float) $booking->amount_due, 2) }}</p>
+                            <p class="text-sm text-zinc-700 dark:text-zinc-300">Balance: ₱{{ number_format((float) $booking->amount_due, 2) }}</p>
                         </div>
                     </div>
 

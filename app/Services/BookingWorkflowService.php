@@ -153,13 +153,23 @@ class BookingWorkflowService
         });
     }
 
-    public function rescheduleBookingDetail(int $bookingDetailsId, string $newCheckInDate): void
-    {
+    public function rescheduleBookingDetail(
+        int $bookingDetailsId,
+        string $newCheckInDate,
+        ?string $newCheckOutDate = null,
+    ): void {
         if (validator(['check_in_date' => $newCheckInDate], ['check_in_date' => ['required', 'date_format:Y-m-d']])->fails()) {
             throw new InvalidArgumentException('Choose a valid check-in date.');
         }
 
-        DB::transaction(function () use ($bookingDetailsId, $newCheckInDate): void {
+        if (
+            $newCheckOutDate !== null
+            && validator(['check_out_date' => $newCheckOutDate], ['check_out_date' => ['required', 'date_format:Y-m-d']])->fails()
+        ) {
+            throw new InvalidArgumentException('Choose a valid check-out date.');
+        }
+
+        DB::transaction(function () use ($bookingDetailsId, $newCheckInDate, $newCheckOutDate): void {
             $detail = BookingDetail::query()
                 ->with('booking')
                 ->lockForUpdate()
@@ -173,10 +183,21 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('The selected facility is not available.');
             }
 
-            $oldCheckIn = Carbon::parse($detail->check_in_date);
-            $oldCheckOut = Carbon::parse($detail->check_out_date);
-            $days = max(1, $oldCheckIn->diffInDays($oldCheckOut));
-            $newCheckOutDate = Carbon::parse($newCheckInDate)->addDays($days)->toDateString();
+            $originalDays = $this->stayDays($detail->check_in_date, $detail->check_out_date);
+
+            if ($newCheckOutDate === null) {
+                $newCheckOutDate = Carbon::parse($newCheckInDate)
+                    ->addDays(max(1, $originalDays))
+                    ->toDateString();
+            } else {
+                $newDays = $this->stayDays($newCheckInDate, $newCheckOutDate);
+
+                if ($newDays !== $originalDays) {
+                    throw new InvalidArgumentException(
+                        $this->stayLengthMismatchMessage($originalDays, $newDays)
+                    );
+                }
+            }
 
             $this->guardEditableBookingDetail($detail);
             $this->scheduleBlocks->synchronizeBookingDetail($detail, [
@@ -190,6 +211,23 @@ class BookingWorkflowService
                 'status' => 'Rescheduled',
             ]);
         });
+    }
+
+    public function stayDays(\DateTimeInterface|string $checkIn, \DateTimeInterface|string $checkOut): int
+    {
+        return (int) Carbon::parse($checkIn)->startOfDay()
+            ->diffInDays(Carbon::parse($checkOut)->startOfDay(), true);
+    }
+
+    public function stayLengthMismatchMessage(int $originalDays, int $newDays): string
+    {
+        return sprintf(
+            'The new dates are %d %s apart, but the original booking is %d %s. Rescheduling must keep the same length of stay.',
+            $newDays,
+            Str::plural('day', $newDays),
+            $originalDays,
+            Str::plural('day', $originalDays),
+        );
     }
 
     public function transferBookingDetail(int $bookingDetailsId, int $newFacilityId): void

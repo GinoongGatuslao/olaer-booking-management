@@ -599,7 +599,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                     <div class="text-left md:text-right">
                         <p class="text-sm text-public-muted dark:text-zinc-400">Estimated total</p>
                         <p class="mt-1 text-3xl font-bold text-public-forest dark:text-emerald-200">₱{{ number_format((float) $reservation->total_price, 2) }}</p>
-                        <p class="mt-1 text-sm text-public-muted dark:text-zinc-400">Amount due: ₱{{ number_format((float) $reservation->amount_due, 2) }}</p>
+                        <p class="mt-1 text-sm text-public-muted dark:text-zinc-400"> Balance: ₱{{ number_format((float) $reservation->amount_due, 2) }}</p>
                     </div>
                 </div>
 

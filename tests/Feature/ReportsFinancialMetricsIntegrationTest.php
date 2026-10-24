@@ -314,7 +314,7 @@ class ReportsFinancialMetricsIntegrationTest extends TestCase
             'Reservation Revenue',
             'Entrance Revenue',
             'Total Outstanding',
-            'The summary cards cover all Verified payments',
+            'The summary cards cover all Amount paid',
         ] as $label) {
             $this->assertStringContainsString(
                 $label,

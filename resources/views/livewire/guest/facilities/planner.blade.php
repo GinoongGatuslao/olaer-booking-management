@@ -353,7 +353,32 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
         return $counts;
     }
+    /** @return array<string, string> */
+protected function messages(): array
+{
+    return [
+        'groups.*.estimated_users.required' => 'Please enter the number of guests.',
+        'groups.*.estimated_users.integer'  => 'Guests must be a whole number.',
+        'groups.*.estimated_users.min'      => 'There must be at least 1 guest.',
+        'groups.*.estimated_users.max'      => 'You can book up to 500 guests.',
+        'groups.*.quantity.required'        => 'Please enter a quantity.',
+    ];
+}
 
+/** @return array<string, string> */
+protected function validationAttributes(): array
+{
+    return [
+        'groups.*.estimated_users'    => 'estimated guests',
+        'groups.*.quantity'           => 'quantity',
+        'groups.*.facility_product_id' => 'facility',
+        'groups.*.rate_code'          => 'schedule',
+        'groups.*.check_in_date'      => 'check-in date',
+        'groups.*.check_out_date'     => 'check-out date',
+        'contactNo'                   => 'contact number',
+        'referenceNumber'             => 'GCash reference number',
+    ];
+}
     private function syncRoomOccupantRows(): void
     {
         $rooms = [];
@@ -376,9 +401,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     }
     private function updatePartyCount(): void
     {
-        $this->partyCount = max(1, (int) collect($this->groups)->sum('estimated_users'));
+        $this->partyCount = max(1, (int) collect($this->groups)
+            ->sum(fn (array $group): int => (int) ($group['estimated_users'] ?? 0)));
     }
 };
+    
 ?>
 
 <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">

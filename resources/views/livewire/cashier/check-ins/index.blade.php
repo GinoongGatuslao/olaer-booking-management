@@ -435,7 +435,7 @@ new class extends Component {
                             wire:click="sortBy('amount_due')"
                             class="font-semibold transition hover:text-brand-text dark:hover:text-white"
                         >
-                            DUE {{ $this->sortIndicator('amount_due') }}
+                            BALANCE {{ $this->sortIndicator('amount_due') }}
                         </button>
                     </th>
 

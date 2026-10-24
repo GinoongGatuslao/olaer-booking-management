@@ -40,7 +40,9 @@ new class extends Component {
     public array $rescheduleForm = [
         'booking_details_id' => '',
         'label' => '',
+        'original_days' => '',
         'new_check_in_date' => '',
+        'new_check_out_date' => '',
     ];
 
     public array $transferForm = [
@@ -159,10 +161,14 @@ new class extends Component {
             return;
         }
 
+        $this->resetValidation();
         $this->rescheduleForm = [
             'booking_details_id' => (string) $bookingDetailsId,
             'label' => $detail->booking->b_ref_no . ' - ' . $detail->facility->facility_name,
-            'new_check_in_date' => (string) $detail->check_in_date,
+            // Display only. saveReschedule() re-reads the real length from the database.
+            'original_days' => (string) app(BookingWorkflowService::class)->stayDays($detail->check_in_date, $detail->check_out_date),
+            'new_check_in_date' => \Illuminate\Support\Carbon::parse($detail->check_in_date)->toDateString(),
+            'new_check_out_date' => \Illuminate\Support\Carbon::parse($detail->check_out_date)->toDateString(),
         ];
     }
 
@@ -171,21 +177,110 @@ new class extends Component {
         $this->rescheduleForm = [
             'booking_details_id' => '',
             'label' => '',
+            'original_days' => '',
             'new_check_in_date' => '',
+            'new_check_out_date' => '',
+        ];
+    }
+
+    /** @return array<string, string> */
+    protected function messages(): array
+    {
+        $unavailable = 'This booking facility is no longer available. Refresh the list and try again.';
+
+        return [
+            'rescheduleForm.booking_details_id.required' => $unavailable,
+            'rescheduleForm.booking_details_id.integer' => $unavailable,
+            'rescheduleForm.booking_details_id.exists' => $unavailable,
+            'rescheduleForm.new_check_in_date.required' => 'Choose the new check-in date.',
+            'rescheduleForm.new_check_in_date.date_format' => 'Enter a valid check-in date.',
+            'rescheduleForm.new_check_in_date.after_or_equal' => 'The new check-in date cannot be in the past.',
+            'rescheduleForm.new_check_out_date.required' => 'Choose the new check-out date.',
+            'rescheduleForm.new_check_out_date.date_format' => 'Enter a valid check-out date.',
+            'rescheduleForm.new_check_out_date.after_or_equal' => 'The new check-out date cannot be before the new check-in date.',
+
+            'transferForm.booking_details_id.required' => $unavailable,
+            'transferForm.booking_details_id.integer' => $unavailable,
+            'transferForm.booking_details_id.exists' => $unavailable,
+            'transferForm.facility_product_id.required' => 'Choose the facility to transfer to.',
+            'transferForm.facility_product_id.integer' => 'Choose a facility from the list.',
+            'transferForm.facility_product_id.exists' => 'That facility is no longer available. Choose another one.',
+
+            'cancelDetailForm.booking_details_id.required' => $unavailable,
+            'cancelDetailForm.booking_details_id.integer' => $unavailable,
+            'cancelDetailForm.booking_details_id.exists' => $unavailable,
+            'cancelDetailForm.reason.required' => 'Enter a reason for cancelling this facility.',
+            'cancelDetailForm.reason.max' => 'The cancellation reason cannot be longer than :max characters.',
+
+            'occupantForm.booking_details_id.required' => $unavailable,
+            'occupantForm.booking_details_id.integer' => $unavailable,
+            'occupantForm.booking_details_id.exists' => $unavailable,
+            'occupantForm.occupants.required' => 'There are no occupants to save for this facility.',
+            'occupantForm.occupants.min' => 'There are no occupants to save for this facility.',
+            'occupantForm.occupants.max' => 'You can save up to :max occupants.',
+            'occupantForm.occupants.*.first_name.required' => "Enter this occupant's first name.",
+            'occupantForm.occupants.*.first_name.max' => 'The first name cannot be longer than :max characters.',
+            'occupantForm.occupants.*.last_name.required' => "Enter this occupant's last name.",
+            'occupantForm.occupants.*.last_name.max' => 'The last name cannot be longer than :max characters.',
+            'occupantForm.occupants.*.middle_name.max' => 'The middle name cannot be longer than :max characters.',
+        ];
+    }
+
+    /** @return array<string, string> */
+    protected function validationAttributes(): array
+    {
+        return [
+            'rescheduleForm.new_check_in_date' => 'new check-in date',
+            'rescheduleForm.new_check_out_date' => 'new check-out date',
+            'transferForm.facility_product_id' => 'facility',
+            'cancelDetailForm.reason' => 'cancellation reason',
+            'occupantForm.occupants' => 'occupants',
+            'occupantForm.occupants.*.first_name' => 'occupant first name',
+            'occupantForm.occupants.*.middle_name' => 'occupant middle name',
+            'occupantForm.occupants.*.last_name' => 'occupant last name',
         ];
     }
 
     public function saveReschedule(BookingWorkflowService $bookingWorkflow): void
     {
+        // The original length comes from the database, never from the form state.
+        $current = BookingDetail::query()->find((int) ($this->rescheduleForm['booking_details_id'] ?? 0));
+        $originalDays = $current === null
+            ? null
+            : $bookingWorkflow->stayDays($current->check_in_date, $current->check_out_date);
+
         $validated = $this->validate([
             'rescheduleForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
             'rescheduleForm.new_check_in_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'rescheduleForm.new_check_out_date' => [
+                'bail',
+                'required',
+                'date_format:Y-m-d',
+                'after_or_equal:rescheduleForm.new_check_in_date',
+                function (string $attribute, mixed $value, \Closure $fail) use ($bookingWorkflow, $originalDays): void {
+                    $checkIn = (string) ($this->rescheduleForm['new_check_in_date'] ?? '');
+
+                    if (
+                        $originalDays === null
+                        || validator(['d' => $checkIn], ['d' => ['required', 'date_format:Y-m-d']])->fails()
+                    ) {
+                        return; // the other rules report these
+                    }
+
+                    $newDays = $bookingWorkflow->stayDays($checkIn, (string) $value);
+
+                    if ($newDays !== $originalDays) {
+                        $fail($bookingWorkflow->stayLengthMismatchMessage($originalDays, $newDays));
+                    }
+                },
+            ],
         ]);
 
         try {
             $bookingWorkflow->rescheduleBookingDetail(
                 (int) $validated['rescheduleForm']['booking_details_id'],
-                $validated['rescheduleForm']['new_check_in_date']
+                $validated['rescheduleForm']['new_check_in_date'],
+                $validated['rescheduleForm']['new_check_out_date'],
             );
 
             $this->cancelReschedule();
@@ -512,31 +607,35 @@ new class extends Component {
         </div>
     @endif
 
-    @error('booking')
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
-    @enderror
-
-    @error('reschedule')
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
-    @enderror
-
-    @error('transfer')
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
-    @enderror
-
-    @error('extend')
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
-    @enderror
+    {{-- One banner for page-level problems (service errors and stale-row errors), instead of four stacked ones. --}}
+    @php
+        $pageError = collect([
+            'booking', 'reschedule', 'transfer', 'extend',
+            'rescheduleForm.booking_details_id', 'transferForm.booking_details_id',
+            'cancelDetailForm.booking_details_id', 'occupantForm.booking_details_id',
+        ])->map(fn (string $key): ?string => $errors->first($key) ?: null)->filter()->first();
+    @endphp
+    @if ($pageError)
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $pageError }}</div>
+    @endif
 
     @if ($rescheduleForm['booking_details_id'] !== '')
         <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
             <h2 class="text-lg font-semibold text-amber-950 dark:text-amber-100">Reschedule Booking</h2>
             <p class="text-sm text-amber-800 dark:text-amber-200">{{ $rescheduleForm['label'] }}</p>
-            <form wire:submit.prevent="saveReschedule" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <form wire:submit.prevent="saveReschedule" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
                 <flux:input label="New check-in date" type="date" wire:model="rescheduleForm.new_check_in_date" />
-                <flux:button type="submit" variant="primary">Save Reschedule</flux:button>
-                <flux:button type="button" wire:click="cancelReschedule">Cancel</flux:button>
+                <flux:input label="New check-out date" type="date" wire:model="rescheduleForm.new_check_out_date" />
+                <div class="flex gap-3 sm:mt-6">
+                    <flux:button type="submit" variant="primary">Save Reschedule</flux:button>
+                    <flux:button type="button" wire:click="cancelReschedule">Cancel</flux:button>
+                </div>
             </form>
+            @if ($rescheduleForm['original_days'] !== '')
+                <p class="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                    The original stay is {{ $rescheduleForm['original_days'] }} {{ \Illuminate\Support\Str::plural('day', (int) $rescheduleForm['original_days']) }} between check-in and check-out. The new dates must keep the same length.
+                </p>
+            @endif
         </div>
     @endif
 
@@ -553,6 +652,7 @@ new class extends Component {
                             <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </select>
+                    @error('transferForm.facility_product_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                     <p class="mt-1 text-xs text-zinc-500">Exact unit is assigned automatically; cheaper transfers are rejected.</p>
                 </div>
                 <flux:button type="submit" variant="primary">Auto-assign Transfer</flux:button>
@@ -680,7 +780,7 @@ new class extends Component {
                     <th class="px-5 py-3 font-semibold">Date Range</th>
                     <th class="px-5 py-3 font-semibold">Rate</th>
                     <th class="px-5 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">TOTAL {{ $this->sortIndicator('total_price') }}</button></th>
-                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">DUE {{ $this->sortIndicator('amount_due') }}</button></th>
+                    <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">BALANCE {{ $this->sortIndicator('amount_due') }}</button></th>
                     <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">BOOKING STATUS {{ $this->sortIndicator('booking_status') }}</button></th>
                     <th class="px-5 py-3"><button type="button" wire:click="sortBy('status')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY STATUS {{ $this->sortIndicator('status') }}</button></th>
                     <th class="px-5 py-3 text-right font-semibold">Actions</th>

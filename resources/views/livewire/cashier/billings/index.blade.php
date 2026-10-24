@@ -447,7 +447,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                         <div class="flex justify-between py-1"><span>Charges</span><span>{{ $this->money($statement['ledger']['charges']) }}</span></div>
                         <div class="flex justify-between py-1"><span>Discounts / credit adjustments</span><span>−{{ $this->money($statement['ledger']['discounts']) }}</span></div>
                         <div class="flex justify-between py-1"><span>Applied transaction credit</span><span>−{{ $this->money($statement['ledger']['applied_credits']) }}</span></div>
-                        <div class="flex justify-between py-1"><span>Verified payments</span><span>−{{ $this->money($statement['ledger']['verified_payments']) }}</span></div>
+                        <div class="flex justify-between py-1"><span>Amount paid</span><span>−{{ $this->money($statement['ledger']['verified_payments']) }}</span></div>
                         <div class="mt-2 flex justify-between border-t border-zinc-200 pt-3 text-base font-bold dark:border-zinc-800">
                             <span>Balance</span><span>{{ $this->money($statement['ledger']['balance']) }}</span>
                         </div>

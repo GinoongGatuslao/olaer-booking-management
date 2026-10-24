@@ -148,12 +148,12 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
         </flux:card>
 
         <flux:card>
-            <p class="text-sm text-zinc-500">Verified payments</p>
+            <p class="text-sm text-zinc-500">Amount paid</p>
             <p class="mt-2 text-2xl font-semibold">₱{{ number_format($this->summary['total_paid'], 2) }}</p>
         </flux:card>
 
         <flux:card>
-            <p class="text-sm text-zinc-500">Amount due</p>
+            <p class="text-sm text-zinc-500">Balance</p>
             <p class="mt-2 text-2xl font-semibold {{ $this->summary['amount_due'] > 0 ? 'text-red-600' : 'text-green-600' }}">
                 ₱{{ number_format($this->summary['amount_due'], 2) }}
             </p>

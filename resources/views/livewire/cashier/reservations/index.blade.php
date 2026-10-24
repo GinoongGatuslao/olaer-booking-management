@@ -50,6 +50,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public ?string $detailAction = null;
     public string $detailCheckInDate = '';
     public string $detailCheckOutDate = '';
+    public string $detailOriginalDays = ''; // display only; the real length is re-read on save
     public string $detailFacilityProductId = '';
     public string $detailCancellationReason = '';
     public array $detailOccupants = [];
@@ -259,6 +260,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->detailAction = $action;
         $this->detailCheckInDate = $detail->check_in_date?->toDateString() ?? '';
         $this->detailCheckOutDate = $detail->check_out_date?->toDateString() ?? '';
+        $this->detailOriginalDays = ($action === 'reschedule' && $detail->check_in_date && $detail->check_out_date)
+            ? (string) app(ReservationFacilityOperationService::class)->stayDays($detail->check_in_date, $detail->check_out_date)
+            : '';
         $this->detailFacilityProductId = (string) ($detail->facility_product_id ?? '');
         $this->detailCancellationReason = '';
         $this->detailOccupants = $detail->roomOccupants
@@ -277,6 +281,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->detailAction = null;
         $this->detailCheckInDate = '';
         $this->detailCheckOutDate = '';
+        $this->detailOriginalDays = '';
         $this->detailFacilityProductId = '';
         $this->detailCancellationReason = '';
         $this->detailOccupants = [];
@@ -304,6 +309,64 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ->get();
     }
 
+    /** @return array<string, string> */
+    protected function messages(): array
+    {
+        $unavailable = 'This reservation is no longer available. Refresh the list.';
+        $facilityUnavailable = 'This facility is no longer available. Refresh the list.';
+
+        return [
+            'cancelReservationId.required' => $unavailable,
+            'cancelReservationId.exists' => $unavailable,
+            'cancellationReason.required' => 'Enter a reason for cancelling this reservation.',
+            'cancellationReason.max' => 'The cancellation reason cannot be longer than :max characters.',
+
+            'detailActionId.required' => $facilityUnavailable,
+            'detailActionId.integer' => $facilityUnavailable,
+            'detailActionId.exists' => $facilityUnavailable,
+            'detailAction.required' => 'Choose what you want to do with this facility.',
+            'detailAction.in' => 'Choose a valid action for this facility.',
+
+            'detailCheckInDate.required' => 'Choose the new check-in or use date.',
+            'detailCheckInDate.date_format' => 'Enter a valid check-in or use date.',
+            'detailCheckInDate.after_or_equal' => 'The new check-in or use date cannot be in the past.',
+            'detailCheckOutDate.required' => 'Choose the new check-out or end date.',
+            'detailCheckOutDate.date_format' => 'Enter a valid check-out or end date.',
+            'detailCheckOutDate.after_or_equal' => 'The check-out date cannot be before the check-in date.',
+
+            'detailFacilityProductId.required' => 'Choose the facility to transfer to.',
+            'detailFacilityProductId.integer' => 'Choose a facility from the list.',
+            'detailFacilityProductId.exists' => 'That facility is not available. Choose another one.',
+
+            'detailCancellationReason.required' => 'Enter a reason for cancelling this facility.',
+            'detailCancellationReason.max' => 'The cancellation reason cannot be longer than :max characters.',
+
+            'detailOccupants.required' => 'There are no occupants to save for this facility.',
+            'detailOccupants.min' => 'There are no occupants to save for this facility.',
+            'detailOccupants.max' => 'You can save up to :max occupants.',
+            'detailOccupants.*.first_name.required' => "Enter this occupant's first name.",
+            'detailOccupants.*.first_name.max' => 'The first name cannot be longer than :max characters.',
+            'detailOccupants.*.last_name.required' => "Enter this occupant's last name.",
+            'detailOccupants.*.last_name.max' => 'The last name cannot be longer than :max characters.',
+            'detailOccupants.*.middle_name.max' => 'The middle name cannot be longer than :max characters.',
+        ];
+    }
+
+    /** @return array<string, string> */
+    protected function validationAttributes(): array
+    {
+        return [
+            'cancellationReason' => 'cancellation reason',
+            'detailCheckInDate' => 'new check-in date',
+            'detailCheckOutDate' => 'new check-out date',
+            'detailFacilityProductId' => 'facility',
+            'detailCancellationReason' => 'cancellation reason',
+            'detailOccupants.*.first_name' => 'occupant first name',
+            'detailOccupants.*.middle_name' => 'occupant middle name',
+            'detailOccupants.*.last_name' => 'occupant last name',
+        ];
+    }
+
     public function saveDetailAction(
         ReservationFacilityOperationService $operations,
         RoomOccupantService $occupants,
@@ -314,8 +377,33 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         ];
 
         if ($this->detailAction === 'reschedule') {
+            // The original length comes from the database, never from the form state.
+            $current = ReservationDetail::query()->find((int) $this->detailActionId);
+            $originalDays = ($current?->check_in_date && $current?->check_out_date)
+                ? $operations->stayDays($current->check_in_date, $current->check_out_date)
+                : null;
+
             $rules['detailCheckInDate'] = ['required', 'date_format:Y-m-d', 'after_or_equal:today'];
-            $rules['detailCheckOutDate'] = ['required', 'date_format:Y-m-d', 'after_or_equal:detailCheckInDate'];
+            $rules['detailCheckOutDate'] = [
+                'bail',
+                'required',
+                'date_format:Y-m-d',
+                'after_or_equal:detailCheckInDate',
+                function (string $attribute, mixed $value, \Closure $fail) use ($operations, $originalDays): void {
+                    if (
+                        $originalDays === null
+                        || validator(['d' => $this->detailCheckInDate], ['d' => ['required', 'date_format:Y-m-d']])->fails()
+                    ) {
+                        return; // the other rules report these
+                    }
+
+                    $newDays = $operations->stayDays($this->detailCheckInDate, (string) $value);
+
+                    if ($newDays !== $originalDays) {
+                        $fail($operations->stayLengthMismatchMessage($originalDays, $newDays));
+                    }
+                },
+            ];
         } elseif ($this->detailAction === 'transfer') {
             $rules['detailFacilityProductId'] = ['required', 'integer', Rule::exists('tbl_facility_product', 'facility_product_id')->where('is_active', true)];
         } elseif ($this->detailAction === 'cancel') {
@@ -452,12 +540,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Close</flux:button>
             </div>
 
-            @error('detailAction')
-                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
-            @enderror
-
-            @if ($errors->has('detailCheckInDate') || $errors->has('detailCheckOutDate') || $errors->has('detailFacilityProductId') || $errors->has('detailCancellationReason') || $errors->has('detailOccupants') || $errors->has('detailOccupants.*.first_name') || $errors->has('detailOccupants.*.last_name'))
-                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $errors->first() }}</div>
+            {{-- Service errors and stale-row errors only. Field errors show under their own inputs below. --}}
+            @php($actionError = $errors->first('detailAction') ?: $errors->first('detailActionId') ?: $errors->first('detailOccupants'))
+            @if ($actionError)
+                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $actionError }}</div>
             @endif
 
             <form wire:submit="saveDetailAction" class="mt-5 space-y-4">
@@ -466,6 +552,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
                         <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
                     </div>
+                    @if ($detailOriginalDays !== '')
+                        <p class="text-xs text-zinc-500">
+                            The original stay is {{ $detailOriginalDays }} {{ \Illuminate\Support\Str::plural('day', (int) $detailOriginalDays) }} between check-in and check-out. The new dates must keep the same length.
+                        </p>
+                    @endif
                 @elseif ($detailAction === 'transfer')
                     <flux:select wire:model="detailFacilityProductId" label="Destination facility product *">
                         <option value="">Choose an upgrade product</option>
@@ -504,9 +595,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     @if ($cancelReservationId)
         <section class="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm dark:border-red-900/60 dark:bg-red-950/30">
             <h2 class="font-semibold">Cancel reservation #{{ $cancelReservationId }}</h2>
+            @error('cancelReservationId') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
             <form wire:submit="cancelReservation" class="mt-4 space-y-4">
                 <flux:input wire:model="cancellationReason" label="Cancellation reason" />
-                @error('cancellationReason') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
                 <div class="flex gap-3">
                     <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
                     <flux:button type="button" variant="ghost" wire:click="$set('cancelReservationId', null)">Close</flux:button>
@@ -609,7 +700,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                             wire:click="sortBy('amount_due')"
                             class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
                         >
-                            DUE {{ $this->getSortIcon('amount_due') }}
+                            BALANCE {{ $this->getSortIcon('amount_due') }}
                         </button>
                     </th>
                     <th class="px-4 py-3">

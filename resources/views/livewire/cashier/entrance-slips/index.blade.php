@@ -884,7 +884,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             </div>
 
                             <div class="mt-2 flex justify-between text-lg font-semibold">
-                                <span>Amount due</span>
+                                <span>Balance</span>
                                 <span>₱{{ number_format((float) $this->selectedSlip->amount_due, 2) }}</span>
                             </div>
                         </div>
@@ -892,7 +892,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                         @if ($this->selectedSlip->status !== 'Paid' && (float) $this->selectedSlip->amount_due > 0)
                             <form wire:submit="recordPayment" class="space-y-4">
                                 <flux:select
-                                    wire:model="modeOfPaymentId"
+                                    wire:model.live="modeOfPaymentId"
                                     label="Mode of payment"
                                 >
                                     <option value="">Select mode</option>
@@ -904,11 +904,13 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     @endforeach
                                 </flux:select>
 
+                                @if($this->modeOfPaymentId === '2')
                                 <flux:input
-                                    wire:model="referenceNumber"
-                                    label="GCash reference number"
-                                    placeholder="Required only for GCash"
-                                />
+                                        wire:model="referenceNumber"
+                                        label="GCash reference number"
+                                        placeholder="Required for GCash" 
+                                    />
+                                @endif
 
                                 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                                     Entrance slips must be paid in full. The payment amount will be exactly

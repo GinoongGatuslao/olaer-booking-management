@@ -7,6 +7,7 @@ use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class ReservationFacilityOperationService
@@ -62,12 +63,22 @@ class ReservationFacilityOperationService
                 throw new InvalidArgumentException('A facility cannot be rescheduled into the past.');
             }
 
+            $originalDays = $this->stayDays($oldStart, $oldEnd);
+
             $newEnd = $newCheckOutDate !== null && trim($newCheckOutDate) !== ''
                 ? Carbon::parse($newCheckOutDate)
-                : $newStart->copy()->addDays(max(0, $oldStart->diffInDays($oldEnd)));
+                : $newStart->copy()->addDays($originalDays);
 
             if ($newEnd->lt($newStart)) {
                 throw new InvalidArgumentException('Check-out cannot be before check-in.');
+            }
+
+            $newDays = $this->stayDays($newStart, $newEnd);
+
+            if ($newDays !== $originalDays) {
+                throw new InvalidArgumentException(
+                    $this->stayLengthMismatchMessage($originalDays, $newDays)
+                );
             }
 
             $this->scheduleBlocks->synchronizeReservationDetail($detail, [
@@ -83,6 +94,23 @@ class ReservationFacilityOperationService
 
             return $detail->fresh(['facility', 'reservation']);
         }, attempts: 3);
+    }
+
+    public function stayDays(\DateTimeInterface|string $checkIn, \DateTimeInterface|string $checkOut): int
+    {
+        return (int) Carbon::parse($checkIn)->startOfDay()
+            ->diffInDays(Carbon::parse($checkOut)->startOfDay(), true);
+    }
+
+    public function stayLengthMismatchMessage(int $originalDays, int $newDays): string
+    {
+        return sprintf(
+            'The new dates are %d %s apart, but the original reservation is %d %s. Rescheduling must keep the same length of stay.',
+            $newDays,
+            Str::plural('day', $newDays),
+            $originalDays,
+            Str::plural('day', $originalDays),
+        );
     }
 
     public function transferDetailToProduct(

@@ -329,7 +329,7 @@ $newRevenueView = <<<'BLADE'
 
         @if (trim($reportSearch) !== '')
             <p class="mb-4 text-xs text-zinc-500 dark:text-zinc-400">
-                The summary cards cover all Verified payments in the selected date range.
+                The summary cards cover all Amount paid in the selected date range.
                 The table search currently matches {{ $report['count'] }} payment(s)
                 totaling {{ $this->money($report['total']) }}.
             </p>
@@ -438,7 +438,7 @@ $verification = [
         'Verified Revenue',
         'Booking Revenue',
         'Total Outstanding',
-        'The summary cards cover all Verified payments',
+        'The summary cards cover all Amount paid',
     ],
 ];
 
