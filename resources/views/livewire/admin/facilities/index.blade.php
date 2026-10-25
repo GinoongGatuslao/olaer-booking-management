@@ -229,19 +229,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         $this->fillPriceRowsFromProfile($profile);
     }
 
-    public function updatedFacilitySize(): void
-    {
-        if ($this->sizeChoice !== '__new__' || $this->facilityTypeId === '') {
-            return;
-        }
-
-        $size = trim($this->facilitySize);
-
-        $this->productCode = $size === ''
-            ? ''
-            : app(FacilityManagementService::class)->suggestedProductCode((int) $this->facilityTypeId, $size);
-    }
-
     /** @param array{prices: array<string, string>} $profile */
     private function fillPriceRowsFromProfile(array $profile): void
     {
@@ -273,7 +260,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             ],
             'sizeChoice' => ['required', 'string'],
             'facilitySize' => ['required', 'string', 'max:50'],
-            'productCode' => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z0-9_]+$/'],
             'min_capacity' => ['required', 'integer', 'min:1', 'max:9999'],
             'max_capacity' => ['required', 'integer', 'min:1', 'max:9999', 'gte:min_capacity'],
             'facilityStatus' => [
@@ -303,7 +289,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             'facilityTypeId.exists' => 'Selected facility type does not exist.',
             'sizeChoice.required' => 'Choose a facility name or create a new one.',
             'facilitySize.required' => 'Facility name is required.',
-            'productCode.regex' => 'Product code may only contain letters, numbers and underscores.',
             'min_capacity.required' => 'Minimum capacity is required.',
             'max_capacity.required' => 'Maximum capacity is required.',
             'max_capacity.gte' => 'Maximum capacity must be at least the minimum capacity.',
@@ -365,7 +350,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                 'facility_status' => $statusIsLocked
                     ? $currentFacility->facility_status
                     : $validated['facilityStatus'],
-                'product_code' => $validated['productCode'] ?? null,
                 'prices' => collect($validated['priceRows'])
                     ->mapWithKeys(fn (array $row): array => [$row['rate_type'] => $row['facility_price']])
                     ->all(),
@@ -377,7 +361,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
 
             $field = match (true) {
                 str_contains($message, 'price') || str_contains($message, 'Price') => 'priceRows',
-                str_contains($message, 'roduct code') => 'productCode',
                 str_contains($message, 'apacity') => 'max_capacity',
                 default => 'facilityName',
             };
@@ -741,26 +724,16 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                         @enderror
 
                         @if ($creatingNewSize)
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <flux:input
-                                    wire:model.live.debounce.400ms="facilitySize"
-                                    label="New facility name"
-                                    placeholder="Example: Jumbo Cottage"
-                                />
-                                <flux:input
-                                    wire:model="productCode"
-                                    label="Facility product code"
-                                    placeholder="Example: COTTAGE_JUMBO"
-                                />
-                            </div>
+                            <flux:input
+                                wire:model="facilitySize"
+                                label="New facility name"
+                                placeholder="Example: Jumbo Cottage"
+                            />
                             @error('facilitySize')
                                 <p class="text-sm text-red-600">{{ $message }}</p>
                             @enderror
-                            @error('productCode')
-                                <p class="text-sm text-red-600">{{ $message }}</p>
-                            @enderror
                             <p class="text-xs text-zinc-500">
-                                A new facility product and its rates are created together with this facility. The code is suggested from the type and name; you can change it.
+                                A new facility product, its product code and its rates are created automatically with this facility.
                             </p>
                         @elseif ($profile !== null)
                             <p class="text-xs text-zinc-500">
