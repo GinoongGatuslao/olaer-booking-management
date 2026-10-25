@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\FacilityProductCode;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\BookingExtraGuest;
@@ -90,7 +89,7 @@ class DetailExtraGuestService
 
         if (
             ! $product instanceof FacilityProduct
-            || $product->product_code !== FacilityProductCode::RoomStandard
+            || ! $product->isRoom()
         ) {
             throw new InvalidArgumentException(
                 'Extra guests can only be assigned to a room detail.',

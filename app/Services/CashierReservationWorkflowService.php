@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\FacilityProductCode;
 use App\Models\Address;
 use App\Models\Booking;
 use App\Models\Guest;
@@ -168,7 +167,7 @@ class CashierReservationWorkflowService
                 $guestCount,
                 $guestCount,
             );
-            $isRoom = $newFacility->facilityProduct?->product_code === FacilityProductCode::RoomStandard;
+            $isRoom = (bool) $newFacility->facilityProduct?->isRoom();
 
             if ($isRoom) {
                 if (

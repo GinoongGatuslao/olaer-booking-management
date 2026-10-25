@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\FacilityCapacityPolicy;
-use App\FacilityProductCode;
 use App\FacilityRateCode;
 use App\FacilitySchedulePolicy;
 use App\Models\Facility;
@@ -105,7 +103,7 @@ class FacilityProductConfigurationService
 
     public function isRoomProduct(FacilityProduct $product): bool
     {
-        return $product->product_code === FacilityProductCode::RoomStandard;
+        return $product->isRoom();
     }
 
     /** @return array<string, int|string|null> */
@@ -162,79 +160,5 @@ class FacilityProductConfigurationService
         }
 
         return $rateCode;
-    }
-
-    private function hasValidConfiguration(FacilityProduct $product): bool
-    {
-        $requiredRates = match ($product->product_code) {
-            FacilityProductCode::RoomStandard => [FacilityRateCode::Overnight],
-            FacilityProductCode::CottageSmall,
-            FacilityProductCode::CottageMedium,
-            FacilityProductCode::CottageLarge,
-            FacilityProductCode::CottageExtraLarge => [
-                FacilityRateCode::Day,
-                FacilityRateCode::Night,
-                FacilityRateCode::Both,
-            ],
-            FacilityProductCode::FunctionHall1,
-            FacilityProductCode::FunctionHall2 => [
-                FacilityRateCode::Day,
-                FacilityRateCode::Night,
-                FacilityRateCode::Both,
-            ],
-        };
-
-        if ($this->isRoomProduct($product)) {
-            if ($product->capacity_policy !== FacilityCapacityPolicy::Strict
-                || $product->schedule_policy !== FacilitySchedulePolicy::Overnight
-                || $product->included_guest_count === null
-                || $product->strict_maximum === null
-                || $product->included_guest_count < 1
-                || $product->strict_maximum < $product->included_guest_count
-            ) {
-                return false;
-            }
-        } elseif ($product->capacity_policy !== FacilityCapacityPolicy::RecommendedInformational
-            || $product->suggested_maximum === null
-            || $product->suggested_maximum < 1
-            || ($product->suggested_minimum !== null
-                && ($product->suggested_minimum < 1 || $product->suggested_minimum > $product->suggested_maximum))
-            || ($product->schedule_policy === FacilitySchedulePolicy::DatedSlots) !== $this->isCottageProduct($product)
-            || ($product->schedule_policy === FacilitySchedulePolicy::WholeCalendarDay) !== $this->isFunctionHallProduct($product)
-        ) {
-            return false;
-        }
-
-        $activeRates = $product->productRates
-            ->filter(fn (ProductRate $rate): bool => $rate->is_active)
-            ->keyBy(fn (ProductRate $rate): string => $rate->rate_code->value);
-
-        foreach ($requiredRates as $requiredRate) {
-            $rate = $activeRates->get($requiredRate->value);
-
-            if (! $rate instanceof ProductRate || $this->money->compare($rate->amount, '0.00') !== 1) {
-                return false;
-            }
-        }
-
-        return $activeRates->count() === count($requiredRates);
-    }
-
-    private function isCottageProduct(FacilityProduct $product): bool
-    {
-        return in_array($product->product_code, [
-            FacilityProductCode::CottageSmall,
-            FacilityProductCode::CottageMedium,
-            FacilityProductCode::CottageLarge,
-            FacilityProductCode::CottageExtraLarge,
-        ], true);
-    }
-
-    private function isFunctionHallProduct(FacilityProduct $product): bool
-    {
-        return in_array($product->product_code, [
-            FacilityProductCode::FunctionHall1,
-            FacilityProductCode::FunctionHall2,
-        ], true);
     }
 }

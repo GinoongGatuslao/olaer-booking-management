@@ -7,6 +7,7 @@ use App\Models\FacilityProduct;
 use App\Models\FacilityType;
 use App\Models\FacilityPrice;
 use App\Models\FacilityAmenity;
+use App\Services\FacilityManagementService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -16,6 +17,7 @@ use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use Illuminate\Support\Facades\DB;
 
 new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort')] class extends Component
 {
@@ -44,6 +46,10 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     public string $facilityStatus = 'Available';
     public bool $statusLocked = false;
     public string $presetName = '';
+    public string $sizeChoice = '';
+    public string $originalSize = '';
+    public string $productCode = '';
+    public bool $applyToSize = false;
     public array $priceRows = [
     ];
 
@@ -99,27 +105,80 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         ];
     }
 
+    /** @return array<string, array{size: string, count: int, min: int, max: int, product_code: ?string, prices: array<string, string>}> */
+    #[Computed]
+    public function sizeProfiles(): array
+    {
+        if ($this->facilityTypeId === '') {
+            return [];
+        }
+
+        return app(FacilityManagementService::class)->sizeProfiles((int) $this->facilityTypeId);
+    }
+
+    /** The shared size profile that the chosen size belongs to, if it already exists. */
+    public function selectedProfile(): ?array
+    {
+        if ($this->sizeChoice === '' || $this->sizeChoice === '__new__') {
+            return null;
+        }
+
+        return $this->sizeProfiles()[$this->sizeChoice] ?? null;
+    }
+
+    /** Capacity and prices are shared by every facility of a size, so lock capacity unless this is the only one. */
+    public function capacityLocked(): bool
+    {
+        $profile = $this->selectedProfile();
+
+        if ($profile === null) {
+            return false;
+        }
+
+        return ! $this->isOnlyFacilityOfOwnSize($profile);
+    }
+
+    /** True when editing the single facility that defines its own size, so nothing else shares its capacity or prices. */
+    private function isOnlyFacilityOfOwnSize(array $profile): bool
+    {
+        return $this->editingId !== null
+            && $this->sizeChoice === $this->originalSize
+            && $profile['count'] <= 1;
+    }
+
+    public function pricesDifferFromSize(): bool
+    {
+        $profile = $this->selectedProfile();
+
+        if ($profile === null || $this->isOnlyFacilityOfOwnSize($profile)) {
+            return false;
+        }
+
+        foreach ($this->priceRows as $row) {
+            if (! is_numeric($row['facility_price'] ?? null)) {
+                continue;
+            }
+
+            $current = $profile['prices'][$row['rate_type']] ?? null;
+
+            if ($current !== null && number_format((float) $row['facility_price'], 2, '.', '') !== $current) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function addPriceRow(): void
     {
-        $this->priceRows = [];
-
         $type = $this->facilityTypeGetter();
 
-        if ($type == 'Cottage' || $type == 'Function Hall') {
-            $this->priceRows = [
-                ['rate_type' => 'Day Rate', 'facility_price' => ''],
-                ['rate_type' => 'Night Rate', 'facility_price' => ''],
-                ['rate_type' => 'Both', 'facility_price' => ''],
-            ];
-        } else if ($type == 'Room') {
-            $this->priceRows = [
-            ['rate_type' => 'Overnight', 'facility_price' => ''],
-            ];
-        } else {
-            $this->priceRows = [
-                ['rate_type' => '', 'facility_price' => ''],
-            ];
-        }
+        $this->priceRows = collect(
+            app(FacilityManagementService::class)->rateTypesFor($type),
+        )->map(fn (string $rateType): array => [
+            'rate_type' => $rateType,
+            'facility_price' => '',
+        ])->all();
     }
 
     public function removeAmenityRow(int $index): void
@@ -134,10 +193,69 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
 
     public function updatedFacilityTypeId(): void
     {
+        unset($this->sizeProfiles, $this->facilityTypeGetter);
+
+        $this->sizeChoice = '';
+        $this->facilitySize = '';
+        $this->productCode = '';
+        $this->applyToSize = false;
+        $this->min_capacity = '';
+        $this->max_capacity = '';
         $this->addPriceRow();
     }
 
-    public function save(): void
+    public function updatedSizeChoice(): void
+    {
+        $this->applyToSize = false;
+        $this->resetValidation();
+
+        $profile = $this->selectedProfile();
+
+        if ($profile === null) {
+            // "Create new size" (or nothing chosen): start from a clean slate.
+            $this->facilitySize = '';
+            $this->productCode = '';
+            $this->min_capacity = '';
+            $this->max_capacity = '';
+            $this->addPriceRow();
+
+            return;
+        }
+
+        $this->facilitySize = $profile['size'];
+        $this->productCode = (string) $profile['product_code'];
+        $this->min_capacity = (string) $profile['min'];
+        $this->max_capacity = (string) $profile['max'];
+        $this->fillPriceRowsFromProfile($profile);
+    }
+
+    public function updatedFacilitySize(): void
+    {
+        if ($this->sizeChoice !== '__new__' || $this->facilityTypeId === '') {
+            return;
+        }
+
+        $size = trim($this->facilitySize);
+
+        $this->productCode = $size === ''
+            ? ''
+            : app(FacilityManagementService::class)->suggestedProductCode((int) $this->facilityTypeId, $size);
+    }
+
+    /** @param array{prices: array<string, string>} $profile */
+    private function fillPriceRowsFromProfile(array $profile): void
+    {
+        $this->addPriceRow();
+
+        $this->priceRows = collect($this->priceRows)
+            ->map(fn (array $row): array => [
+                'rate_type' => $row['rate_type'],
+                'facility_price' => $profile['prices'][$row['rate_type']] ?? '',
+            ])
+            ->all();
+    }
+
+    public function save(FacilityManagementService $facilities): void
     {
         $validated = $this->validate([
             'editingId' => ['nullable', 'integer', 'exists:tbl_facility,facility_id'],
@@ -153,21 +271,19 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                 'integer',
                 'exists:tbl_facility_type,facility_type_id',
             ],
+            'sizeChoice' => ['required', 'string'],
             'facilitySize' => ['required', 'string', 'max:50'],
-            'min_capacity' => ['required', 'string', 'max:50'],
-            'max_capacity' => ['required', 'string', 'max:50'],
+            'productCode' => ['nullable', 'string', 'max:50', 'regex:/^[A-Za-z0-9_]+$/'],
+            'min_capacity' => ['required', 'integer', 'min:1', 'max:9999'],
+            'max_capacity' => ['required', 'integer', 'min:1', 'max:9999', 'gte:min_capacity'],
             'facilityStatus' => [
                 'required',
                 Rule::in(['Available', 'Unavailable', 'Booked', 'Occupied']),
             ],
+            'applyToSize' => ['boolean'],
             'priceRows' => ['required', 'array', 'min:1'],
-            'priceRows.*.rate_type' => ['nullable', 'string', 'max:20'],
-            'priceRows.*.facility_price' => [
-                'nullable',
-                'numeric',
-                'min:0',
-                'max:999999.99',
-            ],
+            'priceRows.*.rate_type' => ['required', 'string', 'max:20'],
+            'priceRows.*.facility_price' => ['required', 'numeric', 'gt:0', 'max:999999.99'],
             'amenityRows' => ['nullable', 'array'],
             'amenityRows.*.amenity_id' => [
                 'nullable',
@@ -185,42 +301,19 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             'facilityName.unique' => 'This facility number is already used.',
             'facilityTypeId.required' => 'Facility type is required.',
             'facilityTypeId.exists' => 'Selected facility type does not exist.',
+            'sizeChoice.required' => 'Choose a facility name or create a new one.',
             'facilitySize.required' => 'Facility name is required.',
-            'capacity.required' => 'Capacity is required.',
+            'productCode.regex' => 'Product code may only contain letters, numbers and underscores.',
+            'min_capacity.required' => 'Minimum capacity is required.',
+            'max_capacity.required' => 'Maximum capacity is required.',
+            'max_capacity.gte' => 'Maximum capacity must be at least the minimum capacity.',
             'facilityStatus.in' => 'Select a valid facility status.',
             'priceRows.required' => 'Select a facility type first.',
+            'priceRows.*.facility_price.required' => 'Enter a price for every rate.',
             'priceRows.*.facility_price.numeric' => 'Facility price must be a valid number.',
+            'priceRows.*.facility_price.gt' => 'Facility price must be greater than zero.',
             'amenityRows.*.amenity_quantity.integer' => 'Amenity quantity must be a whole number.',
         ]);
-
-        $cleanPrices = collect($validated['priceRows'])
-            ->map(fn (array $row): array => [
-                'rate_type' => trim((string) ($row['rate_type'] ?? '')),
-                'facility_price' => $row['facility_price'] ?? null,
-            ])
-            ->filter(fn (array $row): bool => $row['rate_type'] !== '' || filled($row['facility_price']))
-            ->values();
-
-        if ($cleanPrices->isEmpty()) {
-            $this->addError('priceRows', 'Add at least one valid price.');
-            return;
-        }
-
-        foreach ($cleanPrices as $index => $row) {
-            if ($row['rate_type'] === '' || ! filled($row['facility_price'])) {
-                $this->addError(
-                    'priceRows.'.$index.'.rate_type',
-                    'Each price row needs a rate type and price.',
-                );
-
-                return;
-            }
-        }
-
-        if ($cleanPrices->pluck('rate_type')->count() !== $cleanPrices->pluck('rate_type')->unique()->count()) {
-            $this->addError('priceRows', 'Rate types must not be duplicated.');
-            return;
-        }
 
         $cleanAmenities = collect($validated['amenityRows'] ?? [])
             ->map(fn (array $row): array => [
@@ -262,56 +355,37 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             return;
         }
 
-        DB::transaction(function () use (
-            $validated,
-            $cleanPrices,
-            $cleanAmenities,
-            $currentFacility,
-            $statusIsLocked,
-        ): void {
-            $payload = [
-                'facility_name' => trim($validated['facilityName']),
+        try {
+            $facilities->saveFacility($currentFacility, [
+                'facility_name' => $validated['facilityName'],
                 'facility_type_id' => (int) $validated['facilityTypeId'],
-                'facility_size' => trim($validated['facilitySize']),
-                'capacity' => (string)trim($validated['min_capacity']) .'-'. trim($validated['max_capacity']),
-                'min_capacity' => (int)trim($validated['min_capacity']),
-                'max_capacity' => (int)trim($validated['max_capacity']),
+                'facility_size' => $validated['facilitySize'],
+                'min_capacity' => (int) $validated['min_capacity'],
+                'max_capacity' => (int) $validated['max_capacity'],
                 'facility_status' => $statusIsLocked
                     ? $currentFacility->facility_status
                     : $validated['facilityStatus'],
-            ];
+                'product_code' => $validated['productCode'] ?? null,
+                'prices' => collect($validated['priceRows'])
+                    ->mapWithKeys(fn (array $row): array => [$row['rate_type'] => $row['facility_price']])
+                    ->all(),
+                'amenities' => $cleanAmenities->all(),
+                'apply_to_size' => (bool) $validated['applyToSize'],
+            ]);
+        } catch (InvalidArgumentException $exception) {
+            $message = $exception->getMessage();
 
-            if ($currentFacility !== null) {
-                $currentFacility->update($payload);
-                $facility = $currentFacility->refresh();
-            } else {
-                $facility = Facility::query()->create($payload);
-            }
+            $field = match (true) {
+                str_contains($message, 'price') || str_contains($message, 'Price') => 'priceRows',
+                str_contains($message, 'roduct code') => 'productCode',
+                str_contains($message, 'apacity') => 'max_capacity',
+                default => 'facilityName',
+            };
 
-            FacilityPrice::query()
-                ->where('facility_id', $facility->facility_id)
-                ->delete();
+            $this->addError($field, $message);
 
-            foreach ($cleanPrices as $row) {
-                FacilityPrice::query()->create([
-                    'facility_id' => $facility->facility_id,
-                    'rate_type' => $row['rate_type'],
-                    'facility_price' => round((float) $row['facility_price'], 2),
-                ]);
-            }
-
-            FacilityAmenity::query()
-                ->where('facility_id', $facility->facility_id)
-                ->delete();
-
-            foreach ($cleanAmenities as $row) {
-                FacilityAmenity::query()->create([
-                    'facility_id' => $facility->facility_id,
-                    'amenity_id' => (int) $row['amenity_id'],
-                    'amenity_quantity' => (int) $row['amenity_quantity'],
-                ]);
-            }
-        });
+            return;
+        }
 
         session()->flash(
             'success',
@@ -346,7 +420,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     public function startEditing(int $facilityId): void
     {
         $facility = Facility::query()
-            ->with(['prices', 'facilityAmenities'])
+            ->with(['prices', 'facilityAmenities', 'facilityProduct'])
             ->findOrFail($facilityId);
 
         $existingPrices = $facility->prices
@@ -363,14 +437,13 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         $this->max_capacity = (string) $facility->max_capacity;
         $this->facilityStatus = (string) $facility->facility_status;
         $this->statusLocked = in_array($facility->facility_status, ['Booked', 'Occupied'], true);
-        $type = $this->facilityTypeGetter();
-        if ($type === 'Cottage' || $type === 'Function Hall') {
-            $expectedRates = ['Day Rate', 'Night Rate', 'Both']; // Or 'Whole Day Rate' depending on your DB enum
-        } elseif ($type === 'Room') {
-            $expectedRates = ['Overnight'];
-        } else {
-            $expectedRates = ['Standard Rate'];
-        }
+        unset($this->sizeProfiles, $this->facilityTypeGetter);
+        $this->sizeChoice = (string) $facility->facility_size;
+        $this->originalSize = (string) $facility->facility_size;
+        $this->productCode = (string) $facility->facilityProduct?->product_code;
+        $this->applyToSize = false;
+        $expectedRates = app(FacilityManagementService::class)
+            ->rateTypesFor($this->facilityTypeGetter());
         $this->priceRows = collect($expectedRates)
             ->map(function (string $rateType) use ($existingPrices): array {
                 $existing = $existingPrices->get($rateType);
@@ -420,7 +493,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     {
         $this->editingId = null;
         $facility = Facility::query()
-            ->with(['prices', 'facilityAmenities'])
+            ->with(['prices', 'facilityAmenities', 'facilityProduct'])
             ->findOrFail($facilityId);
         $existingPrices = $facility->prices
             ->keyBy(fn (FacilityPrice $price): string => (string) $price->rate_type);
@@ -431,15 +504,13 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         $this->facilitySize = (string) $facility->facility_size;
         $this->min_capacity = (string) $facility->min_capacity;
         $this->max_capacity = (string) $facility->max_capacity;
-        $this->facilityStatus = (string) $facility->facility_status;
-        $type = $this->facilityTypeGetter();
-        if ($type === 'Cottage' || $type === 'Function Hall') {
-            $expectedRates = ['Day Rate', 'Night Rate', 'Both']; 
-        } elseif ($type === 'Room') {
-            $expectedRates = ['Overnight'];
-        } else {
-            $expectedRates = ['Standard Rate'];
-        }
+        $this->facilityStatus = 'Available';
+        unset($this->sizeProfiles, $this->facilityTypeGetter);
+        $this->sizeChoice = (string) $facility->facility_size;
+        $this->productCode = (string) $facility->facilityProduct?->product_code;
+        $this->applyToSize = false;
+        $expectedRates = app(FacilityManagementService::class)
+            ->rateTypesFor($this->facilityTypeGetter());
         $this->priceRows = collect($expectedRates)
             ->map(function (string $rateType) use ($existingPrices): array {
                 $existing = $existingPrices->get($rateType);
@@ -482,6 +553,10 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         $this->facilityName = '';
         $this->facilityTypeId = '';
         $this->facilitySize = '';
+        $this->sizeChoice = '';
+        $this->originalSize = '';
+        $this->productCode = '';
+        $this->applyToSize = false;
         $this->min_capacity = '';
         $this->max_capacity = '';
         $this->facilityStatus = 'Available';
@@ -641,12 +716,60 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             @endforeach
                     </flux:select>
 
+                    @php
+                        $profile = $this->selectedProfile();
+                        $capacityLocked = $this->capacityLocked();
+                        $creatingNewSize = $sizeChoice === '__new__';
+                    @endphp
+
                     <div class="grid gap-4">
-                        <flux:input
-                            wire:model="facilitySize"
-                            label="Facility name"
-                            placeholder="Example: Small"
-                        />
+                        <flux:select wire:model.live="sizeChoice" label="Facility name" :disabled="$facilityTypeId === ''">
+                            <flux:select.option value="">
+                                {{ $facilityTypeId === '' ? 'Select facility type first' : 'Select facility name' }}
+                            </flux:select.option>
+                            @foreach ($this->sizeProfiles as $sizeProfile)
+                                <flux:select.option value="{{ $sizeProfile['size'] }}">
+                                    {{ $sizeProfile['size'] }} ({{ $sizeProfile['min'] }}–{{ $sizeProfile['max'] }} guests)
+                                </flux:select.option>
+                            @endforeach
+                            @if ($facilityTypeId !== '')
+                                <flux:select.option value="__new__">+ Create new facility name</flux:select.option>
+                            @endif
+                        </flux:select>
+                        @error('sizeChoice')
+                            <p class="text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+
+                        @if ($creatingNewSize)
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <flux:input
+                                    wire:model.live.debounce.400ms="facilitySize"
+                                    label="New facility name"
+                                    placeholder="Example: Jumbo Cottage"
+                                />
+                                <flux:input
+                                    wire:model="productCode"
+                                    label="Facility product code"
+                                    placeholder="Example: COTTAGE_JUMBO"
+                                />
+                            </div>
+                            @error('facilitySize')
+                                <p class="text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                            @error('productCode')
+                                <p class="text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                            <p class="text-xs text-zinc-500">
+                                A new facility product and its rates are created together with this facility. The code is suggested from the type and name; you can change it.
+                            </p>
+                        @elseif ($profile !== null)
+                            <p class="text-xs text-zinc-500">
+                                Product code: <span class="font-medium">{{ $productCode ?: 'not set' }}</span>.
+                                @if ($capacityLocked)
+                                    Capacity and prices are shared with the other {{ $profile['size'] }} facilities.
+                                @endif
+                            </p>
+                        @endif
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
@@ -656,6 +779,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             placeholder="Example: 1"
                             type="number"
                             min="1"
+                            :readonly="$capacityLocked"
                         />
 
                         <flux:input
@@ -663,9 +787,16 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             label="Maximum Capacity"
                             placeholder="Example: 25"
                             type="number"
-                            min="2"
+                            min="1"
+                            :readonly="$capacityLocked"
                         />
                     </div>
+                    @error('min_capacity')
+                        <p class="text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                    @error('max_capacity')
+                        <p class="text-sm text-red-600">{{ $message }}</p>
+                    @enderror
 
                     <flux:select
                         wire:model="facilityStatus"
@@ -690,7 +821,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <h3 class="text-sm font-semibold">Facility prices</h3>
-                                <p class="text-xs text-zinc-500">Rate types appear after selecting a facility type.</p>
+                                <p class="text-xs text-zinc-500">Cottages and function halls use Day, Night and Both rates. Rooms use Overnight.</p>
                             </div>
                         </div>
 
@@ -717,6 +848,19 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             />
         </div>
     @endforeach
+                        @error('priceRows.*.facility_price')
+                            <p class="text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+
+                        @if ($this->pricesDifferFromSize())
+                            <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                                <p>These prices differ from the current {{ $facilitySize }} prices. Facilities of the same size must share the same price per rate.</p>
+                                <label class="mt-2 flex items-start gap-2">
+                                    <input type="checkbox" wire:model.live="applyToSize" class="mt-1 rounded border-zinc-300" />
+                                    <span>Change the price of every {{ $facilitySize }} facility to these prices.</span>
+                                </label>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="space-y-3">

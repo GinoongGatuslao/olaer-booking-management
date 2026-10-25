@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Casts\ProductCodeCast;
 use App\FacilityCapacityPolicy;
-use App\FacilityProductCode;
 use App\FacilitySchedulePolicy;
 use Database\Factories\FacilityProductFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use LogicException;
 
 /**
- * @property FacilityProductCode $product_code
+ * @property string $product_code
  * @property FacilitySchedulePolicy $schedule_policy
  * @property FacilityCapacityPolicy $capacity_policy
  * @property int|null $suggested_minimum
@@ -61,7 +61,7 @@ class FacilityProduct extends Model
     protected function casts(): array
     {
         return [
-            'product_code' => FacilityProductCode::class,
+            'product_code' => ProductCodeCast::class,
             'schedule_policy' => FacilitySchedulePolicy::class,
             'capacity_policy' => FacilityCapacityPolicy::class,
             'suggested_minimum' => 'integer',
@@ -70,6 +70,13 @@ class FacilityProduct extends Model
             'strict_maximum' => 'integer',
             'is_active' => 'boolean',
         ];
+    }
+
+    /** A room is a strict-capacity, overnight product; everything else is dated slots. */
+    public function isRoom(): bool
+    {
+        return $this->capacity_policy === FacilityCapacityPolicy::Strict
+            && $this->schedule_policy === FacilitySchedulePolicy::Overnight;
     }
 
     /** @return BelongsTo<FacilityType, $this> */

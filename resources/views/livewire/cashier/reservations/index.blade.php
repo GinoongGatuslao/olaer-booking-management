@@ -737,7 +737,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                         <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <div class="font-medium text-brand-text dark:text-white">
-                                                    {{ $detail->facility?->facility_number }} — {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
+                                                     {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
                                                 </div>
                                                 <div class="text-xs text-brand-text-muted dark:text-zinc-400">
                                                     {{ $detail->facility?->facilityType?->facility_type }}

@@ -272,8 +272,9 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                                 </select>
                             </label>
                             @error('modeOfPaymentId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
-
+                            @if($this->modeOfPaymentId == '2')
                             <flux:input label="Reference Number" wire:model.live="referenceNumber" placeholder="Required for GCash" />
+                            @endif
                             @error('referenceNumber') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
                         @else
                             <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
