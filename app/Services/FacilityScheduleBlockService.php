@@ -124,11 +124,18 @@ class FacilityScheduleBlockService
         $this->assertInTransaction();
 
         $currentKeys = $this->keyed($this->requiredBlocksForDetail($detail));
-        $dayKey = $currentKeys->sole();
+
+        if ($currentKeys->count() !== 1) {
+            throw new InvalidArgumentException('Only a single-day Day Rate booking can be extended to Both.');
+        }
+
+        $dayKey = $currentKeys->first();
 
         if ($dayKey['slot'] !== FacilityScheduleSlot::Day) {
             throw new InvalidArgumentException('Only a canonical Day schedule can be extended to Both.');
         }
+
+        $this->assertNightSlotFree($dayKey['facility_id'], $dayKey['service_date']);
 
         $ownedKeys = $this->ownedBlocks('booking_detail_id', (int) $detail->booking_details_id)
             ->toBase()
@@ -147,6 +154,30 @@ class FacilityScheduleBlockService
         $this->synchronizeBookingDetail($detail, [
             'rate_code' => FacilityRateCode::Both,
         ]);
+    }
+
+    /**
+     * The night slot of the facility on that date must not be held by any other
+     * booking or reservation before a Day Rate booking can be extended to Both.
+     */
+    public function assertNightSlotFree(int $facilityId, string $serviceDate): void
+    {
+        $taken = FacilityScheduleBlock::query()
+            ->where('facility_id', $facilityId)
+            ->where('service_date', $serviceDate)
+            ->where('slot', FacilityScheduleSlot::Night->value)
+            ->lockForUpdate()
+            ->first();
+
+        if ($taken === null) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'This booking cannot be extended because the night rate of this facility on %s is already taken by another %s.',
+            CarbonImmutable::parse($serviceDate)->format('M d, Y'),
+            $taken->reservation_detail_id !== null ? 'reservation' : 'booking',
+        ));
     }
 
     public function transferReservationOwnership(

@@ -516,14 +516,14 @@ class BookingWorkflowService
 
         $this->guardEditableBookingDetail($detail);
 
-        $product = $this->products->productFor($detail->facility);
+        $facilityType = mb_strtolower(trim((string) $detail->facility?->facilityType?->facility_type));
 
-        if (! str_starts_with($product->product_code->value, 'COTTAGE_') && ! str_starts_with($product->product_code->value, 'FUNCTION_') ) {
-            throw new InvalidArgumentException('Only cottage or function hall bookings can use the day-rate extension rule.');
+        if (! in_array($facilityType, ['cottage', 'function hall'], true)) {
+            throw new InvalidArgumentException('Only cottage or function hall bookings can be extended.');
         }
 
         if ($detail->getRawOriginal('rate_code') !== 'DAY') {
-            throw new InvalidArgumentException('Only Day Rate cottage or function hall bookings can be extended using this rule.');
+            throw new InvalidArgumentException('Only Day Rate bookings can be extended.');
         }
 
         $extraGuests = BookingExtraGuest::query()

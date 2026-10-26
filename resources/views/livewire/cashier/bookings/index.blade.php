@@ -475,6 +475,7 @@ new class extends Component {
             ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_booking.guest_id')
             ->leftJoin('tbl_booking_details', 'tbl_booking_details.booking_id', '=', 'tbl_booking.booking_id')
             ->leftJoin('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_booking_details.facility_id')
+            ->leftJoin('tbl_facility_type', 'tbl_facility_type.facility_type_id', '=', 'tbl_facility.facility_type_id')
             ->select([
                 'tbl_booking.booking_id',
                 'tbl_booking.b_ref_no',
@@ -489,6 +490,18 @@ new class extends Component {
                 'tbl_booking_details.check_out_date',
                 'tbl_booking_details.status',
                 'tbl_facility.facility_name',
+                DB::raw("(
+                    tbl_facility_type.facility_type IN ('Cottage', 'Function Hall')
+                    AND tbl_booking_details.rate_code = 'DAY'
+                    AND COALESCE(tbl_booking.status, '') NOT IN ('Cancelled', 'Checked-out', 'Payment Rejected', 'Rejected', 'Pending Verification')
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM tbl_facility_schedule_blocks night_block
+                        WHERE night_block.facility_id = tbl_booking_details.facility_id
+                            AND night_block.slot = 'night'
+                            AND night_block.service_date = DATE(tbl_booking_details.check_in_date)
+                    )
+                ) as can_extend"),
                 DB::raw("CONCAT(tbl_guest.first_name, ' ', COALESCE(tbl_guest.middle_name, ''), ' ', tbl_guest.last_name) as guest_name"),
             ]);
 
@@ -661,21 +674,6 @@ new class extends Component {
         </div>
     @endif
 
-    @if ($cancelDetailForm['booking_details_id'] !== '')
-        <flux:card>
-            <flux:heading size="lg">Cancel facility</flux:heading>
-            <flux:text class="mt-1">{{ $cancelDetailForm['label'] }}</flux:text>
-            @error('cancelDetail') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-            <form wire:submit="saveCancelDetail" class="mt-4 space-y-4">
-                <flux:textarea wire:model="cancelDetailForm.reason" label="Cancellation reason *" rows="3" />
-                <p class="text-xs text-zinc-500">Only this facility is cancelled. Paid value stays within this booking as transaction credit.</p>
-                <div class="flex justify-end gap-3">
-                    <flux:button type="button" variant="ghost" wire:click="cancelCancelDetail">Close</flux:button>
-                    <flux:button type="submit" variant="danger">Cancel Facility</flux:button>
-                </div>
-            </form>
-        </flux:card>
-    @endif
 
     @if ($occupantForm['booking_details_id'] !== '')
         <flux:card>
@@ -820,10 +818,11 @@ new class extends Component {
                                         <flux:menu.separator />
                                         <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:menu.item>
                                         <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:menu.item>
-                                        <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
+                                        @if ($booking->can_extend)
+                                            <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
+                                        @endif
                                         <flux:menu.item icon="user-group" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:menu.item>
                                         <flux:menu.separator />
-                                        <flux:menu.item icon="x-circle" variant="danger" wire:click="openCancelDetail({{ $booking->booking_details_id }})">Cancel facility</flux:menu.item>
                                     @endif
                                 </x-table-actions>
                             </div>
