@@ -599,6 +599,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         <option value="Inclusive">Inclusive</option>
                     </flux:select>
 
+                   @if ($amenityType === 'Rentable')
                     <flux:input
                         wire:model="amenityPrice"
                         type="number"
@@ -606,14 +607,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         min="0"
                         label="Price"
                         placeholder="0.00"
-                        :readonly="$amenityType === 'Inclusive'"
                     />
-
-                    @if ($amenityType === 'Inclusive')
-                        <p class="-mt-2 text-xs text-zinc-500">
-                            Inclusive amenities are saved at ₱0.00.
-                        </p>
                     @endif
+
 
                     <div class="flex justify-end gap-3 pt-2">
                         <flux:button

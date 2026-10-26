@@ -504,7 +504,8 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                     ->findOrFail($this->editingFineId)
                     ->update($payload);
             } else {
-                Fine::query()->create($payload);
+                Fine::query()
+                    ->create($payload);
             }
         });
 
@@ -912,14 +913,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                                 </option>
                             @endforeach
                         </flux:select>
-                        <flux:input
-                            wire:model="fineCharge"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            label="Fine charge"
-                            placeholder="200.00"
-                        />
                     @else
                         <flux:input
                             wire:model="situationalFine"
@@ -933,6 +926,15 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                             placeholder="Describe when this charge applies"
                         />
                     @endif
+
+                    <flux:input
+                            wire:model="fineCharge"
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            label="Fine charge"
+                            placeholder="200.00"
+                        />
 
 
 
