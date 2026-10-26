@@ -309,8 +309,13 @@ class extends Component
         ];
     }
 };
+
+
 ?>
-<style>
+
+<div class="space-y-6">
+
+    <style>
         @media print {
             .no-print { display: none !important; }
             body { background: white !important; }
@@ -319,8 +324,7 @@ class extends Component
         header {
                 display: none !important;
             }
-</style>
-<div class="space-y-6">
+    </style>
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">
@@ -539,7 +543,7 @@ class extends Component
                 </div>
 
                 <div class="flex gap-3 print:hidden">
-                    <flux:button type="button" variant="primary" onclick="window.print()">
+                    <flux:button type="button" variant="primary" href="{{ route('print.entrance-slip', $this->createdSlipId) }}">
                         Print slip
                     </flux:button>
 
@@ -556,8 +560,8 @@ class extends Component
             @endif
         </aside>
     </div>
-    <flux:card>
-        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" print:hidden>
+    <flux:card class="print:hidden">
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" >
             <div>
                 <h2 class="text-lg font-semibold">My entrance slips today</h2>
                 <p class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -565,16 +569,6 @@ class extends Component
                 </p>
             </div>
 
-            @if (Route::has('security.entrance-slips.create'))
-                <flux:button
-                    href="{{ route('security.entrance-slips.create') }}"
-                    wire:navigate
-                    size="sm"
-                    variant="ghost"
-                >
-                    New Slip
-                </flux:button>
-            @endif
         </div>
 
         <div class="overflow-x-auto">
