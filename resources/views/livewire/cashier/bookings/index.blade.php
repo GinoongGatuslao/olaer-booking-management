@@ -493,6 +493,7 @@ new class extends Component {
                 DB::raw("(
                     tbl_facility_type.facility_type IN ('Cottage', 'Function Hall')
                     AND tbl_booking_details.rate_code = 'DAY'
+                    AND COALESCE(tbl_booking_details.status, '') NOT IN ('Checked-out', 'Cancelled', 'Payment Rejected', 'Rejected')
                     AND COALESCE(tbl_booking.status, '') NOT IN ('Cancelled', 'Checked-out', 'Payment Rejected', 'Rejected', 'Pending Verification')
                     AND NOT EXISTS (
                         SELECT 1
