@@ -819,9 +819,7 @@ new class extends Component {
                                         <flux:menu.separator />
                                         <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:menu.item>
                                         <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:menu.item>
-                                        @if ($booking->can_extend)
-                                            <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
-                                        @endif
+                                        <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
                                         <flux:menu.item icon="user-group" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:menu.item>
                                         <flux:menu.separator />
                                     @endif
