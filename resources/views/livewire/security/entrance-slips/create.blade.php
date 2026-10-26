@@ -310,7 +310,16 @@ class extends Component
     }
 };
 ?>
-
+<style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; }
+            .print-card { box-shadow: none !important; border: 1px solid #111827 !important; }
+        }
+        header {
+                display: none !important;
+            }
+</style>
 <div class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
@@ -548,7 +557,7 @@ class extends Component
         </aside>
     </div>
     <flux:card>
-        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" print:hidden>
             <div>
                 <h2 class="text-lg font-semibold">My entrance slips today</h2>
                 <p class="text-sm text-zinc-500 dark:text-zinc-400">
