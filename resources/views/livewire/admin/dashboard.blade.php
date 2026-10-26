@@ -48,11 +48,6 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
         description="Verified revenue, facility use, staff activity, and current configuration at a glance. Live data refreshes while this dashboard is visible."
     >
         <x-slot:actions>
-            @if (Route::has('admin.reports.index'))
-                <flux:button href="{{ route('admin.reports.index') }}" wire:navigate variant="primary">
-                    Open Reports
-                </flux:button>
-            @endif
 
             @if (Route::has('admin.users.index'))
                 <flux:button href="{{ route('admin.users.index') }}" wire:navigate variant="ghost">

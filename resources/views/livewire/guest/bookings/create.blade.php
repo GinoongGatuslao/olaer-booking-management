@@ -123,8 +123,8 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
             'first_name' => ['required', 'string', 'max:50'],
             'middle_name' => ['nullable', 'string', 'max:50'],
             'last_name' => ['required', 'string', 'max:50'],
-            'contact_no' => ['required', 'string', 'max:20'],
-            'email' => ['required', 'email', 'max:100'],
+            'contact_no' => ['required', 'string', 'max:11'],
+            'email' => ['required', 'email', 'max:100', 'regex:/^[A-Za-z0-9]+(?:[._%+-][A-Za-z0-9]+)*@(?:[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.)+[A-Za-z]{2,}$/'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
@@ -408,7 +408,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                         <flux:input wire:model="last_name" label="Last name" />
                     </div>
                     <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        <flux:input wire:model="contact_no" label="Contact number" />
+                        <flux:input wire:model="contact_no" maxlength="11" label="Contact number" />
                         <flux:input wire:model="email" type="email" label="Email" />
                     </div>
                     <div class="mt-4 grid gap-4 md:grid-cols-4">

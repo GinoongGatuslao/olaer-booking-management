@@ -70,7 +70,6 @@ new #[Title('Security settings')] class extends Component {
     {
         try {
             $validated = $this->validate([
-                'current_password' => $this->currentPasswordRules(),
                 'password' => $this->passwordRules(),
             ]);
         } catch (ValidationException $e) {
@@ -173,14 +172,6 @@ new #[Title('Security settings')] class extends Component {
 
     <x-pages::settings.layout :heading="__('Update password')" :subheading="__('Ensure your account is using a long, random password to stay secure')">
         <form method="POST" wire:submit="updatePassword" class="mt-6 space-y-6">
-            <flux:input
-                wire:model="current_password"
-                :label="__('Current password')"
-                type="password"
-                required
-                autocomplete="current-password"
-                viewable
-            />
             <flux:input
                 wire:model="password"
                 :label="__('New password')"

@@ -408,7 +408,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 Paginated rentable and inclusive amenity master data.
             </p>
         </div>
-
+        <div class="flex gap-2">
+        <flux:button type="button" wire:click="createNew" variant="primary" >Create Amenity</flux:button>
         @if (Route::has('admin.dashboard'))
             <flux:button
                 href="{{ route('admin.dashboard') }}"
@@ -418,6 +419,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 Back to Dashboard
             </flux:button>
         @endif
+        </div>
+
     </div>
 
     @if (session('success'))
@@ -441,7 +444,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate without loading every amenity at once.
                         </p>
-                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create Amenity</flux:button>
+                        
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -546,8 +549,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         {{ $this->amenities->total() }}
                         amenities
                     </p>
-
+                    <div class="[&_p]:hidden">
                     {{ $this->amenities->links() }}
+                    </div>
                 </div>
             </flux:card>
         </section>
@@ -566,16 +570,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         </p>
                     </div>
 
-                    @if ($editingId !== null)
-                        <flux:button
-                            type="button"
-                            wire:click="createNew"
-                            size="sm"
-                            variant="ghost"
-                        >
-                            New
-                        </flux:button>
-                    @endif
                 </div>
 
                 <form wire:submit="save" class="mt-5 space-y-4">

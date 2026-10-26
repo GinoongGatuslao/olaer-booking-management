@@ -287,7 +287,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 'required',
                 'email',
                 'max:50',
-                'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/',
+                'regex:/^[A-Za-z0-9]+(?:[._%+-][A-Za-z0-9]+)*@(?:[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.)+[A-Za-z]{2,}$/',
                 Rule::unique('tbl_user', 'email')
                     ->ignore($this->editingUserId, 'user_id'),
             ],
@@ -547,12 +547,16 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 <div class="space-y-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-            <h1 class="text-2xl font-bold tracking-tight">User Management</h1>
+            <h1 class="text-2xl font-bold tracking-tight">
+                User Management
+            </h1>
+            
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                 Paginated staff-account management with role and account-status controls.
             </p>
         </div>
-
+        <div class="flex gap-2">
+        <flux:button type="button" wire:click="createNewUser" variant="primary">Create Staff Account</flux:button>
         @if (Route::has('admin.dashboard'))
             <flux:button
                 href="{{ route('admin.dashboard') }}"
@@ -562,6 +566,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 Back to Dashboard
             </flux:button>
         @endif
+        </div>
     </div>
 
     @if (session('success'))
@@ -594,7 +599,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                             </div>
 
                             <div class="flex flex-wrap items-end gap-2">
-                                <flux:button type="button" wire:click="createNewUser" variant="primary">Create Staff Account</flux:button>
+                                
                                 <div class="w-28">
                                     <flux:select wire:model.live="perPage" label="Rows">
                                         <option value="10">10</option>
@@ -806,14 +811,14 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     <flux:input wire:model="lastName" label="Last name" />
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:input wire:model="username" label="Username*" :disabled="$isDisabled"/>
+                        <flux:input wire:model="username" label="Username" :disabled="$isDisabled"/>
                         <flux:input wire:model="email" type="email" label="Email" />
                     </div>
 
                     <flux:input
                         wire:model="contactNo"
                         label="Contact number"
-                        placeholder="09123456789"
+                        placeholder="Example: 09123456789"
                         maxlength="11"
                     />
 
@@ -859,6 +864,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                 type="password"
                                 label="Password"
                                 autocomplete="new-password"
+                                viewable
                             />
 
                             <flux:input
@@ -866,6 +872,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                 type="password"
                                 label="Confirm password"
                                 autocomplete="new-password"
+                                viewable
                             />
                         </div>
                     </div>

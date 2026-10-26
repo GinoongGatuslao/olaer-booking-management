@@ -77,7 +77,7 @@ $login = function () {
             </div>
 
             <div>
-                <flux:input wire:model="password" type="password" label="Password" autocomplete="current-password" />
+                <flux:input wire:model="password" type="password" label="Password" autocomplete="current-password" viewable/>
                 @error('password')
                 @enderror
             </div>

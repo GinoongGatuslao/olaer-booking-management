@@ -37,7 +37,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         $this->validate([
             'identifier' => ['required', 'string', 'max:100'],
         ], [
-            'identifier.required' => 'Enter your username or email address.',
+            'identifier.required' => 'Enter your email address.',
         ]);
 
         $key = 'staff-password-reset:'.sha1(strtolower($this->identifier).'|'.request()->ip());
@@ -141,7 +141,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         <div class="mb-6">
             <h1 class="text-2xl font-bold tracking-tight">Reset password</h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Use the username or email address assigned to your staff account.
+                Use the email address assigned to your staff account.
             </p>
         </div>
 
@@ -156,8 +156,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                 <div>
                     <flux:input
                         wire:model="identifier"
-                        label="Username or email"
-                        autocomplete="username"
+                        label="Email"
                         autofocus
                     />
                 </div>
@@ -202,6 +201,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                         label="New password"
                         autocomplete="new-password"
                         autofocus
+                        viewable
                     />
                     <p class="mt-1 text-xs text-zinc-500">
                         Minimum 8 characters with uppercase, lowercase, number, and symbol.
@@ -213,6 +213,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                     type="password"
                     label="Confirm new password"
                     autocomplete="new-password"
+                    viewable
                 />
 
                 <flux:button type="submit" variant="primary" class="w-full" wire:loading.attr="disabled">

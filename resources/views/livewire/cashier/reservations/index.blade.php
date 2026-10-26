@@ -154,6 +154,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->sortField = 'reservation_id';
         $this->sortDirection = 'desc';
         $this->perPage = 10;
+        $this->dateTo = '';
+        $this->dateFrom ='';
 
         $this->resetPage();
     }
@@ -629,11 +631,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     />
 
                     <flux:select wire:model.live="statusFilter" label="Status">
+                        <option value="All">All</option>
                         <option value="Active">Active</option>
                         <option value="Cancelled">Cancelled</option>
                         <option value="Converted">Converted</option>
                         <option value="No-show">No-show</option>
-                        <option value="All">All</option>
                     </flux:select>
 
                     <flux:select wire:model.live="perPage" label="Rows per page">

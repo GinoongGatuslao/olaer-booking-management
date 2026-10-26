@@ -682,6 +682,10 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             </p>
         </div>
 
+        <div class="mt-3 flex flex-wrap gap-2">
+            <flux:button type="button" wire:click="manageDamageTypes" variant="ghost">Manage damage types</flux:button>
+            <flux:button type="button" wire:click="createNewFine" variant="primary">Create Fine</flux:button>
+                        
         @if (Route::has('admin.dashboard'))
             <flux:button
                 href="{{ route('admin.dashboard') }}"
@@ -691,6 +695,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                 Back to Dashboard
             </flux:button>
         @endif
+        </div>
     </div>
 
     @if (session('success'))
@@ -714,10 +719,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate fine master records.
                         </p>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <flux:button type="button" wire:click="createNewFine" variant="primary">Create Fine</flux:button>
-                            <flux:button type="button" wire:click="manageDamageTypes" variant="ghost">Manage damage types</flux:button>
-                        </div>
+                        
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -865,16 +867,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         </p>
                     </div>
 
-                    @if ($editingFineId !== null)
-                        <flux:button
-                            type="button"
-                            wire:click="createNewFine"
-                            size="sm"
-                            variant="ghost"
-                        >
-                            New
-                        </flux:button>
-                    @endif
                 </div>
 
                 <form wire:submit="saveFine" class="mt-5 space-y-4">
@@ -966,16 +958,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         </p>
                     </div>
 
-                    @if ($editingDamageTypeId !== null)
-                        <flux:button
-                            type="button"
-                            wire:click="resetDamageTypeForm"
-                            size="sm"
-                            variant="ghost"
-                        >
-                            New
-                        </flux:button>
-                    @endif
                 </div>
 
                 <form wire:submit="saveDamageType" class="mt-5 space-y-4">

@@ -62,7 +62,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     #[Computed]
     public function facilities(): LengthAwarePaginator
     {
-        $sort = in_array($this->sortField, ['facility_number', 'facility_name', 'facility_status'], true)
+        $sort = in_array($this->sortField, ['facility_number', 'facility_name', 'facility_type', 'facility_size', 'facility_status'], true)
             ? $this->sortField
             : 'facility_number';
         $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
@@ -85,7 +85,16 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             })
             ->when($this->typeFilter !== '', fn (Builder $query) => $query->where('facility_type_id', $this->typeFilter))
             ->when($this->statusFilter !== '', fn (Builder $query) => $query->where('facility_status', $this->statusFilter))
-            ->orderBy($sort, $direction)
+            ->when(
+                $sort === 'facility_type',
+                fn (Builder $query) => $query->orderBy(
+                    FacilityType::query()
+                        ->select('facility_type')
+                        ->whereColumn('tbl_facility_type.facility_type_id', 'tbl_facility.facility_type_id'),
+                    $direction,
+                ),
+                fn (Builder $query) => $query->orderBy($sort, $direction),
+            )
             ->orderBy('facility_id')
             ->paginate($perPage);
     }
@@ -561,7 +570,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
 
     public function sortBy(string $field): void
     {
-        if (! in_array($field, ['facility_number', 'facility_name', 'facility_status'], true)) {
+        if (! in_array($field, ['facility_number', 'facility_name', 'facility_type', 'facility_size', 'facility_status'], true)) {
             return;
         }
 
@@ -640,9 +649,9 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             <table class="w-full min-w-[62rem] text-left text-sm">
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <tr>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold">NUMBER {{ $this->sortIcon('facility_name') }}</button></th>
-                        <th class="px-5 py-3 font-semibold">Type</th>
-                        <th class="px-5 py-3 font-semibold">Facility NAME</th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_number')" class="font-semibold">NUMBER {{ $this->sortIcon('facility_number') }}</button></th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_type')" class="font-semibold">TYPE {{ $this->sortIcon('facility_type') }}</button></th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold">FACILITY NAME {{ $this->sortIcon('facility_name') }}</button></th>
                         <th class="px-5 py-3 font-semibold">Capacity</th>
                         <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_status')" class="font-semibold">STATUS {{ $this->sortIcon('facility_status') }}</button></th>
                         <th class="px-5 py-3 text-right font-semibold">Action</th>
@@ -719,9 +728,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                                 <flux:select.option value="__new__">+ Create new facility name</flux:select.option>
                             @endif
                         </flux:select>
-                        @error('sizeChoice')
-                            <p class="text-sm text-red-600">{{ $message }}</p>
-                        @enderror
+
 
                         @if ($creatingNewSize)
                             <flux:input
@@ -729,9 +736,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                                 label="New facility name"
                                 placeholder="Example: Jumbo Cottage"
                             />
-                            @error('facilitySize')
-                                <p class="text-sm text-red-600">{{ $message }}</p>
-                            @enderror
+
                             <p class="text-xs text-zinc-500">
                                 A new facility product, its product code and its rates are created automatically with this facility.
                             </p>
@@ -764,12 +769,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             :readonly="$capacityLocked"
                         />
                     </div>
-                    @error('min_capacity')
-                        <p class="text-sm text-red-600">{{ $message }}</p>
-                    @enderror
-                    @error('max_capacity')
-                        <p class="text-sm text-red-600">{{ $message }}</p>
-                    @enderror
 
                     <flux:select
                         wire:model="facilityStatus"
@@ -798,9 +797,6 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             </div>
                         </div>
 
-                        @error('priceRows')
-                            <p class="text-sm text-red-600">{{ $message }}</p>
-                        @enderror
                         <h3 class="text-sm font-semibold">Rate type:</h3>
                         @foreach ($priceRows as $index => $row)
         <div wire:key="price-row-{{ $index }}" class="grid items-center gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1fr_1fr] dark:border-zinc-800">
@@ -821,9 +817,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             />
         </div>
     @endforeach
-                        @error('priceRows.*.facility_price')
-                            <p class="text-sm text-red-600">{{ $message }}</p>
-                        @enderror
+
 
                         @if ($this->pricesDifferFromSize())
                             <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
@@ -848,9 +842,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             </flux:button>
                         </div>
 
-                        @error('amenityRows')
-                            <p class="text-sm text-red-600">{{ $message }}</p>
-                        @enderror
+
 
                         @foreach ($amenityRows as $index => $row)
                             <div wire:key="amenity-row-{{ $index }}" class="grid gap-2 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1fr_8rem_auto] dark:border-zinc-800">

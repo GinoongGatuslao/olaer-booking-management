@@ -506,7 +506,8 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                 Create and update discounts for entrance fees and facility bookings.
             </p>
         </div>
-
+        <div class="flex gap-2">
+        <flux:button type="button" wire:click="createNew" variant="primary">Create Discount</flux:button>
         @if (Route::has('admin.dashboard'))
             <flux:button
                 href="{{ route('admin.dashboard') }}"
@@ -516,6 +517,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                 Back to Dashboard
             </flux:button>
         @endif
+        </div>
     </div>
 
     @if (session('success'))
@@ -539,7 +541,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             Search, filter, sort, and paginate discount master records.
                         </p>
-                        <flux:button type="button" wire:click="createNew" variant="primary" class="mt-3">Create Discount</flux:button>
+                        
                     </div>
 
                     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">

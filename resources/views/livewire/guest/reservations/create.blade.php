@@ -119,8 +119,8 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
             'first_name' => ['required', 'string', 'max:50'],
             'middle_name' => ['nullable', 'string', 'max:50'],
             'last_name' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:50'],
-            'contact_no' => ['required', 'string', 'max:20'],
+            'email' => ['required', 'email', 'max:50', 'regex:/^[A-Za-z0-9]+(?:[._%+-][A-Za-z0-9]+)*@(?:[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.)+[A-Za-z]{2,}$/'],
+            'contact_no' => ['required', 'string', 'max:11'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
@@ -255,7 +255,7 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                 </div>
                 <div class="mt-4 grid gap-4 md:grid-cols-2">
                     <flux:input wire:model="email" type="email" label="Email" />
-                    <flux:input wire:model="contact_no" label="Contact number" />
+                    <flux:input wire:model="contact_no" label="Contact number" maxlength="11"/>
                 </div>
                 <div class="mt-4 grid gap-4 md:grid-cols-4">
                     <flux:input wire:model="province" label="Province" />

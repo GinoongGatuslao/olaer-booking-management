@@ -385,6 +385,12 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         try {
             $this->guardCanRecordFine();
 
+            if (! $this->fines()->contains('fine_id', (int) $validated['fineId'])) {
+                throw new \InvalidArgumentException(
+                    'The selected fine does not match the selected checklist item.'
+                );
+            }
+
             [$source, $sourceId] = $this->parseChecklistKey(
                 (string) (
                     $validated['selectedChecklistKey']
@@ -934,30 +940,24 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                 'damageType',
             ]);
 
-        if (
-            $this->selectedChecklistKey !== ''
-            && $this->selectedBookingDetailsId !== null
-        ) {
-            $selectedItem = collect(
-                $this->selectedChecklistItems(),
-            )->firstWhere(
-                'key',
-                $this->selectedChecklistKey,
-            );
+        if (trim($this->selectedChecklistKey) === '') {
+            // No checklist item selected: situational fines only.
+            $query->where('fine_type', 'Situational');
+        } else {
+            $selectedItem = $this->selectedBookingDetailsId === null
+                ? null
+                : collect($this->selectedChecklistItems())->firstWhere(
+                    'key',
+                    $this->selectedChecklistKey,
+                );
 
-            if ($selectedItem !== null) {
+            if ($selectedItem === null) {
+                // Unknown checklist key: never fall back to every fine.
+                $query->whereRaw('1 = 0');
+            } else {
                 $query
-                    ->whereIn(
-                        'fine_type',
-                        [
-                            'Amenity',
-                            'Amenity Fine',
-                        ],
-                    )
-                    ->where(
-                        'amenity_id',
-                        $selectedItem['amenity_id'],
-                    );
+                    ->whereIn('fine_type', ['Amenity', 'Amenity Fine'])
+                    ->where('amenity_id', $selectedItem['amenity_id']);
             }
         }
 
@@ -1334,12 +1334,13 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                         </flux:button>
                     </div>
 
-                    @if (
-                        $selectedChecklistKey !== ''
-                        && $fines->isEmpty()
-                    )
+                    @if ($fines->isEmpty())
                         <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                            Admin must configure an amenity fine for this checklist item before it can be charged.
+                            @if ($selectedChecklistKey !== '')
+                                Admin must configure an amenity fine for this checklist item before it can be charged.
+                            @else
+                                Admin must configure a situational fine before one can be recorded.
+                            @endif
                         </div>
                     @endif
                 </div>

@@ -372,8 +372,8 @@ protected function validationAttributes(): array
             'firstName' => ['required', 'string', 'max:50'],
             'middleName' => ['nullable', 'string', 'max:50'],
             'lastName' => ['required', 'string', 'max:50'],
-            'email' => ['required', 'email', 'max:100', 'regex:/^[A-Za-z0-9]+@[A-Za-z0-9]+(?:\.[A-Za-z]{2,})+$/'],
-            'contactNo' => ['required', 'string', 'max:20'],
+            'email' => ['required', 'email', 'max:100', 'regex:/^[A-Za-z0-9]+(?:[._%+-][A-Za-z0-9]+)*@(?:[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\.)+[A-Za-z]{2,}$/'],
+            'contactNo' => ['required', 'string', 'max:11'],
             'province' => ['required', 'string', 'max:50'],
             'city' => ['required', 'string', 'max:50'],
             'barangay' => ['nullable', 'string', 'max:50'],
@@ -507,7 +507,7 @@ protected function validationAttributes(): array
                 <flux:input wire:model="middleName" label="Middle name" />
                 <x-required-input wire:model="lastName" name="lastName" label="Last name" />
                 <x-required-input wire:model="email" name="email" type="email" label="Email" />
-                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" />
+                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" maxlength="11"/>
                 <x-required-input wire:model="province" name="province" label="Province" />
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3">

@@ -26,8 +26,7 @@ class StaffPasswordResetService
 
         $user = User::query()
             ->where(function ($query) use ($normalizedIdentifier): void {
-                $query->where('email', $normalizedIdentifier)
-                    ->orWhere('username', $normalizedIdentifier);
+                $query->where('email', $normalizedIdentifier);
             })
             ->where('status', 'Active')
             ->first();
@@ -155,8 +154,7 @@ class StaffPasswordResetService
 
         $user = User::query()
             ->where(function ($query) use ($normalizedIdentifier): void {
-                $query->where('email', $normalizedIdentifier)
-                    ->orWhere('username', $normalizedIdentifier);
+                $query->where('email', $normalizedIdentifier);
             })
             ->where('status', 'Active')
             ->first();
