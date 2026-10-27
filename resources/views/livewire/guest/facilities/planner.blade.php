@@ -722,7 +722,7 @@ protected function validationAttributes(): array
                 <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     Proof of payment <span class="text-red-600">*</span>
                 </label>
-                <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950{{ $errors->has('proofOfPayment') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}" />
+                <input wire:model="proofOfPayment" type="file" accept=".jpg,.jpeg,.png,.pdf" class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950{{ $errors->has('proofOfPayment') ? ' !border-red-500 ' : '' }}" />
                 <p class="mt-1 text-xs text-zinc-500">JPG, PNG, or PDF up to 4 MB. Stored privately.</p>
             </div>
         </flux:card>

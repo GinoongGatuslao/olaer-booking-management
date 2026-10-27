@@ -29,20 +29,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     public bool $showUpdateForm = false;
     public bool $showCancelForm = false;
 
-    public ?int $facilityTypeId = null;
-    public string $rateType = '';
-    public ?int $facilityId = null;
-    public string $checkInDate = '';
-    public string $checkOutDate = '';
-    public int $totalGuestCount = 1;
-    public array $extraGuests = [];
+    public array $details = [];
     public string $cancellationReason = '';
 
     public function mount(): void
     {
-        $this->checkInDate = Carbon::tomorrow()->toDateString();
-        $this->checkOutDate = Carbon::tomorrow()->addDay()->toDateString();
-        $this->syncPaidExtraGuestRows();
+        //
     }
 
     public function requestOtp(GuestReservationManagementService $service): void
@@ -102,7 +94,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
     }
 
-    public function prepareUpdate(): void
+    public function prepareUpdate(GuestReservationManagementService $service): void
     {
         if (! $this->ensureVerifiedReservation()) {
             return;
@@ -114,45 +106,62 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             return;
         }
 
-        $detail = $reservation->details->first();
+        $editable = $service->editableDetails($reservation);
 
-        if (! $detail) {
+        if ($editable->isEmpty()) {
             $this->errorMessage = 'Reservation has no facility detail to update.';
             return;
         }
 
+        $occupancy = app(\App\Services\FacilityOccupancyService::class);
+        $details = [];
+
+        foreach ($editable as $detail) {
+            $id = (int) $detail->reservation_details_id;
+            $single = $editable->count() === 1;
+            $rows = $reservation->extraGuests->filter(
+                fn ($guest): bool => (int) $guest->reservation_details_id === $id
+                    || ($single && $guest->reservation_details_id === null),
+            );
+            $guestCount = (int) $detail->guest_count;
+
+            if ($guestCount < 1) {
+                $extraCount = $single ? (int) $reservation->no_of_extra_guests : $rows->count();
+                $guestCount = $single && (int) $reservation->total_guest_count > 0
+                    ? (int) $reservation->total_guest_count
+                    : (int) (
+                        $detail->facility
+                            ? $occupancy->legacyTotalGuestCount($detail->facility, $extraCount)
+                            : max(1, $extraCount + 1)
+                    );
+            }
+
+            $details[$id] = [
+                'facility_type_id' => (int) $detail->facility?->facility_type_id,
+                'rate_type' => (string) $detail->rate_type,
+                'facility_id' => (int) $detail->facility_id,
+                'check_in_date' => optional($detail->check_in_date)->format('Y-m-d') ?: Carbon::tomorrow()->toDateString(),
+                'check_out_date' => optional($detail->check_out_date)->format('Y-m-d') ?: Carbon::tomorrow()->addDay()->toDateString(),
+                'total_guest_count' => $guestCount,
+                'discount_id' => $detail->discount_id ? (int) $detail->discount_id : null,
+                'extra_guests' => $rows
+                    ->map(fn ($guest): array => [
+                        'first_name' => (string) $guest->first_name,
+                        'middle_name' => (string) ($guest->middle_name ?? ''),
+                        'last_name' => (string) $guest->last_name,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        $this->details = $details;
         $this->showUpdateForm = true;
         $this->showCancelForm = false;
-        $this->facilityTypeId = (int) $detail->facility?->facility_type_id;
-        $this->rateType = (string) $detail->rate_type;
-        $this->facilityId = (int) $detail->facility_id;
-        $this->checkInDate = optional($detail->check_in_date)->format('Y-m-d') ?: Carbon::tomorrow()->toDateString();
-        $this->checkOutDate = optional($detail->check_out_date)->format('Y-m-d') ?: Carbon::tomorrow()->addDay()->toDateString();
-        $this->totalGuestCount = (int) (
-            $detail->guest_count
-            ?: $reservation->total_guest_count
-            ?: (
-                $detail->facility
-                    ? app(\App\Services\FacilityOccupancyService::class)
-                        ->legacyTotalGuestCount(
-                            $detail->facility,
-                            (int) $reservation->no_of_extra_guests,
-                        )
-                    : max(
-                        1,
-                        (int) $reservation->no_of_extra_guests + 1,
-                    )
-            )
-        );
-        $this->extraGuests = $reservation->extraGuests
-            ->map(fn ($guest): array => [
-                'first_name' => (string) $guest->first_name,
-                'middle_name' => (string) ($guest->middle_name ?? ''),
-                'last_name' => (string) $guest->last_name,
-            ])
-            ->values()
-            ->all();
-        $this->syncPaidExtraGuestRows();
+
+        foreach (array_keys($this->details) as $id) {
+            $this->syncPaidExtraGuestRows($id);
+        }
     }
 
     public function prepareCancel(): void
@@ -166,27 +175,26 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         $this->cancellationReason = '';
     }
 
-    public function updatedFacilityTypeId(): void
+    public function updatedDetails(mixed $value, string $key): void
     {
-        $this->rateType = '';
-        $this->facilityId = null;
-        $this->totalGuestCount = 1;
-        $this->syncPaidExtraGuestRows();
-    }
+        [$id, $field] = array_pad(explode('.', $key, 2), 2, '');
 
-    public function updatedRateType(): void
-    {
-        $this->facilityId = null;
-    }
+        if (! isset($this->details[$id])) {
+            return;
+        }
 
-    public function updatedFacilityId(): void
-    {
-        $this->syncPaidExtraGuestRows();
-    }
+        $field = explode('.', $field)[0];
 
-    public function updatedTotalGuestCount(): void
-    {
-        $this->syncPaidExtraGuestRows();
+        if ($field === 'facility_type_id') {
+            $this->details[$id]['rate_type'] = '';
+            $this->details[$id]['facility_id'] = null;
+            $this->details[$id]['total_guest_count'] = 1;
+            $this->syncPaidExtraGuestRows($id);
+        } elseif ($field === 'rate_type') {
+            $this->details[$id]['facility_id'] = null;
+        } elseif (in_array($field, ['facility_id', 'total_guest_count'], true)) {
+            $this->syncPaidExtraGuestRows($id);
+        }
     }
 
     public function updateReservation(GuestReservationManagementService $service): void
@@ -196,37 +204,76 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
 
         $this->resetMessages();
-        $guestCountRules = ['required', 'integer', 'min:1'];
-        $strictMaximum = $this->strictMaximum();
 
-        if ($strictMaximum !== null) {
-            $guestCountRules[] = 'max:'.$strictMaximum;
+        if ($this->details === []) {
+            $this->errorMessage = 'Open the update form before saving.';
+            return;
         }
 
-        $this->validate([
-            'facilityTypeId' => ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'],
-            'rateType' => ['required', 'string', 'max:20'],
-            'facilityId' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
-            'checkInDate' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
-            'checkOutDate' => ['required', 'date_format:Y-m-d', 'after:checkInDate'],
-            'totalGuestCount' => $guestCountRules,
-            'extraGuests.*.first_name' => ['required', 'string', 'max:50'],
-            'extraGuests.*.middle_name' => ['nullable', 'string', 'max:50'],
-            'extraGuests.*.last_name' => ['required', 'string', 'max:50'],
-        ]);
-        $this->syncPaidExtraGuestRows();
+        $rules = [];
+        $attributes = [];
+
+        foreach (array_keys($this->details) as $id) {
+            $guestRules = ['required', 'integer', 'min:1'];
+            $maximum = $this->strictMaximumFor($id);
+
+            if ($maximum !== null) {
+                $guestRules[] = 'max:'.$maximum;
+            }
+
+            $key = "details.{$id}";
+            $rules["{$key}.facility_type_id"] = ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'];
+            $rules["{$key}.rate_type"] = ['required', 'string', 'max:20'];
+            $rules["{$key}.facility_id"] = ['required', 'integer', 'exists:tbl_facility,facility_id'];
+            $rules["{$key}.check_in_date"] = ['required', 'date_format:Y-m-d', 'after_or_equal:today'];
+            $rules["{$key}.check_out_date"] = ['required', 'date_format:Y-m-d', "after:{$key}.check_in_date"];
+            $rules["{$key}.total_guest_count"] = $guestRules;
+            $rules["{$key}.extra_guests.*.first_name"] = ['required', 'string', 'max:50'];
+            $rules["{$key}.extra_guests.*.middle_name"] = ['nullable', 'string', 'max:50'];
+            $rules["{$key}.extra_guests.*.last_name"] = ['required', 'string', 'max:50'];
+
+            $attributes["{$key}.facility_type_id"] = 'facility type';
+            $attributes["{$key}.rate_type"] = 'rate type';
+            $attributes["{$key}.facility_id"] = 'facility';
+            $attributes["{$key}.check_in_date"] = 'check-in date';
+            $attributes["{$key}.check_out_date"] = 'check-out date';
+            $attributes["{$key}.total_guest_count"] = 'total guests';
+            $attributes["{$key}.extra_guests.*.first_name"] = 'first name';
+            $attributes["{$key}.extra_guests.*.middle_name"] = 'middle name';
+            $attributes["{$key}.extra_guests.*.last_name"] = 'last name';
+        }
+
+        $this->validate($rules, [], $attributes);
+
+        foreach (array_keys($this->details) as $id) {
+            $this->syncPaidExtraGuestRows($id);
+        }
+
+        $overlap = $this->overlappingSelection();
+
+        if ($overlap !== null) {
+            $this->errorMessage = $overlap;
+            return;
+        }
 
         try {
             $service->updateReservation((int) $this->reservationId, [
-                'facility_id' => $this->facilityId,
-                'rate_type' => $this->rateType,
-                'check_in_date' => $this->checkInDate,
-                'check_out_date' => $this->checkOutDate,
-                'total_guest_count' => $this->totalGuestCount,
-                'extra_guests' => $this->extraGuests,
+                'details' => collect($this->details)
+                    ->map(fn (array $row, int|string $id): array => [
+                        'reservation_details_id' => (int) $id,
+                        'facility_id' => (int) $row['facility_id'],
+                        'rate_type' => (string) $row['rate_type'],
+                        'check_in_date' => (string) $row['check_in_date'],
+                        'check_out_date' => (string) $row['check_out_date'],
+                        'total_guest_count' => (int) $row['total_guest_count'],
+                        'extra_guests' => (array) ($row['extra_guests'] ?? []),
+                    ])
+                    ->values()
+                    ->all(),
             ]);
 
             $this->showUpdateForm = false;
+            $this->details = [];
             $this->successMessage = 'Reservation updated successfully.';
         } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
@@ -277,105 +324,120 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         return $service->facilityTypes();
     }
 
-    public function rateTypes(GuestReservationManagementService $service)
+    public function rateTypesFor(int|string $id)
     {
-        return $service->rateTypesForFacilityType($this->facilityTypeId);
+        return app(GuestReservationManagementService::class)
+            ->rateTypesForFacilityType($this->detailInt($id, 'facility_type_id'));
     }
 
-    public function availableFacilities(GuestReservationManagementService $service)
+    public function availableFacilitiesFor(int|string $id)
     {
-        $reservation = $this->reservation();
-        $detail = $reservation?->details->first();
-
-        return $service->availableFacilities(
-            $this->facilityTypeId,
-            $this->rateType,
-            $this->checkInDate,
-            $this->checkOutDate,
-            $detail?->reservation_details_id,
+        return app(GuestReservationManagementService::class)->availableFacilities(
+            $this->detailInt($id, 'facility_type_id'),
+            (string) ($this->details[$id]['rate_type'] ?? ''),
+            (string) ($this->details[$id]['check_in_date'] ?? ''),
+            (string) ($this->details[$id]['check_out_date'] ?? ''),
+            (int) $id,
         );
     }
 
-    public function quote(GuestReservationManagementService $service): ?array
+    public function quoteFor(int|string $id): ?array
     {
         try {
-            $reservation = $this->reservation();
-            $detail = $reservation?->details->first();
-
-            return $service->quotePreview(
-                $this->facilityId,
-                $this->rateType,
-                $this->checkInDate,
-                $this->checkOutDate,
+            return app(GuestReservationManagementService::class)->quotePreview(
+                $this->detailInt($id, 'facility_id'),
+                (string) ($this->details[$id]['rate_type'] ?? ''),
+                (string) ($this->details[$id]['check_in_date'] ?? ''),
+                (string) ($this->details[$id]['check_out_date'] ?? ''),
                 0,
-                $detail?->discount_id ? (int) $detail->discount_id : null,
-                $this->totalGuestCount,
+                $this->detailInt($id, 'discount_id'),
+                (int) ($this->details[$id]['total_guest_count'] ?? 1),
             );
         } catch (Throwable) {
             return null;
         }
     }
 
-    public function strictMaximum(): ?int
+    public function strictMaximumFor(int|string $id): ?int
     {
-        if (! $this->facilityId) {
+        $facilityId = $this->detailInt($id, 'facility_id');
+
+        if ($facilityId === null) {
             return null;
         }
 
         try {
-            return app(\App\Services\FacilityOccupancyService::class)
-                ->strictMaximum($this->facilityId);
+            return app(\App\Services\FacilityOccupancyService::class)->strictMaximum($facilityId);
         } catch (Throwable) {
             return null;
         }
     }
 
-    public function occupancyPreview(): ?array
+    public function occupancyPreviewFor(int|string $id): ?array
     {
-        if (! $this->facilityId) {
+        $facilityId = $this->detailInt($id, 'facility_id');
+
+        if ($facilityId === null) {
             return null;
         }
 
         try {
-            return app(\App\Services\FacilityOccupancyService::class)
-                ->forFacilityId(
-                    $this->facilityId,
-                    $this->totalGuestCount,
-                );
+            return app(\App\Services\FacilityOccupancyService::class)->forFacilityId(
+                $facilityId,
+                (int) ($this->details[$id]['total_guest_count'] ?? 1),
+            );
         } catch (Throwable) {
             return null;
         }
     }
 
-    private function syncPaidExtraGuestRows(): void
+    private function detailInt(int|string $id, string $field): ?int
     {
-        $this->extraGuests = array_values($this->extraGuests);
-        $occupancy = $this->occupancyPreview();
+        $value = $this->details[$id][$field] ?? null;
 
-        if ($this->facilityId !== null && $occupancy === null) {
+        return filled($value) ? (int) $value : null;
+    }
+
+    private function syncPaidExtraGuestRows(int|string $id): void
+    {
+        if (! isset($this->details[$id])) {
             return;
         }
 
-        $required = (int) (
-            $occupancy['paid_extra_guest_count']
-            ?? 0
-        );
+        $rows = array_values((array) ($this->details[$id]['extra_guests'] ?? []));
+        $occupancy = $this->occupancyPreviewFor($id);
 
-        for ($i = count($this->extraGuests); $i < $required; $i++) {
-            $this->extraGuests[$i] = [
-                'first_name' => '',
-                'middle_name' => '',
-                'last_name' => '',
-            ];
+        if ($this->detailInt($id, 'facility_id') !== null && $occupancy === null) {
+            $this->details[$id]['extra_guests'] = $rows;
+            return;
         }
 
-        if (count($this->extraGuests) > $required) {
-            $this->extraGuests = array_slice(
-                $this->extraGuests,
-                0,
-                $required,
-            );
+        $required = (int) ($occupancy['paid_extra_guest_count'] ?? 0);
+
+        for ($i = count($rows); $i < $required; $i++) {
+            $rows[$i] = ['first_name' => '', 'middle_name' => '', 'last_name' => ''];
         }
+
+        $this->details[$id]['extra_guests'] = array_slice($rows, 0, $required);
+    }
+
+    private function overlappingSelection(): ?string
+    {
+        $rows = array_values($this->details);
+
+        for ($i = 0; $i < count($rows); $i++) {
+            for ($j = $i + 1; $j < count($rows); $j++) {
+                if (
+                    (int) $rows[$i]['facility_id'] === (int) $rows[$j]['facility_id']
+                    && $rows[$i]['check_in_date'] < $rows[$j]['check_out_date']
+                    && $rows[$j]['check_in_date'] < $rows[$i]['check_out_date']
+                ) {
+                    return 'The same facility is selected more than once for overlapping dates. Choose a different facility for one of them.';
+                }
+            }
+        }
+
+        return null;
     }
 
     private function resetMessages(): void
@@ -650,103 +712,136 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         @endif
 
         @if ($showUpdateForm)
+            @php($managedReservation = $reservation ?? $this->reservation())
             @php($facilityTypes = $this->facilityTypes(app(\App\Services\GuestReservationManagementService::class)))
-            @php($rateTypes = $this->rateTypes(app(\App\Services\GuestReservationManagementService::class)))
-            @php($availableFacilities = $this->availableFacilities(app(\App\Services\GuestReservationManagementService::class)))
-            @php($quote = $this->quote(app(\App\Services\GuestReservationManagementService::class)))
+            @php($quotes = collect($details)->map(fn ($row, $detailId) => $this->quoteFor($detailId))->all())
+            @php($allQuoted = $quotes !== [] && collect($quotes)->every(fn ($quote) => $quote !== null))
 
-            <form wire:submit="updateReservation" class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 sm:p-8">
+            <form wire:submit="updateReservation" novalidate class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 sm:p-8">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Reservation update</p>
                 <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-emerald-200">Choose new visit details</h2>
-                <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Availability, occupancy, discounts, and the estimated total will be checked again before the update is saved.</p>
-
-                <div class="mt-6 grid gap-5 md:grid-cols-2">
-                    <flux:field>
-                        <flux:label>Check-in date</flux:label>
-                        <flux:input type="date" wire:model.live="checkInDate" />
-                        <flux:error name="checkInDate" />
-                    </flux:field>
-                    <flux:field>
-                        <flux:label>Check-out date</flux:label>
-                        <flux:input type="date" wire:model.live="checkOutDate" />
-                        <flux:error name="checkOutDate" />
-                    </flux:field>
-                    <flux:field>
-                        <flux:label>Facility type</flux:label>
-                        <flux:select wire:model.live="facilityTypeId">
-                            <option value="">Select type</option>
-                            @foreach ($facilityTypes as $type)
-                                <option wire:key="manage-facility-type-{{ $type->facility_type_id }}" value="{{ $type->facility_type_id }}">{{ $type->facility_type }}</option>
-                            @endforeach
-                        </flux:select>
-                        <flux:error name="facilityTypeId" />
-                    </flux:field>
-                    <flux:field>
-                        <flux:label>Rate type</flux:label>
-                        <flux:select wire:model.live="rateType">
-                            <option value="">Select rate</option>
-                            @foreach ($rateTypes as $rate)
-                                <option wire:key="manage-rate-type-{{ Str::slug($rate) }}" value="{{ $rate }}">{{ $rate }}</option>
-                            @endforeach
-                        </flux:select>
-                        <flux:error name="rateType" />
-                    </flux:field>
-                </div>
-
-                <fieldset class="mt-6">
-                    <legend class="text-sm font-semibold text-public-forest dark:text-white">Available facility</legend>
-                    <div class="mt-3 grid gap-3 md:grid-cols-3">
-                        @forelse ($availableFacilities as $facility)
-                            <label wire:key="manage-available-facility-{{ $facility->facility_id }}" class="cursor-pointer rounded-2xl border p-4 transition {{ (int) $facilityId === (int) $facility->facility_id ? 'border-public-spring bg-public-spring-light ring-1 ring-public-spring' : 'border-public-forest/10 hover:border-public-spring/60 hover:bg-public-cream/50' }}">
-                                <input type="radio" wire:model.live="facilityId" value="{{ $facility->facility_id }}" class="sr-only">
-                                <p class="font-semibold text-public-forest dark:text-white">{{ $facility->facility_name }}</p>
-                                <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</p>
-                            </label>
-                        @empty
-                            <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection.</p>
-                        @endforelse
-                    </div>
-                    @error('facilityId') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                </fieldset>
-
-                <div class="mt-6 max-w-xl">
-                    <flux:field>
-                        <flux:label>Total guests</flux:label>
-                        <flux:input type="number" min="1" max="{{ $this->strictMaximum() }}" wire:model.live="totalGuestCount" />
-                        <flux:error name="totalGuestCount" />
-                    </flux:field>
-                    <p class="mt-2 text-xs leading-5 text-public-muted dark:text-zinc-400">
-                        Total guests includes the primary guest. Rooms include 4 guests and enforce the maximum shown below. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
-                    </p>
-                    @if ($this->occupancyPreview())
-                        @php($occupancy = $this->occupancyPreview())
-                        <p class="mt-2 text-xs font-medium text-public-forest dark:text-emerald-200">
-                            @if ($occupancy['strict_maximum'])
-                                Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
-                            @else
-                                Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
-                            @endif
-                        </p>
+                <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">
+                    @if (count($details) > 1)
+                        This reservation has {{ count($details) }} facilities. Change any of them below; facilities you leave as they are keep their current details. Availability, occupancy, discounts, and the estimated total will be checked again before the update is saved.
+                    @else
+                        Availability, occupancy, discounts, and the estimated total will be checked again before the update is saved.
                     @endif
-                </div>
+                </p>
 
-                @if ($extraGuests !== [])
-                    <div class="mt-6 space-y-3">
-                        <h3 class="font-semibold text-public-forest dark:text-white">Paid extra guest names</h3>
-                        @foreach ($extraGuests as $index => $guest)
-                            <div wire:key="manage-extra-guest-{{ $index }}" class="grid gap-3 rounded-2xl border border-public-forest/10 p-4 md:grid-cols-3">
-                                <flux:input wire:model.live="extraGuests.{{ $index }}.first_name" aria-label="Extra guest {{ $index + 1 }} first name" placeholder="First name" />
-                                <flux:input wire:model.live="extraGuests.{{ $index }}.middle_name" aria-label="Extra guest {{ $index + 1 }} middle name" placeholder="Middle name" />
-                                <flux:input wire:model.live="extraGuests.{{ $index }}.last_name" aria-label="Extra guest {{ $index + 1 }} last name" placeholder="Last name" />
+                @foreach ($details as $detailId => $row)
+                    @php($original = $managedReservation?->details->firstWhere('reservation_details_id', $detailId))
+                    @php($rateTypes = $this->rateTypesFor($detailId))
+                    @php($availableFacilities = $this->availableFacilitiesFor($detailId))
+                    @php($occupancy = $this->occupancyPreviewFor($detailId))
+                    @php($quote = $quotes[$detailId] ?? null)
+
+                    <div wire:key="manage-detail-{{ $detailId }}" class="mt-6 rounded-3xl border border-public-forest/10 p-5 sm:p-6">
+                        <div class="flex flex-wrap items-baseline justify-between gap-2">
+                            <h3 class="font-public-display text-xl text-public-forest dark:text-emerald-200">
+                                @if (count($details) > 1)
+                                    Facility {{ $loop->iteration }} of {{ $loop->count }}
+                                @else
+                                    Facility
+                                @endif
+                            </h3>
+                            <p class="text-sm text-public-muted dark:text-zinc-300">Currently {{ $original?->facility?->facility_name }} ({{ $original?->facility?->facilityType?->facility_type }})</p>
+                        </div>
+
+                        <div class="mt-5 grid gap-5 md:grid-cols-2">
+                            <flux:field>
+                                <flux:label>Check-in date</flux:label>
+                                <flux:input type="date" wire:model.live="details.{{ $detailId }}.check_in_date" />
+                                <flux:error name="details.{{ $detailId }}.check_in_date" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Check-out date</flux:label>
+                                <flux:input type="date" wire:model.live="details.{{ $detailId }}.check_out_date" />
+                                <flux:error name="details.{{ $detailId }}.check_out_date" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Facility type</flux:label>
+                                <flux:select wire:model.live="details.{{ $detailId }}.facility_type_id">
+                                    <option value="">Select type</option>
+                                    @foreach ($facilityTypes as $type)
+                                        <option wire:key="manage-{{ $detailId }}-facility-type-{{ $type->facility_type_id }}" value="{{ $type->facility_type_id }}">{{ $type->facility_type }}</option>
+                                    @endforeach
+                                </flux:select>
+                                <flux:error name="details.{{ $detailId }}.facility_type_id" />
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Rate type</flux:label>
+                                <flux:select wire:model.live="details.{{ $detailId }}.rate_type">
+                                    <option value="">Select rate</option>
+                                    @foreach ($rateTypes as $rate)
+                                        <option wire:key="manage-{{ $detailId }}-rate-type-{{ Str::slug($rate) }}" value="{{ $rate }}">{{ $rate }}</option>
+                                    @endforeach
+                                </flux:select>
+                                <flux:error name="details.{{ $detailId }}.rate_type" />
+                            </flux:field>
+                        </div>
+
+                        <fieldset class="mt-6">
+                            <legend class="text-sm font-semibold text-public-forest dark:text-white">Available facility</legend>
+                            <div class="mt-3 grid gap-3 md:grid-cols-3">
+                                @forelse ($availableFacilities as $facility)
+                                    <label wire:key="manage-available-facility-{{ $detailId }}-{{ $facility->facility_id }}" class="cursor-pointer rounded-2xl border p-4 transition {{ (int) ($row['facility_id'] ?? 0) === (int) $facility->facility_id ? 'border-public-spring bg-public-spring-light ring-1 ring-public-spring' : 'border-public-forest/10 hover:border-public-spring' }}">
+                                        <input type="radio" name="manage-facility-{{ $detailId }}" wire:model.live="details.{{ $detailId }}.facility_id" value="{{ $facility->facility_id }}" class="sr-only">
+                                        <p class="font-semibold text-public-forest dark:text-white">{{ $facility->facility_name }}</p>
+                                        <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</p>
+                                    </label>
+                                @empty
+                                    <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection.</p>
+                                @endforelse
                             </div>
-                        @endforeach
-                    </div>
-                @endif
+                            @error('details.'.$detailId.'.facility_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </fieldset>
 
-                @if ($quote)
+                        <div class="mt-6 max-w-xl">
+                            <flux:field>
+                                <flux:label>Total guests</flux:label>
+                                <flux:input type="number" min="1" max="{{ $this->strictMaximumFor($detailId) }}" wire:model.live="details.{{ $detailId }}.total_guest_count" />
+                                <flux:error name="details.{{ $detailId }}.total_guest_count" />
+                            </flux:field>
+                            <p class="mt-2 text-xs leading-5 text-public-muted dark:text-zinc-400">
+                                Total guests includes the primary guest. Rooms include 4 guests and enforce the maximum shown below. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
+                            </p>
+                            @if ($occupancy)
+                                <p class="mt-2 text-xs font-medium text-public-forest dark:text-emerald-200">
+                                    @if ($occupancy['strict_maximum'])
+                                        Maximum {{ $occupancy['strict_maximum'] }} guests · Included {{ $occupancy['included_guest_count'] }} · Paid room extras {{ $occupancy['paid_extra_guest_count'] }}
+                                    @else
+                                        Recommended capacity: {{ $occupancy['suggested_minimum'] ? $occupancy['suggested_minimum'].'–' : '' }}{{ $occupancy['suggested_maximum'] }} guests (informational)
+                                    @endif
+                                </p>
+                            @endif
+                        </div>
+
+                        @if (($row['extra_guests'] ?? []) !== [])
+                            <div class="mt-6 space-y-3">
+                                <h4 class="font-semibold text-public-forest dark:text-white">Paid extra guest names</h4>
+                                @foreach ($row['extra_guests'] as $index => $guest)
+                                    <div wire:key="manage-extra-guest-{{ $detailId }}-{{ $index }}" class="grid gap-3 rounded-2xl border border-public-forest/10 p-4 md:grid-cols-3">
+                                        <flux:input wire:model.live="details.{{ $detailId }}.extra_guests.{{ $index }}.first_name" aria-label="Extra guest {{ $index + 1 }} first name" placeholder="First name" />
+                                        <flux:input wire:model.live="details.{{ $detailId }}.extra_guests.{{ $index }}.middle_name" aria-label="Extra guest {{ $index + 1 }} middle name" placeholder="Middle name" />
+                                        <flux:input wire:model.live="details.{{ $detailId }}.extra_guests.{{ $index }}.last_name" aria-label="Extra guest {{ $index + 1 }} last name" placeholder="Last name" />
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @if ($quote && count($details) > 1)
+                            <p class="mt-5 text-sm font-medium text-public-forest dark:text-emerald-200">This facility: ₱{{ number_format((float) $quote['total_price'], 2) }}</p>
+                        @endif
+                    </div>
+                @endforeach
+
+                @if ($allQuoted)
                     <div class="mt-6 rounded-2xl border border-public-spring/30 bg-public-spring-light p-5 text-public-forest">
                         <p class="text-sm font-medium">Updated estimated total</p>
-                        <p class="mt-1 text-3xl font-bold">₱{{ number_format((float) $quote['total_price'], 2) }}</p>
+                        <p class="mt-1 text-3xl font-bold">₱{{ number_format((float) app(\App\Services\DecimalMoneyService::class)->add(...collect($quotes)->map(fn ($quote) => (string) $quote['total_price'])->values()->all()), 2) }}</p>
+                        @if (count($details) > 1)
+                            <p class="mt-1 text-xs">Covers all {{ count($details) }} facilities in this reservation.</p>
+                        @endif
                     </div>
                 @endif
 

@@ -815,7 +815,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <input
                                 wire:model="discountStart"
                                 type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountStart') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountStart') ? ' !border-red-500 ' : '' }}"
                             />
 
                             @if ($message = $this->visibleError('discountStart'))
@@ -831,7 +831,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <input
                                 wire:model="discountEnd"
                                 type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountEnd') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountEnd') ? ' !border-red-500 ' : '' }}"
                             />
 
                             @if ($message = $this->visibleError('discountEnd'))

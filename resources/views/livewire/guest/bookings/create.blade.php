@@ -530,7 +530,7 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
 
                     <div class="mt-4">
                         <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Proof of payment <span class="text-red-500">*</span></label>
-                        <input wire:model="proof_of_payment" type="file" accept="image/jpeg,image/png,application/pdf" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-white{{ $errors->has('proof_of_payment') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}" />
+                        <input wire:model="proof_of_payment" type="file" accept="image/jpeg,image/png,application/pdf" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-white{{ $errors->has('proof_of_payment') ? ' !border-red-500 ' : '' }}" />
                         <p class="mt-1 text-xs text-zinc-500">Accepted: JPG, PNG, PDF. Maximum 4 MB.</p>
                         <div wire:loading wire:target="proof_of_payment" class="mt-2 text-sm text-zinc-500">Uploading...</div>
                         @if ($message = $this->visibleError('proof_of_payment')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif

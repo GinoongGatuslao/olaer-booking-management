@@ -609,31 +609,12 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
                     <div class="flex flex-col gap-4">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                            <div>
-                                <h2 class="font-semibold">Staff accounts</h2>
-                                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                                    Search, filter, sort, edit, activate, or deactivate accounts.
-                                </p>
-                            </div>
 
-                            <div class="flex flex-wrap items-end gap-2">
-                                
-                                <div class="w-28">
-                                    <flux:select wire:model.live="perPage" label="Rows">
-                                        <option value="10">10</option>
-                                        <option value="25">25</option>
-                                        <option value="50">50</option>
-                                        <option value="100">100</option>
-                                    </flux:select>
-                                </div>
 
-                                <flux:button wire:click="clearFilters" variant="ghost">
-                                    Clear Filters
-                                </flux:button>
-                            </div>
+                            
                         </div>
 
-                        <div class="grid gap-3 md:grid-cols-3">
+                        <div class="grid gap-3 md:grid-cols-4">
                             <flux:input
                                 wire:model.live.debounce.300ms="search"
                                 label="Search"
@@ -655,6 +636,22 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                             </flux:select>
+
+                            <div class="flex flex-wrap items-end gap-2">
+                                
+                                <div class="w-28">
+                                    <flux:select wire:model.live="perPage" label="Rows">
+                                        <option value="10">10</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </flux:select>
+                                </div>
+
+                                <flux:button wire:click="clearFilters" variant="ghost">
+                                    Clear Filters
+                                </flux:button>
+                            </div>
                         </div>
                     </div>
                 </div>

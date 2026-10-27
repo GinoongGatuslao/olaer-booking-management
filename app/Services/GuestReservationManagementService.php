@@ -34,6 +34,7 @@ class GuestReservationManagementService
         private readonly GuestConfirmationEmailService $confirmationEmailService,
         private readonly DetailExtraGuestService $detailGuests,
         private readonly FacilityProductConfigurationService $products,
+        private readonly TransactionLedgerService $ledger,
     ) {}
 
     /** @return array{reservation_id:int, debug_otp:?string} */
@@ -228,10 +229,18 @@ class GuestReservationManagementService
         );
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * Update one or more facilities of a reservation in a single transaction.
+     * Facilities that are not part of the request are left untouched, and the
+     * reservation totals are recalculated from every active facility.
+     *
+     * @param  array{details: array<int|string, array<string, mixed>>}  $data
+     */
     public function updateReservation(int $reservationId, array $data): Reservation
     {
-        $reservation = DB::transaction(function () use ($reservationId, $data): Reservation {
+        $changes = $this->normalizeChanges((array) ($data['details'] ?? []));
+
+        $reservation = DB::transaction(function () use ($reservationId, $changes): Reservation {
             $reservation = Reservation::query()
                 ->with(['details', 'payments'])
                 ->lockForUpdate()
@@ -240,88 +249,138 @@ class GuestReservationManagementService
             $this->guardActiveReservation($reservation);
             $this->guardNoVerifiedPayments($reservation);
 
-            $detail = ReservationDetail::query()
+            $editable = ReservationDetail::query()
                 ->where('reservation_id', $reservation->reservation_id)
+                ->orderBy('reservation_details_id')
                 ->lockForUpdate()
-                ->first();
+                ->get()
+                ->reject(fn (ReservationDetail $detail): bool => $this->isClosedDetail($detail))
+                ->keyBy(fn (ReservationDetail $detail): int => (int) $detail->reservation_details_id);
 
-            if (! $detail) {
+            if ($editable->isEmpty()) {
                 throw new InvalidArgumentException('Reservation has no facility details to update.');
             }
 
-            $facilityId = (int) $data['facility_id'];
-            $rateType = (string) $data['rate_type'];
-            $checkInDate = (string) $data['check_in_date'];
-            $checkOutDate = (string) $data['check_out_date'];
-
-            $facilities = $this->scheduleLock->lockMany([
-                (int) $detail->facility_id,
-                $facilityId,
-            ])->keyBy('facility_id');
-
-            if ($facilities->get($facilityId)?->facility_status !== 'Available') {
-                throw new InvalidArgumentException('The selected facility is not available.');
+            foreach (array_keys($changes) as $detailId) {
+                if (! $editable->has($detailId)) {
+                    throw new InvalidArgumentException('One of the selected facilities can no longer be updated.');
+                }
             }
 
-            $totalGuestCount = (int) ($data['total_guest_count'] ?? 0);
-            $extraGuests = $this->cleanExtraGuests(
-                $data['extra_guests'] ?? [],
-            );
-            $occupancy = $this->occupancy->forFacilityId(
-                $facilityId,
-                $totalGuestCount,
-            );
-            $this->occupancy->assertNamedPaidExtraGuests(
-                $extraGuests,
-                $occupancy['paid_extra_guest_count'],
-            );
-            $extraGuestCount =
-                $occupancy['paid_extra_guest_count'];
+            $facilities = $this->scheduleLock->lockMany([
+                ...collect($changes)->pluck('facility_id')->values()->all(),
+                ...collect(array_keys($changes))
+                    ->map(fn (int $detailId): int => (int) $editable->get($detailId)->facility_id)
+                    ->values()
+                    ->all(),
+            ])->keyBy('facility_id');
 
-            $discount = $this->discountResolver->resolveForFacility(
-                $facilityId,
-                $checkInDate,
-                $detail->discount_id ? (int) $detail->discount_id : null,
+            // Validate and quote every changed facility before touching any data.
+            $prepared = [];
+
+            foreach ($changes as $detailId => $change) {
+                $detail = $editable->get($detailId);
+                $facilityId = $change['facility_id'];
+
+                if ($facilities->get($facilityId)?->facility_status !== 'Available') {
+                    throw new InvalidArgumentException('The selected facility is not available.');
+                }
+
+                $extraGuests = $this->cleanExtraGuests($change['extra_guests']);
+                $occupancy = $this->occupancy->forFacilityId(
+                    $facilityId,
+                    $change['total_guest_count'],
+                );
+                $this->occupancy->assertNamedPaidExtraGuests(
+                    $extraGuests,
+                    $occupancy['paid_extra_guest_count'],
+                );
+
+                $discount = $this->discountResolver->resolveForFacility(
+                    $facilityId,
+                    $change['check_in_date'],
+                    $detail->discount_id ? (int) $detail->discount_id : null,
+                );
+
+                $quote = $this->quoteService->quote(
+                    facilityId: $facilityId,
+                    rateType: $change['rate_type'],
+                    checkInDate: $change['check_in_date'],
+                    checkOutDate: $change['check_out_date'],
+                    discountId: $discount?->discount_id,
+                    totalGuestCount: $change['total_guest_count'],
+                );
+
+                $prepared[$detailId] = [
+                    'detail' => $detail,
+                    'change' => $change,
+                    'discount' => $discount,
+                    'quote' => $quote,
+                    'extra_guests' => $extraGuests,
+                ];
+            }
+
+            // Free every changed facility first so facilities can move between
+            // details of the same reservation without blocking each other.
+            $this->scheduleBlocks->releaseReservationDetails(
+                collect($prepared)->pluck('detail')->values(),
             );
 
-            $quote = $this->quoteService->quote(
-                facilityId: $facilityId,
-                rateType: $rateType,
-                checkInDate: $checkInDate,
-                checkOutDate: $checkOutDate,
-                discountId: $discount?->discount_id,
-                totalGuestCount: $totalGuestCount,
-            );
+            foreach ($prepared as $item) {
+                /** @var ReservationDetail $detail */
+                $detail = $item['detail'];
+                $change = $item['change'];
+                $quote = $item['quote'];
 
-            $this->scheduleBlocks->synchronizeReservationDetail($detail, [
-                'facility_id' => $facilityId,
-                'check_in_date' => $checkInDate,
-                'check_out_date' => $checkOutDate,
-                ...$quote['detail_snapshot'],
-            ]);
+                $this->scheduleBlocks->synchronizeReservationDetail($detail, [
+                    'facility_id' => $change['facility_id'],
+                    'check_in_date' => $change['check_in_date'],
+                    'check_out_date' => $change['check_out_date'],
+                    ...$quote['detail_snapshot'],
+                ]);
+
+                $detail->update([
+                    'facility_id' => $change['facility_id'],
+                    'rate_type' => $quote['rate_type'],
+                    'check_in_date' => $change['check_in_date'],
+                    'check_out_date' => $change['check_out_date'],
+                    'discount_id' => $item['discount']?->discount_id,
+                    ...$quote['detail_snapshot'],
+                ]);
+
+                // Only this facility's extra guests are replaced.
+                $detail->extraGuests()->delete();
+
+                if ($editable->count() === 1) {
+                    // Older single-facility reservations may have unlinked guest rows.
+                    $reservation->extraGuests()->whereNull('reservation_details_id')->delete();
+                }
+
+                $this->detailGuests->createForReservation(
+                    $reservation,
+                    $detail,
+                    $item['extra_guests'],
+                );
+            }
+
+            // Totals come from every active facility, not just the edited one.
+            $fresh = $reservation->fresh(['details', 'payments']);
+            $summary = $this->ledger->summaryForReservation($fresh);
+            $active = $fresh->details->reject(
+                fn (ReservationDetail $detail): bool => $this->isClosedDetail($detail),
+            );
+            $guestCounts = $active->pluck('guest_count');
 
             $reservation->update([
-                'total_price' => $quote['total_price'],
-                'amount_due' => $quote['amount_due'],
-                'no_of_extra_guests' => $extraGuestCount,
-                'total_guest_count' => $totalGuestCount,
+                'total_price' => $summary['total'],
+                'amount_due' => $summary['balance'],
+                'no_of_extra_guests' => $active->sum(
+                    fn (ReservationDetail $detail): int => $this->paidExtraGuestCount($detail),
+                ),
+                'total_guest_count' => $guestCounts->contains(fn (mixed $count): bool => $count === null)
+                    ? (int) $reservation->total_guest_count
+                    : (int) $guestCounts->sum(),
             ]);
-
-            $detail->update([
-                'facility_id' => $facilityId,
-                'rate_type' => $quote['rate_type'],
-                'check_in_date' => $checkInDate,
-                'check_out_date' => $checkOutDate,
-                'discount_id' => $discount?->discount_id,
-                ...$quote['detail_snapshot'],
-            ]);
-
-            $reservation->extraGuests()->delete();
-            $this->detailGuests->createForReservation(
-                $reservation,
-                $detail,
-                $extraGuests,
-            );
 
             return $reservation->fresh(['guest.address', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments']);
         });
@@ -329,6 +388,14 @@ class GuestReservationManagementService
         $this->confirmationEmailService->sendReservationUpdated($reservation);
 
         return $reservation;
+    }
+
+    /** @return Collection<int, ReservationDetail> */
+    public function editableDetails(Reservation $reservation): Collection
+    {
+        return $reservation->details
+            ->reject(fn (ReservationDetail $detail): bool => $this->isClosedDetail($detail))
+            ->values();
     }
 
     public function cancelReservation(int $reservationId, string $reason): Reservation
@@ -383,6 +450,63 @@ class GuestReservationManagementService
         $this->confirmationEmailService->sendReservationCancelled($reservation);
 
         return $reservation;
+    }
+
+    private function isClosedDetail(ReservationDetail $detail): bool
+    {
+        return in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true);
+    }
+
+    /**
+     * @param  array<int|string, array<string, mixed>>  $details
+     * @return array<int, array{facility_id: int, rate_type: string, check_in_date: string, check_out_date: string, total_guest_count: int, extra_guests: array<int, array<string, mixed>>}>
+     */
+    private function normalizeChanges(array $details): array
+    {
+        $changes = [];
+
+        foreach ($details as $key => $change) {
+            $detailId = (int) ($change['reservation_details_id'] ?? $key);
+            $facilityId = (int) ($change['facility_id'] ?? 0);
+            $rateType = trim((string) ($change['rate_type'] ?? ''));
+            $checkIn = trim((string) ($change['check_in_date'] ?? ''));
+            $checkOut = trim((string) ($change['check_out_date'] ?? ''));
+
+            if ($detailId < 1 || $facilityId < 1 || $rateType === '' || $checkIn === '' || $checkOut === '') {
+                throw new InvalidArgumentException('Complete the details of every facility before saving.');
+            }
+
+            $changes[$detailId] = [
+                'facility_id' => $facilityId,
+                'rate_type' => $rateType,
+                'check_in_date' => $checkIn,
+                'check_out_date' => $checkOut,
+                'total_guest_count' => (int) ($change['total_guest_count'] ?? 0),
+                'extra_guests' => (array) ($change['extra_guests'] ?? []),
+            ];
+        }
+
+        if ($changes === []) {
+            throw new InvalidArgumentException('Reservation has no facility details to update.');
+        }
+
+        return $changes;
+    }
+
+    private function paidExtraGuestCount(ReservationDetail $detail): int
+    {
+        if ($detail->guest_count === null) {
+            return (int) $detail->extraGuests()->count();
+        }
+
+        try {
+            return (int) $this->occupancy->forFacilityId(
+                (int) $detail->facility_id,
+                (int) $detail->guest_count,
+            )['paid_extra_guest_count'];
+        } catch (InvalidArgumentException) {
+            return (int) $detail->extraGuests()->count();
+        }
     }
 
     private function findManageableReservation(string $referenceNumber, string $email): Reservation
