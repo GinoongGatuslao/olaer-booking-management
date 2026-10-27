@@ -18,6 +18,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'payable_q', except: '')]
@@ -930,24 +950,27 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             </div>
 
             <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <flux:input
-                    wire:model="amountPaid"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    label="Amount paid"
-                />
+                <flux:field>
+                    <flux:label>Amount paid <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="amountPaid" type="number" min="0.01" step="0.01" :invalid="$errors->has('amountPaid')" />
+                    @if ($msg = $this->visibleError('amountPaid'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
 
-                <flux:select
-                    wire:model.live="modeOfPaymentId"
-                    label="Mode of payment"
-                >
+                <flux:field>
+                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                    <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
                     @foreach ($modeOfPayments as $mode)
                         <option value="{{ $mode->mode_of_payment_id }}">
                             {{ $mode->mode_of_payment }}
                         </option>
                     @endforeach
                 </flux:select>
+                    @if ($msg = $this->visibleError('modeOfPaymentId'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 @if($this->modeOfPaymentId === '2')
                     <flux:input
                         wire:model="referenceNumber"
@@ -966,13 +989,9 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 </div>
             </div>
 
-            @error('amountPaid')
-                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-            @enderror
+            
 
-            @error('modeOfPaymentId')
-                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-            @enderror
+            
 
             @error('referenceNumber')
                 <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
@@ -997,11 +1016,17 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     clearable
                 />
 
-                <flux:select wire:model.live="targetType" label="Payable type">
+                <flux:field>
+                    <flux:label>Payable type <span class="text-red-500">*</span></flux:label>
+                    <flux:select wire:model.live="targetType" :invalid="$errors->has('targetType')">
                     <option value="booking">Bookings</option>
                     <option value="reservation">Reservations</option>
                     <option value="entrance_slip">Entrance Slips</option>
                 </flux:select>
+                    @if ($msg = $this->visibleError('targetType'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
 
                 <flux:select
                     wire:model.live="payablePerPage"

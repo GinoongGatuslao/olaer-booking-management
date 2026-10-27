@@ -18,6 +18,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -869,14 +889,17 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                 </div>
 
-                <form wire:submit="saveFine" class="mt-5 space-y-4">
-                    <flux:select
-                        wire:model.live="fineType"
-                        label="Fine type"
-                    >
+                <form wire:submit="saveFine" novalidate class="mt-5 space-y-4">
+                    <flux:field>
+                        <flux:label>Fine type <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model.live="fineType" :invalid="$errors->has('fineType')">
                         <option value="Situational">Situational</option>
                         <option value="Amenity">Amenity</option>
                     </flux:select>
+                        @if ($msg = $this->visibleError('fineType'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     @if ($fineType === 'Amenity')
                         <flux:select
@@ -919,14 +942,13 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         />
                     @endif
 
-                    <flux:input
-                            wire:model="fineCharge"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            label="Fine charge"
-                            placeholder="200.00"
-                        />
+                    <flux:field>
+                        <flux:label>Fine charge <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="fineCharge" type="number" step="0.01" min="0.01" placeholder="Example: 200.00" :invalid="$errors->has('fineCharge')" />
+                        @if ($msg = $this->visibleError('fineCharge'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
 
 
@@ -960,12 +982,14 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
                 </div>
 
-                <form wire:submit="saveDamageType" class="mt-5 space-y-4">
-                    <flux:input
-                        wire:model="damageType"
-                        label="Damage type"
-                        placeholder="Damaged, Missing, Stained"
-                    />
+                <form wire:submit="saveDamageType" novalidate class="mt-5 space-y-4">
+                    <flux:field>
+                        <flux:label>Damage type <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="damageType" placeholder="Damaged, Missing, Stained" :invalid="$errors->has('damageType')" />
+                        @if ($msg = $this->visibleError('damageType'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     <div class="flex justify-end gap-3">
                         <flux:button

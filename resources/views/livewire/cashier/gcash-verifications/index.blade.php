@@ -13,6 +13,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     public string $search = '';
@@ -370,7 +390,13 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             </flux:button>
 
                             <div class="mt-4">
-                                <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Example: Amount/reference does not match or proof is unreadable." />
+                                <flux:field>
+                                    <flux:label>Rejection reason <span class="text-red-500">*</span></flux:label>
+                                    <flux:textarea wire:model="rejectionReason" placeholder="Example: Amount/reference does not match or proof is unreadable." :invalid="$errors->has('rejectionReason')" />
+                                    @if ($msg = $this->visibleError('rejectionReason'))
+                                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    @endif
+                                </flux:field>
                                 <flux:button variant="danger" class="mt-3 w-full" wire:click="$set('showRejectDialog', true)">
                                     Reject payment
                                 </flux:button>
@@ -426,7 +452,13 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     Reject this proof only when the amount, reference, or uploaded evidence cannot be verified.
                 </flux:text>
             </div>
-            <flux:textarea wire:model="rejectionReason" label="Rejection reason" placeholder="Explain why this proof is being rejected." />
+            <flux:field>
+                <flux:label>Rejection reason <span class="text-red-500">*</span></flux:label>
+                <flux:textarea wire:model="rejectionReason" placeholder="Explain why this proof is being rejected." :invalid="$errors->has('rejectionReason')" />
+                @if ($msg = $this->visibleError('rejectionReason'))
+                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
             <div class="flex justify-end gap-3">
                 <flux:button type="button" variant="ghost" wire:click="$set('showRejectDialog', false)">Cancel</flux:button>
                 <flux:button type="button" variant="danger" wire:click="rejectSelected">Reject payment</flux:button>

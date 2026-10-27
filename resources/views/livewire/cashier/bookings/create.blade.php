@@ -17,6 +17,74 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] class extends Component
 {
+
+    /**
+     * Messages for the error summary. An empty required field is only highlighted
+     * on the field itself, so it is left out of the summary.
+     *
+     * @return array<int, string>
+     */
+    public function bannerErrors(): array
+    {
+        $requiredFields = [
+            'city',
+            'contactNo',
+            'email',
+            'firstName',
+            'groups.*.check_in_date',
+            'groups.*.check_out_date',
+            'groups.*.estimated_users',
+            'groups.*.facility_product_id',
+            'groups.*.quantity',
+            'groups.*.rate_code',
+            'lastName',
+            'modeOfPaymentId',
+            'partyCount',
+            'province',
+            'roomOccupants.*.*.first_name',
+            'roomOccupants.*.*.last_name',
+        ];
+
+        $messages = [];
+
+        foreach ($this->getErrorBag()->messages() as $key => $list) {
+            $value = data_get($this, $key);
+            $blank = $value === null || $value === '' || $value === [];
+            $isRequiredField = collect($requiredFields)->contains(
+                fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, $key),
+            );
+
+            if ($isRequiredField && $blank) {
+                continue;
+            }
+
+            foreach ($list as $message) {
+                $messages[] = $message;
+            }
+        }
+
+        return array_values(array_unique($messages));
+    }
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     public string $token = '';
     public int $partyCount = 1;
     public array $groups = [];
@@ -499,19 +567,55 @@ protected function validationAttributes(): array
         <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{{ $message }}</div>
     @enderror
 
-    <form wire:submit="submit" class="space-y-6">
+    <form wire:submit="submit" novalidate class="space-y-6">
         <flux:card>
             <flux:heading size="lg">Guest information</flux:heading>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <x-required-input wire:model="firstName" name="firstName" label="First name" />
+                <flux:field>
+                    <flux:label>First name <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="firstName" :invalid="$errors->has('firstName')" />
+                    @if ($msg = $this->visibleError('firstName'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 <flux:input wire:model="middleName" label="Middle name" />
-                <x-required-input wire:model="lastName" name="lastName" label="Last name" />
-                <x-required-input wire:model="email" name="email" type="email" label="Email" />
-                <x-required-input wire:model="contactNo" name="contactNo" label="Contact number" maxlength="11"/>
-                <x-required-input wire:model="province" name="province" label="Province" />
+                <flux:field>
+                    <flux:label>Last name <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="lastName" :invalid="$errors->has('lastName')" />
+                    @if ($msg = $this->visibleError('lastName'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <flux:field>
+                    <flux:label>Email <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
+                    @if ($msg = $this->visibleError('email'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <flux:field>
+                    <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="contactNo" maxlength="11" :invalid="$errors->has('contactNo')" />
+                    @if ($msg = $this->visibleError('contactNo'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <flux:field>
+                    <flux:label>Province <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="province" :invalid="$errors->has('province')" />
+                    @if ($msg = $this->visibleError('province'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <x-required-input wire:model="city" name="city" label="City/Municipality" />
+                <flux:field>
+                    <flux:label>City/Municipality <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="city" :invalid="$errors->has('city')" />
+                    @if ($msg = $this->visibleError('city'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 <flux:input wire:model="barangay" label="Barangay" />
                 <flux:input wire:model="purok" label="Purok/Street" />
             </div>
@@ -535,27 +639,63 @@ protected function validationAttributes(): array
                     @php($availability = $this->availabilityFor($index))
                     <div wire:key="cashier-booking-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="grid gap-4 lg:grid-cols-5">
-                            <x-required-select wire:model.live="groups.{{ $index }}.facility_product_id" name="groups.{{ $index }}.facility_product_id" label="Facility name" class="lg:col-span-2">
+                            <flux:field >
+                                <flux:label>Facility name <span class="text-red-500">*</span></flux:label>
+                                <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" :invalid="$errors->has('groups.'.$index.'.facility_product_id')">
                                 <option value="">Choose name</option>
                                 @foreach ($this->products as $candidate)
                                     <option value="{{ $candidate->facility_product_id }}"> {{ $candidate->display_name }}</option>
                                 @endforeach
-                            </x-required-select>
-                            <x-required-select wire:model.live="groups.{{ $index }}.rate_code" name="groups.{{ $index }}.rate_code" label="Schedule">
+                            </flux:select>
+                                @if ($msg = $this->visibleError('groups.'.$index.'.facility_product_id'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Schedule <span class="text-red-500">*</span></flux:label>
+                                <flux:select wire:model.live="groups.{{ $index }}.rate_code" :invalid="$errors->has('groups.'.$index.'.rate_code')">
                                 <option value="">Choose schedule</option>
                                 @foreach ($product?->productRates ?? [] as $rate)
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
-                            </x-required-select>
-                            <x-required-input wire:model.live="groups.{{ $index }}.quantity" name="groups.{{ $index }}.quantity" type="number" min="1" max="50" label="Quantity" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.estimated_users" name="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" label="Estimated guests" />
+                            </flux:select>
+                                @if ($msg = $this->visibleError('groups.'.$index.'.rate_code'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" :invalid="$errors->has('groups.'.$index.'.quantity')" />
+                                @if ($msg = $this->visibleError('groups.'.$index.'.quantity'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Estimated guests <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" :invalid="$errors->has('groups.'.$index.'.estimated_users')" />
+                                @if ($msg = $this->visibleError('groups.'.$index.'.estimated_users'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
                             <div class="flex items-end">
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
                             </div>
                         </div>
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
-                            <x-required-input wire:model.live="groups.{{ $index }}.check_in_date" name="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" label="Check-in/use date" />
-                            <x-required-input wire:model.live="groups.{{ $index }}.check_out_date" name="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" label="Check-out/end date" />
+                            <flux:field>
+                                <flux:label>Check-in/use date <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_in_date')" />
+                                @if ($msg = $this->visibleError('groups.'.$index.'.check_in_date'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Check-out/end date <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_out_date')" />
+                                @if ($msg = $this->visibleError('groups.'.$index.'.check_out_date'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
                         </div>
                         @if ($availability)
                             <div class="mt-3 flex flex-wrap gap-2">
@@ -591,9 +731,21 @@ protected function validationAttributes(): array
                             <div class="space-y-3">
                                 @foreach ($occupants as $occupantIndex => $occupant)
                                     <div class="grid gap-3 md:grid-cols-3">
-                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" label="First name" />
+                                        <flux:field>
+                                            <flux:label>First name <span class="text-red-500">*</span></flux:label>
+                                            <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name')" />
+                                            @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name'))
+                                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                            @endif
+                                        </flux:field>
                                         <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
-                                        <x-required-input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" name="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" label="Last name" />
+                                        <flux:field>
+                                            <flux:label>Last name <span class="text-red-500">*</span></flux:label>
+                                            <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name')" />
+                                            @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name'))
+                                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                            @endif
+                                        </flux:field>
                                     </div>
                                 @endforeach
                             </div>
@@ -607,12 +759,18 @@ protected function validationAttributes(): array
             <flux:heading size="lg">Payment & admission</flux:heading>
             <flux:text>Core facility charges—and Walk-In admission charges when applicable—must be fully paid before admission. Amenities may remain outstanding.</flux:text>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <x-required-select wire:model.live="modeOfPaymentId" name="modeOfPaymentId" label="Mode of payment">
+                <flux:field>
+                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                    <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
                     <option value="">Choose payment mode</option>
                     @foreach (ModeOfPayment::query()->orderBy('mode_of_payment')->get() as $mode)
                         <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
                     @endforeach
-                </x-required-select>
+                </flux:select>
+                    @if ($msg = $this->visibleError('modeOfPaymentId'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 @if($this->modeOfPaymentId === '2')
                     <flux:input
                         wire:model="referenceNumber"
@@ -625,10 +783,10 @@ protected function validationAttributes(): array
 
         </flux:card>
 
-        @if ($errors->any())
+        @if ($this->bannerErrors() !== [])
             <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                 <ul class="list-disc space-y-1 pl-5">
-                    @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+                    @foreach ($this->bannerErrors() as $error)<li>{{ $error }}</li>@endforeach
                 </ul>
             </div>
         @endif

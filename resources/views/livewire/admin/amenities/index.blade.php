@@ -15,6 +15,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -572,26 +592,33 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
                 </div>
 
-                <form wire:submit="save" class="mt-5 space-y-4">
-                    <flux:input
-                        wire:model="amenityName"
-                        label="Amenity name"
-                        placeholder="Example: Chair, Pillow, Table Set"
-                    />
+                <form wire:submit="save" novalidate class="mt-5 space-y-4">
+                    <flux:field>
+                        <flux:label>Amenity name <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="amenityName" placeholder="Example: Chair, Pillow, Table Set" :invalid="$errors->has('amenityName')" />
+                        @if ($msg = $this->visibleError('amenityName'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
-                    <flux:input
-                        wire:model="amenityDescription"
-                        label="Description"
-                        placeholder="Example: Monoblock, Room inclusive item"
-                    />
+                    <flux:field>
+                        <flux:label>Description <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="amenityDescription" placeholder="Example: Monoblock, Room inclusive item" :invalid="$errors->has('amenityDescription')" />
+                        @if ($msg = $this->visibleError('amenityDescription'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
-                    <flux:select
-                        wire:model.live="amenityType"
-                        label="Amenity type"
-                    >
+                    <flux:field>
+                        <flux:label>Amenity type <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model.live="amenityType" :invalid="$errors->has('amenityType')">
                         <option value="Rentable">Rentable</option>
                         <option value="Inclusive">Inclusive</option>
                     </flux:select>
+                        @if ($msg = $this->visibleError('amenityType'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                    @if ($amenityType === 'Rentable')
                     <flux:input

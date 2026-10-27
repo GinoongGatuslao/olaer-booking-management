@@ -19,6 +19,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -890,11 +910,10 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                         </div>
 
                         @if ($this->selectedSlip->status !== 'Paid' && (float) $this->selectedSlip->amount_due > 0)
-                            <form wire:submit="recordPayment" class="space-y-4">
-                                <flux:select
-                                    wire:model.live="modeOfPaymentId"
-                                    label="Mode of payment"
-                                >
+                            <form wire:submit="recordPayment" novalidate class="space-y-4">
+                                <flux:field>
+                                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                                    <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
                                     <option value="">Select mode</option>
 
                                     @foreach ($this->paymentModes as $mode)
@@ -903,6 +922,10 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                         </option>
                                     @endforeach
                                 </flux:select>
+                                    @if ($msg = $this->visibleError('modeOfPaymentId'))
+                                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    @endif
+                                </flux:field>
 
                                 @if($this->modeOfPaymentId === '2')
                                 <flux:input

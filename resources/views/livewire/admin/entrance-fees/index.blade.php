@@ -10,6 +10,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     public ?int $editingId = null;
@@ -102,12 +122,18 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
     </flux:card>
 
     <flux:modal wire:model="showEditor" class="md:w-[30rem]">
-        <form wire:submit="save" class="space-y-5">
+        <form wire:submit="save" novalidate class="space-y-5">
             <div>
                 <flux:heading size="lg">Edit entrance fee rate</flux:heading>
                 <flux:text class="mt-1">{{ $entranceFeeName }}</flux:text>
             </div>
-            <flux:input wire:model="entranceFeeRate" type="number" min="0.01" step="0.01" label="Entrance fee rate" prefix="₱" />
+            <flux:field>
+                <flux:label>Entrance fee rate <span class="text-red-500">*</span></flux:label>
+                <flux:input wire:model="entranceFeeRate" type="number" min="0.01" step="0.01" prefix="₱" :invalid="$errors->has('entranceFeeRate')" />
+                @if ($msg = $this->visibleError('entranceFeeRate'))
+                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
             <div class="flex justify-end gap-3">
                 <flux:button type="button" wire:click="closeEditor" variant="ghost">Cancel</flux:button>
                 <flux:button type="submit" variant="primary">Save rate</flux:button>

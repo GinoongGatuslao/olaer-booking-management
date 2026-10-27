@@ -15,6 +15,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -631,12 +651,11 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                 Select the guest's checked-in booking detail. The request is assigned to you immediately and remains payable during checkout.
             </flux:text>
 
-            <form wire:submit="createRequest" class="mt-5 space-y-5">
+            <form wire:submit="createRequest" novalidate class="mt-5 space-y-5">
                 <div class="grid gap-4 md:grid-cols-2">
-                    <flux:select
-                        wire:model.live="form.booking_id"
-                        label="Checked-in Booking"
-                    >
+                    <flux:field>
+                        <flux:label>Checked-in Booking <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model.live="form.booking_id" :invalid="$errors->has('form.booking_id')">
                         <option value="">Select booking</option>
 
                         @foreach ($checkedInBookings as $booking)
@@ -645,11 +664,14 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             </option>
                         @endforeach
                     </flux:select>
+                        @if ($msg = $this->visibleError('form.booking_id'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
-                    <flux:select
-                        wire:model="form.booking_detail_id"
-                        label="Checked-in Facility"
-                    >
+                    <flux:field>
+                        <flux:label>Checked-in Facility <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model="form.booking_detail_id" :invalid="$errors->has('form.booking_detail_id')">
                         <option value="">Select facility</option>
 
                         @foreach ($selectedBookingDetails as $detail)
@@ -658,6 +680,10 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             </option>
                         @endforeach
                     </flux:select>
+                        @if ($msg = $this->visibleError('form.booking_detail_id'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
                 </div>
 
                 <div class="space-y-3">
@@ -678,10 +704,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             wire:key="maintenance-create-amenity-item-{{ $index }}"
                             class="grid gap-3 rounded-lg border border-brand-border p-3 dark:border-zinc-800 md:grid-cols-[1fr_7.5rem_auto]"
                         >
-                            <flux:select
-                                wire:model.live="items.{{ $index }}.amenity_id"
-                                label="Amenity"
-                            >
+                            <flux:field>
+                                <flux:label>Amenity <span class="text-red-500">*</span></flux:label>
+                                <flux:select wire:model.live="items.{{ $index }}.amenity_id" :invalid="$errors->has('items.'.$index.'.amenity_id')">
                                 <option value="">Select amenity</option>
 
                                 @foreach ($rentableAmenities as $amenity)
@@ -690,13 +715,18 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                     </option>
                                 @endforeach
                             </flux:select>
+                                @if ($msg = $this->visibleError('items.'.$index.'.amenity_id'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
 
-                            <flux:input
-                                wire:model.live="items.{{ $index }}.quantity"
-                                label="Quantity"
-                                type="number"
-                                min="1"
-                            />
+                            <flux:field>
+                                <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model.live="items.{{ $index }}.quantity" type="number" min="1" :invalid="$errors->has('items.'.$index.'.quantity')" />
+                                @if ($msg = $this->visibleError('items.'.$index.'.quantity'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
 
                             <div class="flex items-end">
                                 <flux:button

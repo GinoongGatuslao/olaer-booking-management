@@ -11,6 +11,26 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new class extends Component {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -637,9 +657,21 @@ new class extends Component {
         <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
             <h2 class="text-lg font-semibold text-amber-950 dark:text-amber-100">Reschedule Booking</h2>
             <p class="text-sm text-amber-800 dark:text-amber-200">{{ $rescheduleForm['label'] }}</p>
-            <form wire:submit.prevent="saveReschedule" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <flux:input label="New check-in date" type="date" wire:model="rescheduleForm.new_check_in_date" />
-                <flux:input label="New check-out date" type="date" wire:model="rescheduleForm.new_check_out_date" />
+            <form wire:submit.prevent="saveReschedule" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+                <flux:field>
+                    <flux:label>New check-in date <span class="text-red-500">*</span></flux:label>
+                    <flux:input type="date" wire:model="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
+                    @if ($msg = $this->visibleError('rescheduleForm.new_check_in_date'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <flux:field>
+                    <flux:label>New check-out date <span class="text-red-500">*</span></flux:label>
+                    <flux:input type="date" wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
+                    @if ($msg = $this->visibleError('rescheduleForm.new_check_out_date'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 <div class="flex gap-3 sm:mt-6">
                     <flux:button type="submit" variant="primary">Save Reschedule</flux:button>
                     <flux:button type="button" wire:click="cancelReschedule">Cancel</flux:button>
@@ -657,16 +689,16 @@ new class extends Component {
         <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950">
             <h2 class="text-lg font-semibold text-blue-950 dark:text-blue-100">Transfer Facility</h2>
             <p class="text-sm text-blue-800 dark:text-blue-200">{{ $transferForm['label'] }}</p>
-            <form wire:submit.prevent="saveTransfer" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <form wire:submit.prevent="saveTransfer" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
-                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product</label>
-                    <select wire:model="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100">
+                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product <span class="text-red-500">*</span></label>
+                    <select wire:model="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100{{ $errors->has('transferForm.facility_product_id') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}">
                         <option value="">Choose upgrade product</option>
                         @foreach ($transferProducts as $product)
                             <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </select>
-                    @error('transferForm.facility_product_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                    @if ($message = $this->visibleError('transferForm.facility_product_id')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif
                     <p class="mt-1 text-xs text-zinc-500">Exact unit is assigned automatically; cheaper transfers are rejected.</p>
                 </div>
                 <flux:button type="submit" variant="primary">Auto-assign Transfer</flux:button>
@@ -682,12 +714,24 @@ new class extends Component {
             <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
             @error('occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
             @error('occupantForm.occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-            <form wire:submit="saveOccupants" class="mt-4 space-y-4">
+            <form wire:submit="saveOccupants" novalidate class="mt-4 space-y-4">
                 @forelse ($occupantForm['occupants'] as $index => $occupant)
                     <div class="grid gap-3 md:grid-cols-3">
-                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                        <flux:field>
+                            <flux:label>Occupant {{ $index + 1 }} first name * <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.first_name')" />
+                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.first_name'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                         <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
-                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" label="Last name *" />
+                        <flux:field>
+                            <flux:label>Last name * <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.last_name')" />
+                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.last_name'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                     </div>
                 @empty
                     <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>

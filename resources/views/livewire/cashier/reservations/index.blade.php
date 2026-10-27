@@ -20,6 +20,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -548,7 +568,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $actionError }}</div>
             @endif
 
-            <form wire:submit="saveDetailAction" class="mt-5 space-y-4">
+            <form wire:submit="saveDetailAction" novalidate class="mt-5 space-y-4">
                 @if ($detailAction === 'reschedule')
                     <div class="grid gap-4 md:grid-cols-2">
                         <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
@@ -598,8 +618,14 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         <section class="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm dark:border-red-900/60 dark:bg-red-950/30">
             <h2 class="font-semibold">Cancel reservation #{{ $cancelReservationId }}</h2>
             @error('cancelReservationId') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-            <form wire:submit="cancelReservation" class="mt-4 space-y-4">
-                <flux:input wire:model="cancellationReason" label="Cancellation reason" />
+            <form wire:submit="cancelReservation" novalidate class="mt-4 space-y-4">
+                <flux:field>
+                    <flux:label>Cancellation reason <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="cancellationReason" :invalid="$errors->has('cancellationReason')" />
+                    @if ($msg = $this->visibleError('cancellationReason'))
+                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
                 <div class="flex gap-3">
                     <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
                     <flux:button type="button" variant="ghost" wire:click="$set('cancelReservationId', null)">Close</flux:button>

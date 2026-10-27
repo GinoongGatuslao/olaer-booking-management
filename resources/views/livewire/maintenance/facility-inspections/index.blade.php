@@ -20,6 +20,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -1306,10 +1326,9 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             @endforeach
                         </flux:select>
 
-                        <flux:select
-                            label="Fine"
-                            wire:model="fineId"
-                        >
+                        <flux:field>
+                            <flux:label>Fine <span class="text-red-500">*</span></flux:label>
+                            <flux:select wire:model="fineId" :invalid="$errors->has('fineId')">
                             <option value="">Select fine</option>
 
                             @foreach ($fines as $fine)
@@ -1318,13 +1337,18 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                                 </option>
                             @endforeach
                         </flux:select>
+                            @if ($msg = $this->visibleError('fineId'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
 
-                        <flux:input
-                            type="number"
-                            label="Quantity"
-                            min="1"
-                            wire:model="fineQuantity"
-                        />
+                        <flux:field>
+                            <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
+                            <flux:input type="number" min="1" wire:model="fineQuantity" :invalid="$errors->has('fineQuantity')" />
+                            @if ($msg = $this->visibleError('fineQuantity'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
 
                         <flux:button
                             variant="primary"

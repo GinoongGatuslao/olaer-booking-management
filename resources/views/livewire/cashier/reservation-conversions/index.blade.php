@@ -10,6 +10,26 @@ use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     public string $search = '';
     public ?int $selectedReservationId = null;
     public string $paymentAmount = '';
@@ -258,8 +278,13 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     </div>
 
                     <div class="mt-4 space-y-4">
-                        <flux:input type="number" step="0.01" min="0" label="Payment Amount" wire:model.live="paymentAmount" />
-                        @error('paymentAmount') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
+                        <flux:field>
+                            <flux:label>Payment Amount <span class="text-red-500">*</span></flux:label>
+                            <flux:input type="number" step="0.01" min="0" wire:model.live="paymentAmount" :invalid="$errors->has('paymentAmount')" />
+                            @if ($msg = $this->visibleError('paymentAmount'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
 
                         @if ((float) $selected->amount_due > 0)
                             <label class="block">

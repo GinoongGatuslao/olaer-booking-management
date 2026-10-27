@@ -18,6 +18,9 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 {
     use WithPagination;
 
+    /** Marker for "empty required field": the field turns red, no text is shown. */
+    private const REQUIRED_MESSAGE = 'This field is required.';
+
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
@@ -136,6 +139,20 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         };
 
         return $query->paginate($perPage);
+    }
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text to display under a field; empty required errors only highlight the box. */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        return $message === '' || $message === self::REQUIRED_MESSAGE ? null : $message;
     }
 
     public function updatedSearch(): void
@@ -317,23 +334,24 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 'same:password',
             ],
         ], [
-            'firstName.required' => 'First name is required.',
-            'lastName.required' => 'Last name is required.',
-            'username.required' => 'Username is required.',
+            'firstName.required' => self::REQUIRED_MESSAGE,
+            'lastName.required' => self::REQUIRED_MESSAGE,
+            'username.required' => self::REQUIRED_MESSAGE,
             'username.unique' => 'This username is already taken.',
-            'email.required' => 'Email is required.',
+            'email.required' => self::REQUIRED_MESSAGE,
             'email.email' => 'Enter a valid email address.',
             'email.unique' => 'This email is already used by another account.',
-            'contactNo.required' => 'Contact number is required.',
+            'contactNo.required' => self::REQUIRED_MESSAGE,
             'contactNo.regex' => 'Contact number must be exactly 11 digits.',
+            'status.required' => self::REQUIRED_MESSAGE,
             'status.in' => 'Status must be Active or Inactive.',
-            'roleId.required' => 'Role is required.',
+            'roleId.required' => self::REQUIRED_MESSAGE,
             'roleId.exists' => 'Selected role does not exist.',
-            'province.required' => 'Province is required.',
-            'city.required' => 'City is required.',
-            'password.required' => 'Password is required for new users.',
+            'province.required' => self::REQUIRED_MESSAGE,
+            'city.required' => self::REQUIRED_MESSAGE,
+            'password.required' => self::REQUIRED_MESSAGE,
             'password.min' => 'Password must be at least 8 characters.',
-            'passwordConfirmation.required' => 'Password confirmation is required.',
+            'passwordConfirmation.required' => self::REQUIRED_MESSAGE,
             'passwordConfirmation.same' => 'Password confirmation does not match.',
         ]);
 
@@ -802,50 +820,117 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 
                 </div>
 
-                <form wire:submit="saveUser" class="space-y-4">
+                <form wire:submit="saveUser" novalidate class="space-y-4">
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:input wire:model="firstName" label="First name" />
-                        <flux:input wire:model="middleName" label="Middle name" />
+                        <flux:field>
+                            <flux:label>First name <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="firstName" :invalid="$errors->has('firstName')" />
+                            @if ($msg = $this->visibleError('firstName'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
+                        <flux:field>
+                            <flux:label>Middle name </flux:label>
+                            <flux:input wire:model="middleName" :invalid="$errors->has('middleName')" />
+                            @if ($msg = $this->visibleError('middleName'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                     </div>
 
-                    <flux:input wire:model="lastName" label="Last name" />
+                    <flux:field>
+                        <flux:label>Last name <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="lastName" :invalid="$errors->has('lastName')" />
+                        @if ($msg = $this->visibleError('lastName'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:input wire:model="username" label="Username" :disabled="$isDisabled"/>
-                        <flux:input wire:model="email" type="email" label="Email" />
+                        <flux:field>
+                            <flux:label>Username <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="username" :disabled="$isDisabled" :invalid="$errors->has('username')" />
+                            @if ($msg = $this->visibleError('username'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
+                        <flux:field>
+                            <flux:label>Email <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
+                            @if ($msg = $this->visibleError('email'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                     </div>
 
-                    <flux:input
-                        wire:model="contactNo"
-                        label="Contact number"
-                        placeholder="Example: 09123456789"
-                        maxlength="11"
-                    />
+                    <flux:field>
+                        <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="contactNo" placeholder="Example: 09123456789" maxlength="11" :invalid="$errors->has('contactNo')" />
+                        @if ($msg = $this->visibleError('contactNo'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:select wire:model="roleId" label="Role">
-                            <option value="">Select role</option>
-                            @foreach ($this->roles as $role)
-                                <option value="{{ $role->role_id }}">
-                                    {{ $role->role_name }}
-                                </option>
-                            @endforeach
-                        </flux:select>
+                        <flux:field>
+                            <flux:label>Role <span class="text-red-500">*</span></flux:label>
+                            <flux:select wire:model="roleId" :invalid="$errors->has('roleId')">
+                                <option value="">Select role</option>
+                                @foreach ($this->roles as $role)
+                                    <option value="{{ $role->role_id }}">
+                                        {{ $role->role_name }}
+                                    </option>
+                                @endforeach
+                            </flux:select>
+                            @if ($msg = $this->visibleError('roleId'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
 
-                        <flux:select wire:model="status" label="Status">
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                        </flux:select>
+                        <flux:field>
+                            <flux:label>Status <span class="text-red-500">*</span></flux:label>
+                            <flux:select wire:model="status" :invalid="$errors->has('status')">
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </flux:select>
+                            @if ($msg = $this->visibleError('status'))
+                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                     </div>
 
                     <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
                         <h3 class="text-sm font-semibold">Address</h3>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:input wire:model="province" label="Province" />
-                            <flux:input wire:model="city" label="City / Municipality" />
-                            <flux:input wire:model="barangay" label="Barangay" />
-                            <flux:input wire:model="purok" label="Purok / Street" />
+                            <flux:field>
+                                <flux:label>Province <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model="province" :invalid="$errors->has('province')" />
+                                @if ($msg = $this->visibleError('province'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>City / Municipality <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model="city" :invalid="$errors->has('city')" />
+                                @if ($msg = $this->visibleError('city'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Barangay </flux:label>
+                                <flux:input wire:model="barangay" :invalid="$errors->has('barangay')" />
+                                @if ($msg = $this->visibleError('barangay'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Purok / Street </flux:label>
+                                <flux:input wire:model="purok" :invalid="$errors->has('purok')" />
+                                @if ($msg = $this->visibleError('purok'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
                         </div>
                     </div>
 
@@ -859,21 +944,20 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         </p>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:input
-                                wire:model="password"
-                                type="password"
-                                label="Password"
-                                autocomplete="new-password"
-                                viewable
-                            />
-
-                            <flux:input
-                                wire:model="passwordConfirmation"
-                                type="password"
-                                label="Confirm password"
-                                autocomplete="new-password"
-                                viewable
-                            />
+                            <flux:field>
+                                <flux:label>Password @if ($editingUserId === null) <span class="text-red-500">*</span> @endif</flux:label>
+                                <flux:input wire:model="password" type="password" autocomplete="new-password" viewable :invalid="$errors->has('password')" />
+                                @if ($msg = $this->visibleError('password'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
+                            <flux:field>
+                                <flux:label>Confirm password @if ($editingUserId === null || $password !== '') <span class="text-red-500">*</span> @endif</flux:label>
+                                <flux:input wire:model="passwordConfirmation" type="password" autocomplete="new-password" viewable :invalid="$errors->has('passwordConfirmation')" />
+                                @if ($msg = $this->visibleError('passwordConfirmation'))
+                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                            </flux:field>
                         </div>
                     </div>
 

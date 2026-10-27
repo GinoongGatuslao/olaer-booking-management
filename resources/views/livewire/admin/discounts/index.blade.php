@@ -14,6 +14,26 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort')] class extends Component
 {
+
+    public function updated(string $property): void
+    {
+        // Clear the red highlight of a field as soon as the user edits it.
+        $this->resetValidation($property);
+    }
+
+    /** Error text for a required field; an empty required field only turns red (no text). */
+    public function visibleError(string $field): ?string
+    {
+        $message = $this->getErrorBag()->first($field);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $value = data_get($this, $field);
+
+        return $value === null || $value === '' || $value === [] ? null : $message;
+    }
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -767,22 +787,22 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
 
                 </div>
 
-                <form wire:submit="save" class="mt-5 space-y-4">
-                    <flux:input
-                        wire:model="discountName"
-                        label="Discount name"
-                        placeholder="Christmas Promo"
-                    />
+                <form wire:submit="save" novalidate class="mt-5 space-y-4">
+                    <flux:field>
+                        <flux:label>Discount name <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="discountName" placeholder="Christmas Promo" :invalid="$errors->has('discountName')" />
+                        @if ($msg = $this->visibleError('discountName'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
-                    <flux:input
-                        wire:model="discountPercent"
-                        type="number"
-                        step="1"
-                        min="1"
-                        max="100"
-                        label="Discount percentage"
-                        placeholder="10"
-                    />
+                    <flux:field>
+                        <flux:label>Discount percentage <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="discountPercent" type="number" step="1" min="1" max="100" placeholder="10" :invalid="$errors->has('discountPercent')" />
+                        @if ($msg = $this->visibleError('discountPercent'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     <flux:switch wire:model.live="hasValidity" label="Use a validity period" description="Turn this on when the discount has a specific start and end." />
 
@@ -790,40 +810,46 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         <div>
                             <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                                 Start date and time
-                            </label>
+                             <span class="text-red-500">*</span></label>
 
                             <input
                                 wire:model="discountStart"
                                 type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountStart') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}"
                             />
 
-                            @error('discountStart')
+                            @if ($message = $this->visibleError('discountStart'))
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
+                            @endif
                         </div>
 
                         <div>
                             <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                                 End date and time
-                            </label>
+                             <span class="text-red-500">*</span></label>
 
                             <input
                                 wire:model="discountEnd"
                                 type="datetime-local"
-                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white"
+                                class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountEnd') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}"
                             />
 
-                            @error('discountEnd')
+                            @if ($message = $this->visibleError('discountEnd'))
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
+                            @endif
                         </div>
                     @endif
 
-                    <flux:select wire:model="status" label="Status">
+                    <flux:field>
+                        <flux:label>Status <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model="status" :invalid="$errors->has('status')">
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                     </flux:select>
+                        @if ($msg = $this->visibleError('status'))
+                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
 
                     <div>
                         <p class="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
