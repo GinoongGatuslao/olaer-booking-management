@@ -1029,16 +1029,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
     @endif
 
     <flux:card class="overflow-hidden p-0">
-        <div class="border-b border-gray-200 p-5 dark:border-gray-800">
-            <div>
-                <h2 class="font-semibold">Request history</h2>
+        
 
-                <p class="mt-1 text-sm text-gray-500">
-                    One request may contain several amenity items delivered to one checked-in facility.
-                </p>
-            </div>
-
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-3 dark:border-zinc-800">
                 <flux:input
                     wire:model.live.debounce.300ms="search"
                     label="Search"
@@ -1057,9 +1050,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     <option value="Cancelled">Cancelled</option>
                 </flux:select>
 
+                <div class="flex items-end gap-2">
                 <flux:select
                     wire:model.live="perPage"
-                    label="Rows per page"
+                    label="Rows"
                 >
                     <option value="10">10</option>
                     <option value="25">25</option>
@@ -1067,17 +1061,17 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     <option value="100">100</option>
                 </flux:select>
 
-                <div class="flex items-end">
+                
                     <flux:button
                         wire:click="clearListFilters"
                         variant="ghost"
-                        class="w-full"
+
                     >
                         Clear Filters
                     </flux:button>
                 </div>
             </div>
-        </div>
+        
 
         <div class="overflow-x-auto">
             <table class="w-full min-w-[84rem] divide-y divide-gray-200 text-sm dark:divide-gray-800">

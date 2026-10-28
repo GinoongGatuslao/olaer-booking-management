@@ -648,7 +648,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 :count="$reservations->total()"
                 count-label="reservations"
             >
-                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div class="grid gap-3 md:grid-cols-6 xl:grid-cols-6">
                     <flux:input
                         wire:model.live.debounce.300ms="search"
                         label="Search"
@@ -691,7 +691,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         variant="ghost"
                         size="sm"
                     >
-                        Reset registry view
+                        Clear Filters
                     </flux:button>
                 </x-slot:actions>
             </x-staff-filter-panel>

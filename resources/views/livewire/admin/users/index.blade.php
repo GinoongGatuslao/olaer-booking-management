@@ -608,11 +608,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             <flux:card class="overflow-hidden p-0">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
                     <div class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-
-
-                            
-                        </div>
 
                         <div class="grid gap-3 md:grid-cols-4">
                             <flux:input

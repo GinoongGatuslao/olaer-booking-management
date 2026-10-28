@@ -538,19 +538,13 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
     <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
-                <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-                    <div>
-                        <h2 class="font-semibold">Entrance slip list</h2>
-                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Search, filter, sort, paginate, print, and select an unpaid slip.
-                        </p>
-                    </div>
+                
 
-                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-5 dark:border-zinc-800">
                         <flux:input
                             wire:model.live.debounce.300ms="search"
                             label="Search"
-                            placeholder="Slip, guard, cashier, receipt, reference"
+                            placeholder="Slip, guard"
                             clearable
                             class="xl:col-span-2"
                         />
@@ -576,23 +570,23 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             label="To"
                         />
 
+                        <div class="flex items-end gap-2">
                         <flux:select wire:model.live="perPage" label="Rows">
                             <option value="10">10</option>
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </flux:select>
-                    </div>
 
-                    <div class="mt-4 flex justify-end">
                         <flux:button
                             wire:click="clearFilters"
                             variant="ghost"
                         >
                             Clear Filters
                         </flux:button>
+                        </div>
+
                     </div>
-                </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[78rem] text-left text-sm">
@@ -660,9 +654,9 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             </tr>
                         </thead>
 
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
+                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 text-brand-text transition-colors ">
                             @forelse ($this->slips as $slip)
-                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}" class="{{ $selectedSlipId === (int) $slip->entrance_slip_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
+                                <tr wire:key="entrance-slip-{{ $slip->entrance_slip_id }}" class="hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60{{ $selectedSlipId === (int) $slip->entrance_slip_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-800' : '' }}">
                                     <td class="px-5 py-4 font-medium">
                                         {{ $this->formatSlipNumber($slip) }}
                                     </td>

@@ -523,12 +523,12 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
         </flux:badge>
     </div>
 
-    <flux:card>
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
+    <flux:card class="overflow-hidden p-0">
+        <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-4 dark:border-zinc-800 ">
             <flux:input
                 wire:model.live.debounce.300ms="search"
                 label="Search"
-                placeholder="Log ID, record, description, staff, IP, or device"
+                placeholder="Log ID, record"
                 clearable
                 class="xl:col-span-2"
             />
@@ -563,12 +563,6 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                 @endforeach
             </flux:select>
 
-            <flux:select wire:model.live="actorFilter" label="Actor">
-                <option value="">All actors</option>
-                <option value="staff">Staff actions</option>
-                <option value="system">System actions</option>
-            </flux:select>
-
             <flux:input
                 wire:model.live="dateFrom"
                 type="date"
@@ -580,29 +574,29 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                 type="date"
                 label="To"
             />
-        </div>
+            
+                <div class="flex items-end gap-2">
+                <flux:select wire:model.live="perPage" label="Rows">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </flux:select>
+                        
+                        <flux:button
+                            type="button"
+                            wire:click="clearFilters"
+                            variant="ghost"
+                        >
+                            Clear Filters
+                        </flux:button>
+                </div>
 
-        <div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <flux:select wire:model.live="perPage" label="Rows per page">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-            </flux:select>
-
-            <div class="flex items-end xl:col-start-4">
-                <flux:button
-                    wire:click="clearFilters"
-                    variant="ghost"
-                    class="w-full"
-                >
-                    Clear Filters
-                </flux:button>
-            </div>
         </div>
+        
     </flux:card>
 
-    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <p class="text-xs uppercase tracking-wide text-zinc-500">
                 Matching Logs
@@ -623,15 +617,6 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
             </p>
         </div>
 
-        <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p class="text-xs uppercase tracking-wide text-zinc-500">
-                System Events
-            </p>
-
-            <p class="mt-1 text-xl font-semibold">
-                {{ $this->summary['system_count'] }}
-            </p>
-        </div>
 
         <div class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <p class="text-xs uppercase tracking-wide text-zinc-500">

@@ -554,21 +554,13 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
     <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
-                <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-                    <div>
-                        <h2 class="font-semibold">Discount list</h2>
+                
 
-                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Search, filter, sort, and paginate discount master records.
-                        </p>
-                        
-                    </div>
-
-                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-5 dark:border-zinc-800">
                         <flux:input
                             wire:model.live.debounce.300ms="search"
                             label="Search"
-                            placeholder="Name, percentage, or status"
+                            placeholder="Name, or percentage"
                             clearable
                             class="xl:col-span-2"
                         />
@@ -606,6 +598,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <option value="function_hall">Function Halls</option>
                         </flux:select>
 
+                        <div class="flex items-end gap-2">
                         <flux:select
                             wire:model.live="perPage"
                             label="Rows"
@@ -615,9 +608,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </flux:select>
-                    </div>
 
-                    <div class="mt-4 flex justify-end">
                         <flux:button
                             type="button"
                             wire:click="clearFilters"
@@ -625,8 +616,13 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         >
                             Clear Filters
                         </flux:button>
+
+                        </div>
                     </div>
-                </div>
+
+
+                        
+                
 
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[76rem] text-left text-sm">

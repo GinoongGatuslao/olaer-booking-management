@@ -661,7 +661,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                         <option value="{{ $size }}">{{ $size }}</option>
                     @endforeach
                 </flux:select>
-                <flux:button wire:click="clearFilters" variant="ghost">Clear</flux:button>
+                <flux:button wire:click="clearFilters" variant="ghost">Clear Filters</flux:button>
             </div>
         </div>
 

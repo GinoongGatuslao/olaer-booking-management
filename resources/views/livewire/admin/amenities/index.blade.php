@@ -458,16 +458,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
     <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
-                <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-                    <div>
-                        <h2 class="font-semibold">Amenity list</h2>
-                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Search, filter, sort, and paginate without loading every amenity at once.
-                        </p>
-                        
-                    </div>
 
-                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-3 dark:border-zinc-800 ">
                         <flux:input
                             wire:model.live.debounce.300ms="search"
                             label="Search"
@@ -481,6 +473,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                             <option value="Inclusive">Inclusive</option>
                         </flux:select>
 
+                        <div class="flex items-end gap-2">
                         <flux:select wire:model.live="perPage" label="Rows">
                             <option value="10">10</option>
                             <option value="25">25</option>
