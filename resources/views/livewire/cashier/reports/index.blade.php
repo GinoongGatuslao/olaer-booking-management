@@ -135,7 +135,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
         $rules = [
             'reportType' => [
                 'required',
-                Rule::in(['revenue', 'booking_summary', 'cancellation', 'available_facilities']),
+                Rule::in(['revenue', 'booking_summary', 'cancellation', 'damaged_amenities', 'available_facilities']),
             ],
             'perPage' => ['required', 'integer', Rule::in([10, 25, 50, 100])],
             'reportSearch' => ['nullable', 'string', 'max:100'],
@@ -361,6 +361,14 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
                 'reportPage',
                 $this->printAll,
             ),
+            'damaged_amenities' => $service->damagedAmenitiesReport(
+                $this->startDate,
+                $this->endDate,
+                $this->perPage,
+                $this->reportSearch,
+                'reportPage',
+                $this->printAll,
+            ),
             'available_facilities' => $service->availableFacilitiesReport(
                 $this->startDate,
                 $this->endDate,
@@ -438,6 +446,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
                     <option value="revenue">My Handled Revenue</option>
                     <option value="booking_summary">Booking Summary</option>
                     <option value="cancellation">Cancellation</option>
+                    <option value="damaged_amenities">Damaged Amenities</option>
                     <option value="available_facilities">Available Facilities</option>
                 </flux:select>
                     @if ($msg = $this->visibleError('reportType'))
