@@ -15,7 +15,9 @@
             .no-print { display: none !important; }
             body { background: white !important; }
             .print-card { box-shadow: none !important; border: 1px solid #111827 !important; }
+            body { padding: 12mm; }
         }
+        
     </style>
 </head>
 <body class="bg-zinc-100 text-zinc-950">

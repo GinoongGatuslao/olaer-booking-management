@@ -186,19 +186,18 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         </div>
     @endif
 
-    <flux:card>
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <flux:card class="overflow-hidden p-0">
+        <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-6 dark:border-zinc-800">
             <flux:input
                 label="Guest / Reference"
                 placeholder="Name, email, contact, reservation or booking ref"
                 wire:model.live.debounce.300ms="search"
                 clearable
-                class="xl:col-span-2"
             />
             <flux:input type="date" label="From" wire:model.live="fromDate" />
             <flux:input type="date" label="To" wire:model.live="toDate" />
             <flux:select label="Transaction" wire:model.live="transactionType">
-                <option value="all">Reservations & Bookings</option>
+                <option value="all">All</option>
                 <option value="reservation">Reservations</option>
                 <option value="booking">Bookings</option>
             </flux:select>
@@ -207,17 +206,18 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                 <option value="paid">Paid / settled</option>
                 <option value="unpaid">Outstanding</option>
             </flux:select>
+            <div class="flex items-end gap-2">
             <flux:select label="Rows" wire:model.live="perPage">
                 <option value="10">10</option>
                 <option value="25">25</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
             </flux:select>
-        </div>
+        
 
-        <div class="mt-4 flex justify-end">
             <flux:button type="button" variant="ghost" wire:click="clearFilters">Clear Filters</flux:button>
-        </div>
+            </div>
+            </div>
     </flux:card>
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.9fr)]">

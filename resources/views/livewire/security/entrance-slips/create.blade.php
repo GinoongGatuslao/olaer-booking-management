@@ -318,7 +318,7 @@ class extends Component
     <style>
         @media print {
             .no-print { display: none !important; }
-            body { background: white !important; }
+            body { background: white !important; padding: 12mm;}
             .print-card { box-shadow: none !important; border: 1px solid #111827 !important; }
         }
         header {

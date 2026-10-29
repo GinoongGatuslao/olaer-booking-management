@@ -1000,15 +1000,9 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     @endif
 
     <flux:card class="overflow-hidden p-0">
-        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-            <div>
-                <h2 class="text-lg font-semibold">Unpaid records</h2>
-                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    Select a booking, reservation, or entrance slip to record payment.
-                </p>
-            </div>
+        
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-3 dark:border-zinc-800">
                 <flux:input
                     wire:model.live.debounce.300ms="payableSearch"
                     label="Search unpaid records"
@@ -1028,9 +1022,10 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     @endif
                 </flux:field>
 
+                <div class="flex items-end gap-2">
                 <flux:select
                     wire:model.live="payablePerPage"
-                    label="Rows per page"
+                    label="Rows"
                 >
                     <option value="10">10</option>
                     <option value="25">25</option>
@@ -1038,17 +1033,16 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     <option value="100">100</option>
                 </flux:select>
 
-                <div class="flex items-end">
                     <flux:button
                         wire:click="clearPayableFilters"
                         variant="ghost"
-                        class="w-full"
                     >
                         Clear Filters
                     </flux:button>
                 </div>
+
             </div>
-        </div>
+        
 
         <div class="overflow-x-auto">
             <table class="w-full min-w-[58rem] text-left text-sm">
@@ -1136,15 +1130,10 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     </flux:card>
 
     <flux:card class="overflow-hidden p-0">
-        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-            <div>
-                <h2 class="text-lg font-semibold">Payment history</h2>
-                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    Verified, pending, and rejected payment records.
-                </p>
-            </div>
+        
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+
+            <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-4 dark:border-zinc-800">
                 <flux:input
                     wire:model.live.debounce.300ms="historySearch"
                     label="Search history"
@@ -1195,7 +1184,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     type="date"
                     label="To"
                 />
-
+                <div class="flex items-end gap-2">
                 <flux:select
                     wire:model.live="historyPerPage"
                     label="Rows"
@@ -1206,17 +1195,16 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     <option value="100">100</option>
                 </flux:select>
 
-                <div class="flex items-end">
+
                     <flux:button
                         wire:click="clearHistoryFilters"
                         variant="ghost"
-                        class="w-full"
                     >
-                        Clear
+                        Clear Filters
                     </flux:button>
                 </div>
             </div>
-        </div>
+        
 
         <div class="overflow-x-auto">
             <table class="w-full min-w-[88rem] text-left text-sm">

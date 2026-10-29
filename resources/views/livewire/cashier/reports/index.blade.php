@@ -392,7 +392,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
     <style>
         @page { margin: 0; }
         @media print {
-            body { background: white !important;}
+            body { background: white !important; padding: 12mm;}
             header {
                 display: none !important;
             }

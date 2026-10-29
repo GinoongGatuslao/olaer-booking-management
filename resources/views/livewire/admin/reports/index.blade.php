@@ -417,11 +417,12 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
     <style>
         @page { margin: 0; }
         @media print {
-            body { background: white !important;}
+            body { background: white !important;  padding: 12mm; }
             header {
                 display: none !important;
             }
         }
+
     </style>
     <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between print:hidden">
         <div>
