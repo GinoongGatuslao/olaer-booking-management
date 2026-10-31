@@ -634,25 +634,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         </section>
     @endif
 
-    <x-staff-table-shell
-        :first-item="$reservations->firstItem()"
-        :last-item="$reservations->lastItem()"
-        :total="$reservations->total()"
-        record-label="reservations"
-        loading-target="search,statusFilter,perPage,sortBy,clearListFilters"
-    >
-        <x-slot:filters>
-            <x-staff-filter-panel
-                title="Reservation registry"
-                description="Search by reference, guest name, contact number, or email, then narrow the registry by lifecycle status."
-                :count="$reservations->total()"
-                count-label="reservations"
-            >
-                <div class="grid gap-3 md:grid-cols-6 xl:grid-cols-6">
+    <flux:card class="overflow-hidden p-0">
+
+            <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-5 dark:border-zinc-800">
                     <flux:input
                         wire:model.live.debounce.300ms="search"
                         label="Search"
-                        placeholder="Reference, guest, contact, or email"
+                        placeholder="Reference, guest"
                         clearable
                     />
 
@@ -664,165 +652,161 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         <option value="No-show">No-show</option>
                     </flux:select>
 
-                    <flux:select wire:model.live="perPage" label="Rows per page">
+                    <flux:input
+                        wire:model.live="dateFrom"
+                        type="date"
+                        label="From"
+                    />
+
+                    <flux:input
+                        wire:model.live="dateTo"
+                        type="date"
+                        label="To"
+                    />
+                    <div class="flex items-end gap-2">
+                    <flux:select wire:model.live="perPage" label="Rows">
                         <option value="10">10</option>
                         <option value="25">25</option>
                         <option value="50">50</option>
                         <option value="100">100</option>
                     </flux:select>
 
-                    <flux:input
-                            wire:model.live="dateFrom"
-                            type="date"
-                            label="From"
-                        />
-
-                        <flux:input
-                            wire:model.live="dateTo"
-                            type="date"
-                            label="To"
-                        />
+                <flux:button type="button" wire:click="clearListFilters" variant="ghost">Clear Filters</flux:button>
                 </div>
+            </div>
 
-                <x-slot:actions>
-                    <flux:button
-                        type="button"
-                        wire:click="clearListFilters"
-                        variant="ghost"
-                        size="sm"
-                    >
-                        Clear Filters
-                    </flux:button>
-                </x-slot:actions>
-            </x-staff-filter-panel>
-        </x-slot:filters>
 
-        <table class="w-full min-w-[76rem] text-left text-sm">
-            <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                <tr>
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('r_ref_no')"
-                            class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
-                        >
-                            REF {{ $this->getSortIcon('r_ref_no') }}
-                        </button>
-                    </th>
-                    <th class="px-4 py-3 font-semibold">GUEST</th>
-                    <th class="px-4 py-3 font-semibold">FACILITY</th>
-                    <th class="px-4 py-3 font-semibold">SCHEDULE</th>
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('total_price')"
-                            class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
-                        >
-                            TOTAL {{ $this->getSortIcon('total_price') }}
-                        </button>
-                    </th>
-                    <th class="px-4 py-3 font-semibold">Paid</th>
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('amount_due')"
-                            class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
-                        >
-                            BALANCE {{ $this->getSortIcon('amount_due') }}
-                        </button>
-                    </th>
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('status')"
-                            class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
-                        >
-                            STATUS {{ $this->getSortIcon('status') }}
-                        </button>
-                    </th>
-                    <th class="px-4 py-3 text-right font-semibold">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-brand-border dark:divide-zinc-800">
-                @forelse ($reservations as $reservation)
-                    <tr
-                        wire:key="reservation-row-{{ $reservation->reservation_id }}"
-                        class="transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
-                    >
-                        <td class="px-4 py-3 font-medium text-brand-text dark:text-white">{{ $reservation->r_ref_no }}</td>
-                        <td class="px-4 py-3">
-                            <div class="font-medium text-brand-text dark:text-white">{{ $this->fullName($reservation->guest) }}</div>
-                            <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $reservation->guest->contact_no }} {{ $reservation->guest->email ? '• '.$reservation->guest->email : '' }}</div>
-                        </td>
-                        <td class="px-4 py-3" colspan="2">
-                            <div class="space-y-3">
-                                @forelse ($reservation->details as $detail)
-                                    <div @class([
-                                        'rounded-lg border p-3',
-                                        'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' => $detail->status === 'Cancelled',
-                                        'border-zinc-200 dark:border-zinc-700' => $detail->status !== 'Cancelled',
-                                    ])>
-                                        <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-                                            <div>
-                                                <div class="font-medium text-brand-text dark:text-white">
-                                                     {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
-                                                </div>
-                                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">
-                                                    {{ $detail->facility?->facilityType?->facility_type }}
-                                                    · {{ $detail->facility?->facilityProduct?->display_name }}
-                                                    · {{ $detail->rate_type }}
-                                                    · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}
-                                                    · {{ $detail->status ?? 'Active' }}
-                                                </div>
-                                            </div>
-                                            @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
-                                                <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
-                                                    <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
-                                                    @if ($detail->roomOccupants->isNotEmpty())
-                                                        <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
-                                                    @endif
-                                                    <flux:menu.separator />
-                                                    <flux:menu.item icon="x-circle" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel facility</flux:menu.item>
-                                                </x-table-actions>
-                                            @endif
-                                        </div>
-                                    </div>
-                                @empty
-                                    <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
-                                @endforelse
-                            </div>
-                        </td>
-                        <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
-                        <td class="px-4 py-3">₱{{ number_format($this->amountPaid($reservation), 2) }}</td>
-                        <td class="px-4 py-3">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
-                        <td class="px-4 py-3">
-                            <x-status-badge :status="(string) $reservation->status" />
-                        </td>
-                        <td class="px-4 py-3 text-right">
-                            @if ($reservation->status === 'Active')
-                                <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
-                                    Cancel Entire Reservation
-                                </flux:button>
-                            @else
-                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
-                            @endif
-                        </td>
-                    </tr>
-                @empty
+        <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,perPage,sortBy,clearListFilters">
+            <table class="w-full min-w-[76rem] text-left text-sm">
+                <thead class="border-b border-brand-border bg-zinc-50 text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
                     <tr>
-                        <td colspan="9" class="px-4 py-8">
-                            <x-dashboard-empty-state
-                                title="No reservations found"
-                                description="Try another search term or status, or create a new reservation when the guest is ready."
-                            />
-                        </td>
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('r_ref_no')"
+                                class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
+                            >
+                                REF {{ $this->getSortIcon('r_ref_no') }}
+                            </button>
+                        </th>
+                        <th class="px-4 py-3 font-semibold">GUEST</th>
+                        <th class="px-4 py-3 font-semibold">FACILITY</th>
+                        <th class="px-4 py-3 font-semibold">SCHEDULE</th>
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('total_price')"
+                                class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
+                            >
+                                TOTAL {{ $this->getSortIcon('total_price') }}
+                            </button>
+                        </th>
+                        <th class="px-4 py-3 font-semibold">Paid</th>
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('amount_due')"
+                                class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
+                            >
+                                BALANCE {{ $this->getSortIcon('amount_due') }}
+                            </button>
+                        </th>
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('status')"
+                                class="font-semibold transition hover:text-brand-primary dark:hover:text-white"
+                            >
+                                STATUS {{ $this->getSortIcon('status') }}
+                            </button>
+                        </th>
+                        <th class="px-4 py-3 text-right font-semibold">Actions</th>
                     </tr>
-                @endforelse
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="divide-y divide-brand-border dark:divide-zinc-800">
+                    @forelse ($reservations as $reservation)
+                        <tr
+                            wire:key="reservation-row-{{ $reservation->reservation_id }}"
+                            class="transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
+                        >
+                            <td class="px-4 py-3 font-medium text-brand-text dark:text-white">{{ $reservation->r_ref_no }}</td>
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-brand-text dark:text-white">{{ $this->fullName($reservation->guest) }}</div>
+                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $reservation->guest->contact_no }} {{ $reservation->guest->email ? '• '.$reservation->guest->email : '' }}</div>
+                            </td>
+                            <td class="px-4 py-3" colspan="2">
+                                <div class="space-y-3">
+                                    @forelse ($reservation->details as $detail)
+                                        <div @class([
+                                            'rounded-lg border p-3',
+                                            'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' => $detail->status === 'Cancelled',
+                                            'border-zinc-200 dark:border-zinc-700' => $detail->status !== 'Cancelled',
+                                        ])>
+                                            <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                                                <div>
+                                                    <div class="font-medium text-brand-text dark:text-white">
+                                                         {{ $detail->facility?->facility_name ?? 'Unassigned facility' }}
+                                                    </div>
+                                                    <div class="text-xs text-brand-text-muted dark:text-zinc-400">
+                                                        {{ $detail->facility?->facilityType?->facility_type }}
+                                                        · {{ $detail->facility?->facilityProduct?->display_name }}
+                                                        · {{ $detail->rate_type }}
+                                                        · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}
+                                                        · {{ $detail->status ?? 'Active' }}
+                                                    </div>
+                                                </div>
+                                                @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
+                                                    <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
+                                                        <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
+                                                        @if ($detail->roomOccupants->isNotEmpty())
+                                                            <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
+                                                        @endif
+                                                        <flux:menu.separator />
+                                                        <flux:menu.item icon="x-circle" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel facility</flux:menu.item>
+                                                    </x-table-actions>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
+                                    @endforelse
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
+                            <td class="px-4 py-3">₱{{ number_format($this->amountPaid($reservation), 2) }}</td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
+                            <td class="px-4 py-3">
+                                <x-status-badge :status="(string) $reservation->status" />
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                @if ($reservation->status === 'Active')
+                                    <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
+                                        Cancel Entire Reservation
+                                    </flux:button>
+                                @else
+                                    <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="px-4 py-8">
+                                <x-dashboard-empty-state
+                                    title="No reservations found"
+                                    description="Try another search term or status, or create a new reservation when the guest is ready."
+                                    class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
+                                />
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
 
-        <x-slot:pagination>
+
+        </div>
+
+        <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
             {{ $reservations->links() }}
-        </x-slot:pagination>
-    </x-staff-table-shell>
+        </div>
+    </flux:card>
 </div>

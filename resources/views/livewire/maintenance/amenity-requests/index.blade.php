@@ -760,29 +760,26 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         </flux:card>
     @endif
 
-    <x-staff-table-shell
-        :first-item="$requests->firstItem()"
-        :last-item="$requests->lastItem()"
-        :total="$requests->total()"
-        record-label="delivery records"
-        loading-target="search,statusFilter,assignmentFilter,perPage,sortBy,clearFilters"
-    >
-        <x-slot:filters>
-            <x-staff-filter-panel
-                title="Delivery queue and history"
-                description="Pending requests are ready for delivery and unassigned. Delivering requests belong to one maintenance staff member."
-                :count="$requests->total()"
-                count-label="requests"
-            >
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <flux:card class="overflow-hidden p-0">
+        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-base font-semibold">Delivery queue and history</h2>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Pending requests are ready for delivery and unassigned. Delivering requests belong to one maintenance staff member.</p>
+                </div>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $requests->total() }} requests</p>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-end gap-4">
+                <div class="min-w-[16rem] flex-1">
                     <flux:input
                         wire:model.live.debounce.300ms="search"
                         label="Search"
                         placeholder="Request, booking, guest, facility, amenity"
                         clearable
-                        class="xl:col-span-2"
                     />
-
+                </div>
+                <div class="w-48">
                     <flux:select
                         wire:model.live="statusFilter"
                         label="Status"
@@ -792,7 +789,8 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="Delivering">Delivering</option>
                         <option value="Delivered">Delivered</option>
                     </flux:select>
-
+                </div>
+                <div class="w-48">
                     <flux:select
                         wire:model.live="assignmentFilter"
                         label="Assignment"
@@ -802,10 +800,11 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="mine">Assigned to me</option>
                         <option value="other">Assigned to another staff</option>
                     </flux:select>
-
+                </div>
+                <div class="w-24">
                     <flux:select
                         wire:model.live="perPage"
-                        label="Rows per page"
+                        label="Rows"
                     >
                         <option value="10">10</option>
                         <option value="25">25</option>
@@ -813,179 +812,174 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="100">100</option>
                     </flux:select>
                 </div>
+                <flux:button type="button" wire:click="clearFilters" variant="ghost">Clear Filters</flux:button>
+            </div>
+        </div>
 
-                <x-slot:actions>
-                    <flux:button
-                        wire:click="clearFilters"
-                        variant="ghost"
-                        size="sm"
-                    >
-                        Reset view
-                    </flux:button>
-                </x-slot:actions>
-            </x-staff-filter-panel>
-        </x-slot:filters>
-
-        <table class="w-full min-w-[84rem] text-left text-sm">
-            <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
-                <tr>
-
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('date_created')"
-                            class="font-semibold hover:text-brand-text dark:hover:text-white"
-                        >
-                            CREATED {{ $this->sortIndicator('date_created') }}
-                        </button>
-                    </th>
-
-                    <th class="px-4 py-3">Guest / Booking</th>
-                    <th class="px-4 py-3">Delivery Items</th>
-
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('total_price')"
-                            class="font-semibold hover:text-brand-text dark:hover:text-white"
-                        >
-                            REQUEST VALUE {{ $this->sortIndicator('total_price') }}
-                        </button>
-                    </th>
-
-                    <th class="px-4 py-3">Created By</th>
-                    <th class="px-4 py-3">Assigned To</th>
-
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('amenity_request_status')"
-                            class="font-semibold hover:text-brand-text dark:hover:text-white"
-                        >
-                            STATUS {{ $this->sortIndicator('amenity_request_status') }}
-                        </button>
-                    </th>
-
-                    <th class="px-4 py-3">
-                        <button
-                            type="button"
-                            wire:click="sortBy('delivered_at')"
-                            class="font-semibold hover:text-brand-text dark:hover:text-white"
-                        >
-                            DELIVERED {{ $this->sortIndicator('delivered_at') }}
-                        </button>
-                    </th>
-
-                    <th class="px-4 py-3 text-right">Action</th>
-                </tr>
-            </thead>
-
-            <tbody class="divide-y divide-brand-border/70 dark:divide-zinc-800">
-                @forelse ($requests as $request)
-                    <tr wire:key="maintenance-amenity-request-{{ $request->amenity_request_id }}" class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
-
-                        <td class="px-4 py-4">
-                            {{ $request->date_created?->format('M d, Y') ?? 'N/A' }}
-                        </td>
-
-                        <td class="px-4 py-4">
-                            <p class="font-medium">
-                                {{ $request->booking?->guest?->full_name
-                                    ?? trim(($request->booking?->guest?->first_name ?? '').' '.($request->booking?->guest?->last_name ?? ''))
-                                    ?: 'Unknown guest' }}
-                            </p>
-
-                            <p class="mt-1 text-xs text-gray-500">
-                                {{ $request->booking?->b_ref_no ?? 'No booking reference' }}
-                            </p>
-                        </td>
-
-                        <td class="max-w-xl px-4 py-4">
-                            <ul class="space-y-1 text-xs leading-5">
-                                @foreach ($request->details as $detail)
-                                    <li>
-                                        {{ $detail->amenity?->amenityName?->amenity_name ?? 'Unknown amenity' }}
-                                        × {{ $detail->amenity_quantity }}
-                                        →
-                                        <span class="font-medium">
-                                            {{ $detail->facility?->facility_name ?? 'Unknown facility' }}
-                                        </span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </td>
-
-                        <td class="px-4 py-4 font-semibold">
-                            ₱{{ number_format((float) $request->total_price, 2) }}
-                        </td>
-
-                        <td class="px-4 py-4">
-                            {{ $this->staffName($request->user) }}
-                        </td>
-
-                        <td class="px-4 py-4">
-                            {{ $this->staffName($request->assignedTo) }}
-                        </td>
-
-                        <td class="px-4 py-4">
-                            <x-status-badge :status="(string) $request->amenity_request_status" />
-                        </td>
-
-                        <td class="px-4 py-4">
-                            {{ $request->delivered_at?->format('M d, Y h:i A') ?? '—' }}
-                        </td>
-
-                        <td class="px-4 py-4 text-right">
-                            @if ($request->amenity_request_status === 'Pending')
-                                <flux:button
-                                    size="sm"
-                                    variant="primary"
-                                    wire:click="requestAction('accept', {{ $request->amenity_request_id }})"
-                                    icon="check-circle"
-                                >
-                                    Accept
-                                </flux:button>
-                            @elseif (
-                                $request->amenity_request_status === 'Delivering'
-                                && (int) $request->assigned_to_user_id === (int) Auth::id()
-                            )
-                                <flux:button
-                                    size="sm"
-                                    variant="primary"
-                                    wire:click="requestAction('deliver', {{ $request->amenity_request_id }})"
-                                    icon="truck"
-                                >
-                                    Mark Delivered
-                                </flux:button>
-                            @elseif ($request->amenity_request_status === 'Delivering')
-                                <span class="text-xs text-gray-500">
-                                    Assigned to another staff
-                                </span>
-                            @else
-                                <span class="text-xs text-gray-500">
-                                    Completed
-                                </span>
-                            @endif
-                        </td>
-                    </tr>
-                @empty
+        <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,assignmentFilter,perPage,sortBy,clearFilters">
+            <table class="w-full min-w-[84rem] text-left text-sm">
+                <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                     <tr>
-                        <td colspan="10" class="px-5 py-6">
-                            <x-dashboard-empty-state
-                                title="No amenity requests found"
-                                description="No delivery records match the current search, status, and assignment filters."
-                                class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
-                            />
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
 
-        <x-slot:pagination>
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('date_created')"
+                                class="font-semibold hover:text-brand-text dark:hover:text-white"
+                            >
+                                CREATED {{ $this->sortIndicator('date_created') }}
+                            </button>
+                        </th>
+
+                        <th class="px-4 py-3">Guest / Booking</th>
+                        <th class="px-4 py-3">Delivery Items</th>
+
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('total_price')"
+                                class="font-semibold hover:text-brand-text dark:hover:text-white"
+                            >
+                                REQUEST VALUE {{ $this->sortIndicator('total_price') }}
+                            </button>
+                        </th>
+
+                        <th class="px-4 py-3">Created By</th>
+                        <th class="px-4 py-3">Assigned To</th>
+
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('amenity_request_status')"
+                                class="font-semibold hover:text-brand-text dark:hover:text-white"
+                            >
+                                STATUS {{ $this->sortIndicator('amenity_request_status') }}
+                            </button>
+                        </th>
+
+                        <th class="px-4 py-3">
+                            <button
+                                type="button"
+                                wire:click="sortBy('delivered_at')"
+                                class="font-semibold hover:text-brand-text dark:hover:text-white"
+                            >
+                                DELIVERED {{ $this->sortIndicator('delivered_at') }}
+                            </button>
+                        </th>
+
+                        <th class="px-4 py-3 text-right">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-brand-border/70 dark:divide-zinc-800">
+                    @forelse ($requests as $request)
+                        <tr wire:key="maintenance-amenity-request-{{ $request->amenity_request_id }}" class="align-top text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
+
+                            <td class="px-4 py-4">
+                                {{ $request->date_created?->format('M d, Y') ?? 'N/A' }}
+                            </td>
+
+                            <td class="px-4 py-4">
+                                <p class="font-medium">
+                                    {{ $request->booking?->guest?->full_name
+                                        ?? trim(($request->booking?->guest?->first_name ?? '').' '.($request->booking?->guest?->last_name ?? ''))
+                                        ?: 'Unknown guest' }}
+                                </p>
+
+                                <p class="mt-1 text-xs text-gray-500">
+                                    {{ $request->booking?->b_ref_no ?? 'No booking reference' }}
+                                </p>
+                            </td>
+
+                            <td class="max-w-xl px-4 py-4">
+                                <ul class="space-y-1 text-xs leading-5">
+                                    @foreach ($request->details as $detail)
+                                        <li>
+                                            {{ $detail->amenity?->amenityName?->amenity_name ?? 'Unknown amenity' }}
+                                            × {{ $detail->amenity_quantity }}
+                                            →
+                                            <span class="font-medium">
+                                                {{ $detail->facility?->facility_name ?? 'Unknown facility' }}
+                                            </span>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </td>
+
+                            <td class="px-4 py-4 font-semibold">
+                                ₱{{ number_format((float) $request->total_price, 2) }}
+                            </td>
+
+                            <td class="px-4 py-4">
+                                {{ $this->staffName($request->user) }}
+                            </td>
+
+                            <td class="px-4 py-4">
+                                {{ $this->staffName($request->assignedTo) }}
+                            </td>
+
+                            <td class="px-4 py-4">
+                                <x-status-badge :status="(string) $request->amenity_request_status" />
+                            </td>
+
+                            <td class="px-4 py-4">
+                                {{ $request->delivered_at?->format('M d, Y h:i A') ?? '—' }}
+                            </td>
+
+                            <td class="px-4 py-4 text-right">
+                                @if ($request->amenity_request_status === 'Pending')
+                                    <flux:button
+                                        size="sm"
+                                        variant="primary"
+                                        wire:click="requestAction('accept', {{ $request->amenity_request_id }})"
+                                        icon="check-circle"
+                                    >
+                                        Accept
+                                    </flux:button>
+                                @elseif (
+                                    $request->amenity_request_status === 'Delivering'
+                                    && (int) $request->assigned_to_user_id === (int) Auth::id()
+                                )
+                                    <flux:button
+                                        size="sm"
+                                        variant="primary"
+                                        wire:click="requestAction('deliver', {{ $request->amenity_request_id }})"
+                                        icon="truck"
+                                    >
+                                        Mark Delivered
+                                    </flux:button>
+                                @elseif ($request->amenity_request_status === 'Delivering')
+                                    <span class="text-xs text-gray-500">
+                                        Assigned to another staff
+                                    </span>
+                                @else
+                                    <span class="text-xs text-gray-500">
+                                        Completed
+                                    </span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="10" class="px-5 py-6">
+                                <x-dashboard-empty-state
+                                    title="No amenity requests found"
+                                    description="No delivery records match the current search, status, and assignment filters."
+                                    class="border-0 bg-transparent py-6 shadow-none dark:bg-transparent"
+                                />
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+
+
+        </div>
+
+        <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
             {{ $requests->links() }}
-        </x-slot:pagination>
-    </x-staff-table-shell>
+        </div>
+    </flux:card>
     <flux:modal wire:model="showActionDialog" class="md:w-[30rem]">
         <div class="space-y-5">
             <div>

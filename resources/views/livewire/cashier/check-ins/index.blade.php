@@ -13,8 +13,8 @@ new class extends Component {
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
-    #[Url(as: 'list', except: 'eligible')]
-    public string $statusFilter = 'eligible';
+    #[Url(as: 'list', except: 'all')]
+    public string $statusFilter = 'all';
 
     #[Url(as: 'arrival', except: 'all')]
     public string $dateFilter = 'all';
@@ -98,7 +98,7 @@ new class extends Component {
     public function clearFilters(): void
     {
         $this->search = '';
-        $this->statusFilter = 'eligible';
+        $this->statusFilter = 'all';
         $this->dateFilter = 'all';
         $this->sortField = 'check_in_date';
         $this->sortDirection = 'asc';
@@ -317,7 +317,7 @@ new class extends Component {
             <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-4 dark:border-zinc-800">
                     <flux:input
                         label="Search"
-                        placeholder="Reference, guest, contact, email, facility"
+                        placeholder="Reference, guest"
                         wire:model.live.debounce.300ms="search"
                         clearable
                     />
@@ -334,7 +334,7 @@ new class extends Component {
                         label="Scheduled arrival"
                         wire:model.live="dateFilter"
                     >
-                        <option value="all">All arrival dates</option>
+                        <option value="all">All</option>
                         <option value="today">Due today</option>
                         <option value="upcoming">Upcoming</option>
                         <option value="overdue">Past scheduled date</option>
