@@ -761,25 +761,16 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     @endif
 
     <flux:card class="overflow-hidden p-0">
-        <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <h2 class="text-base font-semibold">Delivery queue and history</h2>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Pending requests are ready for delivery and unassigned. Delivering requests belong to one maintenance staff member.</p>
-                </div>
-                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $requests->total() }} requests</p>
-            </div>
 
-            <div class="mt-4 flex flex-wrap items-end gap-4">
-                <div class="min-w-[16rem] flex-1">
+            <div class="grid gap-3 border-b border-zinc-200 p-4 md:grid-cols-4 dark:border-zinc-800">
+ 
                     <flux:input
                         wire:model.live.debounce.300ms="search"
                         label="Search"
-                        placeholder="Request, booking, guest, facility, amenity"
+                        placeholder="Request, booking"
                         clearable
                     />
-                </div>
-                <div class="w-48">
+
                     <flux:select
                         wire:model.live="statusFilter"
                         label="Status"
@@ -789,8 +780,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="Delivering">Delivering</option>
                         <option value="Delivered">Delivered</option>
                     </flux:select>
-                </div>
-                <div class="w-48">
+
                     <flux:select
                         wire:model.live="assignmentFilter"
                         label="Assignment"
@@ -800,8 +790,8 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="mine">Assigned to me</option>
                         <option value="other">Assigned to another staff</option>
                     </flux:select>
-                </div>
-                <div class="w-24">
+
+                    <div class="flex items-end gap-2">
                     <flux:select
                         wire:model.live="perPage"
                         label="Rows"
@@ -811,14 +801,15 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="50">50</option>
                         <option value="100">100</option>
                     </flux:select>
-                </div>
+
                 <flux:button type="button" wire:click="clearFilters" variant="ghost">Clear Filters</flux:button>
+                </div>
             </div>
-        </div>
+
 
         <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,assignmentFilter,perPage,sortBy,clearFilters">
             <table class="w-full min-w-[84rem] text-left text-sm">
-                <thead class="border-b border-brand-border bg-brand-surface-muted text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
+                <thead class="border-b border-brand-border bg-zinc-50 text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                     <tr>
 
                         <th class="px-4 py-3">
