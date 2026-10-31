@@ -203,7 +203,7 @@ new class extends Component {
             ->leftJoin('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_booking_details.facility_id')
             ->with(['booking.guest', 'facility.facilityType']);
         if($this->statusFilter === 'all'){
-            $query;
+            $query->whereNotIn('tbl_booking.status', ['Cancelled', 'Checked-out']);
         }
         else if ($this->statusFilter === 'checked_in') {
             $query->where('tbl_booking_details.status', 'Checked-in');
