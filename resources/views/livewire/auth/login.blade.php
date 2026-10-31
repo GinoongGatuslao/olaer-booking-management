@@ -1,8 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Validation\ValidationException;
-use function Livewire\Volt\{layout, rules, state, title};
+use function Livewire\Volt\{layout, mount, rules, state, title};
 
 layout('layouts.guest');
 title('Login - Olaer Spring Resort');
@@ -12,6 +13,16 @@ state([
     'password' => '',
     'remember' => false,
 ]);
+
+mount(function () {
+    // Pre-fill the username (and tick "Remember me") when it was remembered before.
+    $remembered = (string) request()->cookie('remembered_username', '');
+
+    if ($remembered !== '') {
+        $this->username = $remembered;
+        $this->remember = true;
+    }
+});
 
 rules([
     'username' => ['required', 'string'],
@@ -49,6 +60,13 @@ $login = function () {
         ]);
     }
 
+    if ($this->remember) {
+        // Remember the username (never the password) on this browser for 30 days.
+        Cookie::queue('remembered_username', $this->username, 60 * 24 * 30);
+    } else {
+        Cookie::queue(Cookie::forget('remembered_username'));
+    }
+
     $routeName = match ($user->role?->role_name) {
         'Admin' => 'admin.dashboard',
         'Cashier' => 'cashier.dashboard',
@@ -81,19 +99,14 @@ $login = function () {
                 @error('password')
                 @enderror
             </div>
-            <div class="flex justify-between">
-                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                    <input type="checkbox" wire:model="remember"
-                        class="rounded border-zinc-300 text-zinc-900 shadow-sm focus:ring-zinc-500">
-                    <span>Remember me</span>
-                </label>
+            <div class="flex items-center justify-between gap-4">
+                <flux:checkbox wire:model="remember" label="Remember me" />
+
                 <a href="{{ route('password.request') }}" wire:navigate
                     class="text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300">
                     Forgot password?
                 </a>
             </div>
-
-
 
             <flux:button type="submit" variant="primary" class="w-full">
                 Login
