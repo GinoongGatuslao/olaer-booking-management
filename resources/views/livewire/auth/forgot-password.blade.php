@@ -52,10 +52,9 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         RateLimiter::hit($key, 300);
 
         try {
-            $service->requestOtp($this->identifier);
             $result = $service->requestOtp($this->identifier);
-                $this->debugOtp = app()->environment('local')
-                ? $result['debug_otp']
+            $this->debugOtp = app()->environment('local')
+                ? ($result['debug_otp'] ?? null)
                 : null;
         } catch (\RuntimeException $exception) {
             $this->addError('identifier', $exception->getMessage());
@@ -106,7 +105,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
         ]);
 
         try {
-            $service->resetPassword($this->resetIdentifier, $this->resetToken, $this->password);
+            $username = $service->resetPassword($this->resetIdentifier, $this->resetToken, $this->password);
         } catch (\RuntimeException $exception) {
             $this->addError('password', $exception->getMessage());
 
@@ -115,7 +114,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
 
         $this->reset(['resetIdentifier', 'otp', 'resetToken', 'password', 'password_confirmation']);
         $this->step = 'done';
-        $this->statusMessage = 'Your password has been changed. You may now sign in.';
+        $this->statusMessage = "Your password has been changed for the account \"{$username}\". You may now sign in with that username.";
         $this->resetValidation();
     }
 

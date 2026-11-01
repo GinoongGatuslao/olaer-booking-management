@@ -580,8 +580,16 @@ class GuestReservationManagementService
 
     private function sendOtpEmail(string $email, string $referenceNumber, string $otp): void
     {
-        Mail::raw(
-            "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in ".self::OTP_TTL_MINUTES.' minutes.',
+        Mail::send(
+            [
+                'html' => 'emails.guest.reservation-otp',
+                'raw' => "Your Olaer Spring Resort reservation OTP is {$otp}. Reference: {$referenceNumber}. This code expires in ".self::OTP_TTL_MINUTES.' minutes.',
+            ],
+            [
+                'code' => $otp,
+                'reference' => $referenceNumber,
+                'minutes' => self::OTP_TTL_MINUTES,
+            ],
             function ($message) use ($email): void {
                 $message->to($email)->subject('Olaer Spring Resort Reservation OTP');
             }
