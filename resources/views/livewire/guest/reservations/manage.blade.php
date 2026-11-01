@@ -34,6 +34,10 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     /** Original stay length in days per facility; a reschedule must keep it. */
     #[Locked]
     public array $originalDays = [];
+
+    /** Current base price per facility; only facilities priced the same or higher are offered. */
+    #[Locked]
+    public array $minimumPrices = [];
     public string $cancellationReason = '';
 
     public function mount(): void
@@ -165,6 +169,14 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                     $detail->check_in_date,
                     $detail->check_out_date,
                 ),
+            ])
+            ->all();
+
+        $this->minimumPrices = $editable
+            ->mapWithKeys(fn ($detail): array => [
+                (int) $detail->reservation_details_id => $detail->base_price !== null
+                    ? (string) $detail->base_price
+                    : null,
             ])
             ->all();
 
@@ -388,6 +400,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             (string) ($this->details[$id]['check_in_date'] ?? ''),
             (string) ($this->details[$id]['check_out_date'] ?? ''),
             (int) $id,
+            $this->minimumPrices[$id] ?? null,
         );
     }
 
@@ -869,6 +882,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
                         <fieldset class="mt-6">
                             <legend class="text-sm font-semibold text-public-forest dark:text-white">Available facility</legend>
+                            <p class="mt-1 text-xs text-public-muted dark:text-zinc-400">Only facilities with the same price or a higher price than your current one are shown.</p>
                             <div class="mt-3 grid gap-3 md:grid-cols-3">
                                 @forelse ($availableFacilities as $facility)
                                     <label wire:key="manage-available-facility-{{ $detailId }}-{{ $facility->facility_id }}" class="cursor-pointer rounded-2xl border p-4 transition {{ (int) ($row['facility_id'] ?? 0) === (int) $facility->facility_id ? 'border-public-spring bg-public-spring-light ring-1 ring-public-spring' : 'border-public-forest/10 hover:border-public-spring' }}">
@@ -877,7 +891,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                         <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</p>
                                     </label>
                                 @empty
-                                    <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection.</p>
+                                    <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection at the same or a higher price.</p>
                                 @endforelse
                             </div>
                             @error('details.'.$detailId.'.facility_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror

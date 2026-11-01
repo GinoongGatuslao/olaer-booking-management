@@ -570,7 +570,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             </h1>
             
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Paginated staff-account management with role and account-status controls.
+                This page manages resort staff accounts only. Guest records remain part of the reservation and booking workflows.
             </p>
         </div>
         <div class="flex gap-2">
@@ -599,9 +599,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
         </div>
     @endif
 
-    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-        This page manages resort staff accounts only. Guest records remain part of the reservation and booking workflows.
-    </div>
 
     <div>
         <section class="min-w-0">

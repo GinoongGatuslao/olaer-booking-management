@@ -83,6 +83,10 @@ $login = function () {
 <div class="w-full max-w-md">
     <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div class="mb-6 text-center">
+            <img src="/images/olaer/logo.png"
+                alt="Olaer Spring Resort Logo"
+                class="mx-auto mb-4 aspect-square w-[clamp(4rem,18vw,8rem)] rounded-full object-cover"
+            />
             <h1 class="text-2xl font-bold tracking-tight">Olaer Spring Resort</h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Booking Management with Billing System</p>
         </div>

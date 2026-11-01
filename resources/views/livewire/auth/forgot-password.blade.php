@@ -64,7 +64,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
 
         $this->resetIdentifier = $this->identifier;
         $this->step = 'verify';
-        $this->statusMessage = 'If the account is active and has a valid email address, a six-digit reset code has been sent. Only the newest code is valid.';
+        $this->statusMessage = 'If the account is active and has a valid email address, a six-digit reset code has been sent. ';
         $this->resetValidation();
     }
 

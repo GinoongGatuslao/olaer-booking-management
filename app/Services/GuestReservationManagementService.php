@@ -166,7 +166,8 @@ class GuestReservationManagementService
         ?string $rateType,
         ?string $checkInDate,
         ?string $checkOutDate,
-        ?int $ignoreReservationDetailsId = null
+        ?int $ignoreReservationDetailsId = null,
+        ?string $minimumBasePrice = null,
     ): Collection {
         if (! $facilityTypeId || blank($rateType) || blank($checkInDate) || blank($checkOutDate)) {
             return collect();
@@ -195,7 +196,7 @@ class GuestReservationManagementService
 
         // Availability is decided by the schedule blocks (date + Day/Night slot), the same way
         // the planner does it. Blocks held by the reservation detail being edited do not count.
-        return $facilities
+        $available = $facilities
             ->filter(function (Facility $facility) use ($rateCode, $checkInDate, $checkOutDate, $ignoreReservationDetailsId): bool {
                 $product = $facility->facilityProduct;
 
@@ -236,6 +237,30 @@ class GuestReservationManagementService
                         });
                     })
                     ->exists();
+            })
+            ->values();
+
+        if ($minimumBasePrice === null) {
+            return $available;
+        }
+
+        // Only facilities priced the same as, or higher than, the current one are offered.
+        $minimumCents = (int) round(((float) $minimumBasePrice) * 100);
+
+        return $available
+            ->filter(function (Facility $facility) use ($rateType, $checkInDate, $checkOutDate, $minimumCents): bool {
+                try {
+                    $quote = $this->quoteService->quote(
+                        facilityId: (int) $facility->facility_id,
+                        rateType: (string) $rateType,
+                        checkInDate: (string) $checkInDate,
+                        checkOutDate: (string) $checkOutDate,
+                    );
+                } catch (\Throwable) {
+                    return false;
+                }
+
+                return (int) round(((float) $quote['base_price']) * 100) >= $minimumCents;
             })
             ->values();
     }
@@ -350,6 +375,14 @@ class GuestReservationManagementService
                     discountId: $discount?->discount_id,
                     totalGuestCount: $change['total_guest_count'],
                 );
+
+                if ($detail->base_price !== null
+                    && (int) round(((float) $quote['base_price']) * 100) < (int) round(((float) $detail->base_price) * 100)
+                ) {
+                    throw new InvalidArgumentException(
+                        'You can only change to a facility with the same price or a higher price than your current one.'
+                    );
+                }
 
                 $prepared[$detailId] = [
                     'detail' => $detail,
