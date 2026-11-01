@@ -491,12 +491,26 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     {
         $rows = array_values($this->details);
 
+        // A same-day stay (check-out equal to check-in) occupies that one day.
+        $endOf = fn (array $row): string => $row['check_out_date'] > $row['check_in_date']
+            ? (string) $row['check_out_date']
+            : Carbon::parse($row['check_in_date'])->addDay()->toDateString();
+
+        // Day, Night and Both rates only clash when they share a slot.
+        $sharesSlot = function (string $a, string $b): bool {
+            $a = strtolower($a);
+            $b = strtolower($b);
+
+            return $a === $b || $a === 'both' || $b === 'both';
+        };
+
         for ($i = 0; $i < count($rows); $i++) {
             for ($j = $i + 1; $j < count($rows); $j++) {
                 if (
                     (int) $rows[$i]['facility_id'] === (int) $rows[$j]['facility_id']
-                    && $rows[$i]['check_in_date'] < $rows[$j]['check_out_date']
-                    && $rows[$j]['check_in_date'] < $rows[$i]['check_out_date']
+                    && $rows[$i]['check_in_date'] < $endOf($rows[$j])
+                    && $rows[$j]['check_in_date'] < $endOf($rows[$i])
+                    && $sharesSlot((string) $rows[$i]['rate_type'], (string) $rows[$j]['rate_type'])
                 ) {
                     return 'The same facility is selected more than once for overlapping dates. Choose a different facility for one of them.';
                 }

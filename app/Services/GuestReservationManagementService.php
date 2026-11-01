@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\FacilityRateCode;
 use App\Models\Facility;
+use App\Models\FacilityScheduleBlock;
 use App\Models\FacilityType;
 use App\Models\GuestVerificationOtp;
 use App\Models\ProductRate;
@@ -171,7 +172,8 @@ class GuestReservationManagementService
             return collect();
         }
 
-        if ($checkOutDate <= $checkInDate) {
+        // Same-day stays (check-out equal to check-in) are valid for cottages and function halls.
+        if ($checkOutDate < $checkInDate) {
             return collect();
         }
 
@@ -191,14 +193,50 @@ class GuestReservationManagementService
             ->orderBy('facility_name')
             ->get();
 
+        // Availability is decided by the schedule blocks (date + Day/Night slot), the same way
+        // the planner does it. Blocks held by the reservation detail being edited do not count.
         return $facilities
-            ->filter(fn (Facility $facility): bool => $this->availability->isFacilityAvailable(
-                (int) $facility->facility_id,
-                (string) $checkInDate,
-                (string) $checkOutDate,
-                null,
-                $ignoreReservationDetailsId,
-            ))
+            ->filter(function (Facility $facility) use ($rateCode, $checkInDate, $checkOutDate, $ignoreReservationDetailsId): bool {
+                $product = $facility->facilityProduct;
+
+                if (! $product) {
+                    return false;
+                }
+
+                try {
+                    $required = $this->scheduleBlocks->requiredBlocks(
+                        (int) $facility->facility_id,
+                        $product->schedule_policy,
+                        $rateCode,
+                        (string) $checkInDate,
+                        (string) $checkOutDate,
+                    );
+                } catch (InvalidArgumentException) {
+                    return false;
+                }
+
+                if ($required === []) {
+                    return false;
+                }
+
+                return ! FacilityScheduleBlock::query()
+                    ->where('facility_id', $facility->facility_id)
+                    ->where(function ($query) use ($required): void {
+                        foreach ($required as $block) {
+                            $query->orWhere(function ($query) use ($block): void {
+                                $query->where('service_date', $block['service_date'])
+                                    ->where('slot', $block['slot']->value);
+                            });
+                        }
+                    })
+                    ->when($ignoreReservationDetailsId, function ($query, $ignoreId): void {
+                        $query->where(function ($query) use ($ignoreId): void {
+                            $query->whereNull('reservation_detail_id')
+                                ->orWhere('reservation_detail_id', '!=', $ignoreId);
+                        });
+                    })
+                    ->exists();
+            })
             ->values();
     }
 
