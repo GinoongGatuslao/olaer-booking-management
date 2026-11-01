@@ -30,6 +30,10 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
     public bool $showCancelForm = false;
 
     public array $details = [];
+
+    /** Original stay length in days per facility; a reschedule must keep it. */
+    #[Locked]
+    public array $originalDays = [];
     public string $cancellationReason = '';
 
     public function mount(): void
@@ -155,6 +159,15 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             ];
         }
 
+        $this->originalDays = $editable
+            ->mapWithKeys(fn ($detail): array => [
+                (int) $detail->reservation_details_id => $service->stayLengthDays(
+                    $detail->check_in_date,
+                    $detail->check_out_date,
+                ),
+            ])
+            ->all();
+
         $this->details = $details;
         $this->showUpdateForm = true;
         $this->showCancelForm = false;
@@ -184,6 +197,13 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
 
         $field = explode('.', $field)[0];
+
+        if ($field === 'check_in_date') {
+            $this->details[$id]['check_out_date'] = $this->checkOutFor($id);
+        } elseif ($field === 'check_out_date') {
+            // The check-out date follows the check-in date; it is never edited directly.
+            $this->details[$id]['check_out_date'] = $this->checkOutFor($id);
+        }
 
         if ($field === 'facility_type_id') {
             $this->details[$id]['rate_type'] = '';
@@ -225,8 +245,38 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             $rules["{$key}.facility_type_id"] = ['required', 'integer', 'exists:tbl_facility_type,facility_type_id'];
             $rules["{$key}.rate_type"] = ['required', 'string', 'max:20'];
             $rules["{$key}.facility_id"] = ['required', 'integer', 'exists:tbl_facility,facility_id'];
+            $days = (int) ($this->originalDays[$id] ?? 0);
+
             $rules["{$key}.check_in_date"] = ['required', 'date_format:Y-m-d', 'after_or_equal:today'];
-            $rules["{$key}.check_out_date"] = ['required', 'date_format:Y-m-d', "after:{$key}.check_in_date"];
+            $rules["{$key}.check_out_date"] = [
+                'required',
+                'date_format:Y-m-d',
+                $days > 0 ? 'after:today' : 'after_or_equal:today',
+                "after_or_equal:{$key}.check_in_date",
+                function (string $attribute, mixed $value, \Closure $fail) use ($id, $days): void {
+                    $checkIn = $this->details[$id]['check_in_date'] ?? null;
+
+                    if (! $checkIn || ! $value) {
+                        return;
+                    }
+
+                    try {
+                        $expected = Carbon::parse($checkIn)->addDays($days)->toDateString();
+                    } catch (\Throwable) {
+                        return;
+                    }
+
+                    if ((string) $value !== $expected) {
+                        $fail($days === 0
+                            ? 'The check-out date must be the same day as check-in, the same length as your original stay.'
+                            : sprintf(
+                                'The check-out date must be %d %s after check-in, the same length as your original stay.',
+                                $days,
+                                $days === 1 ? 'day' : 'days',
+                            ));
+                    }
+                },
+            ];
             $rules["{$key}.total_guest_count"] = $guestRules;
             $rules["{$key}.extra_guests.*.first_name"] = ['required', 'string', 'max:50'];
             $rules["{$key}.extra_guests.*.middle_name"] = ['nullable', 'string', 'max:50'];
@@ -391,6 +441,22 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
     }
 
+    private function checkOutFor(int|string $id): string
+    {
+        $checkIn = (string) ($this->details[$id]['check_in_date'] ?? '');
+        $days = (int) ($this->originalDays[$id] ?? 0);
+
+        if ($checkIn === '') {
+            return (string) ($this->details[$id]['check_out_date'] ?? '');
+        }
+
+        try {
+            return Carbon::parse($checkIn)->addDays($days)->toDateString();
+        } catch (\Throwable) {
+            return (string) ($this->details[$id]['check_out_date'] ?? '');
+        }
+    }
+
     private function detailInt(int|string $id, string $field): ?int
     {
         $value = $this->details[$id][$field] ?? null;
@@ -528,7 +594,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
         @if (! $verified)
             <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-                <div class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 sm:p-8">
+                <div class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
                     @if (! $otpRequested)
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Step 1 of 3</p>
@@ -648,7 +714,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         @php($reservation = $this->reservation())
 
         @if ($reservation)
-            <article class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 sm:p-8">
+            <article class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
                 <div class="flex flex-col justify-between gap-5 md:flex-row md:items-start">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Verified reservation</p>
@@ -717,7 +783,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             @php($quotes = collect($details)->map(fn ($row, $detailId) => $this->quoteFor($detailId))->all())
             @php($allQuoted = $quotes !== [] && collect($quotes)->every(fn ($quote) => $quote !== null))
 
-            <form wire:submit="updateReservation" novalidate class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 sm:p-8">
+            <form wire:submit="updateReservation" novalidate class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Reservation update</p>
                 <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-emerald-200">Choose new visit details</h2>
                 <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">
@@ -750,12 +816,19 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                         <div class="mt-5 grid gap-5 md:grid-cols-2">
                             <flux:field>
                                 <flux:label>Check-in date</flux:label>
-                                <flux:input type="date" wire:model.live="details.{{ $detailId }}.check_in_date" />
+                                <flux:input type="date" min="{{ now()->toDateString() }}" wire:model.live="details.{{ $detailId }}.check_in_date" />
                                 <flux:error name="details.{{ $detailId }}.check_in_date" />
                             </flux:field>
                             <flux:field>
                                 <flux:label>Check-out date</flux:label>
-                                <flux:input type="date" wire:model.live="details.{{ $detailId }}.check_out_date" />
+                                <flux:input type="date" readonly wire:model.live="details.{{ $detailId }}.check_out_date" />
+                                <p class="mt-1 text-xs text-public-muted dark:text-zinc-400">
+                                    @if (($originalDays[$detailId] ?? 0) === 0)
+                                        Set automatically: the same day as check-in, matching your original stay.
+                                    @else
+                                        Set automatically: {{ $originalDays[$detailId] }} {{ $originalDays[$detailId] === 1 ? 'day' : 'days' }} after check-in, the same length as your original stay.
+                                    @endif
+                                </p>
                                 <flux:error name="details.{{ $detailId }}.check_out_date" />
                             </flux:field>
                             <flux:field>
@@ -861,7 +934,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         @endif
 
         @if ($showCancelForm)
-            <form wire:submit="cancelReservation" class="rounded-3xl border border-red-200 bg-white p-6 shadow-public-card dark:border-red-900/50 dark:bg-zinc-900 sm:p-8">
+            <form wire:submit="cancelReservation" class="rounded-3xl border border-red-200 bg-white p-6 shadow-public-card dark:border-red-900/50 dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-red-700 dark:text-red-300">Permanent action</p>
                 <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-white">Cancel this reservation?</h2>
                 <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Cancellation releases the held facility. It is allowed only for an active reservation without verified payment.</p>

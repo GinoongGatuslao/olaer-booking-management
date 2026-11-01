@@ -286,6 +286,8 @@ class GuestReservationManagementService
                     throw new InvalidArgumentException('The selected facility is not available.');
                 }
 
+                $this->assertValidSchedule($detail, $change['check_in_date'], $change['check_out_date']);
+
                 $extraGuests = $this->cleanExtraGuests($change['extra_guests']);
                 $occupancy = $this->occupancy->forFacilityId(
                     $facilityId,
@@ -450,6 +452,58 @@ class GuestReservationManagementService
         $this->confirmationEmailService->sendReservationCancelled($reservation);
 
         return $reservation;
+    }
+
+    /**
+     * Number of days between check-in and check-out (0 for a same-day stay).
+     */
+    public function stayLengthDays(mixed $checkIn, mixed $checkOut): int
+    {
+        if (! $checkIn || ! $checkOut) {
+            return 0;
+        }
+
+        $in = Carbon::parse($checkIn)->startOfDay();
+        $out = Carbon::parse($checkOut)->startOfDay();
+
+        return max(0, (int) round(($out->getTimestamp() - $in->getTimestamp()) / 86400));
+    }
+
+    /**
+     * A reschedule may move the stay but must keep its original length, and neither
+     * date may be in the past.
+     */
+    private function assertValidSchedule(ReservationDetail $detail, string $checkIn, string $checkOut): void
+    {
+        try {
+            $in = Carbon::parse($checkIn)->startOfDay();
+            $out = Carbon::parse($checkOut)->startOfDay();
+        } catch (\Throwable) {
+            throw new InvalidArgumentException('Enter a valid check-in and check-out date.');
+        }
+
+        $today = Carbon::today();
+        $originalDays = $this->stayLengthDays($detail->check_in_date, $detail->check_out_date);
+
+        if ($in->lt($today)) {
+            throw new InvalidArgumentException('The check-in date cannot be in the past.');
+        }
+
+        if ($out->lt($in)) {
+            throw new InvalidArgumentException('The check-out date cannot be before the check-in date.');
+        }
+
+        if ($originalDays > 0 && $out->lte($today)) {
+            throw new InvalidArgumentException('The check-out date must be after today.');
+        }
+
+        if ($this->stayLengthDays($in, $out) !== $originalDays) {
+            throw new InvalidArgumentException(sprintf(
+                'The new schedule must keep the same length as your original stay (%d %s).',
+                $originalDays,
+                $originalDays === 1 ? 'day' : 'days',
+            ));
+        }
     }
 
     private function isClosedDetail(ReservationDetail $detail): bool
