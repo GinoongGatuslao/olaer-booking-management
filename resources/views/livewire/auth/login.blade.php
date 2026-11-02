@@ -91,18 +91,23 @@ $login = function () {
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Booking Management with Billing System</p>
         </div>
 
-        <form wire:submit="login" class="space-y-5">
-            <div>
-                <flux:input wire:model="username" label="Username" autocomplete="username" autofocus />
-                @error('username')
-                @enderror
-            </div>
+        <form wire:submit="login" novalidate class="space-y-5">
+            {{-- Empty fields only turn the box red; real problems (wrong password, inactive account) still show text. --}}
+            @php($usernameError = filled($username) ? $errors->first('username') : '')
 
-            <div>
-                <flux:input wire:model="password" type="password" label="Password" autocomplete="current-password" viewable/>
-                @error('password')
-                @enderror
-            </div>
+            <flux:field class="relative">
+                <flux:label>Username</flux:label>
+                <flux:input wire:model="username" name="username" autocomplete="username" autofocus :invalid="$errors->has('username')" />
+                @if ($usernameError !== '')
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $usernameError }}</p>
+                @endif
+            </flux:field>
+
+            <flux:field class="relative">
+                <flux:label>Password</flux:label>
+                <flux:input wire:model="password" name="password" type="password" autocomplete="current-password" viewable :invalid="$errors->has('password')" />
+            </flux:field>
+
             <div class="flex items-center justify-between gap-4">
                 <flux:checkbox wire:model="remember" label="Remember me" />
 

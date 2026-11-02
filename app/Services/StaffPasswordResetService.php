@@ -154,7 +154,7 @@ class StaffPasswordResetService
                 && hash_equals($otp->reset_token_hash, hash('sha256', $rawToken));
 
             if (! $validToken) {
-                throw new RuntimeException('This password reset session is invalid or expired. Request a new code.');
+                throw new RuntimeException('The password reset session is invalid or has expired. Please request a new verification code to continue.');
             }
 
             $user->forceFill([
