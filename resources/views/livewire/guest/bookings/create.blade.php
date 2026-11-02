@@ -341,25 +341,25 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">1. Choose schedule and facility</h2>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Check-in date <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model.live="check_in_date" type="date" :invalid="$errors->has('check_in_date')" />
                             @if ($msg = $this->visibleError('check_in_date'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Check-out date <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model.live="check_out_date" type="date" :invalid="$errors->has('check_out_date')" />
                             @if ($msg = $this->visibleError('check_out_date'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Expected check-in time <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="check_in_time" type="time" :invalid="$errors->has('check_in_time')" />
                             @if ($msg = $this->visibleError('check_in_time'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
@@ -428,19 +428,19 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                         <div class="mt-5 grid gap-4">
                             @foreach ($extra_guests as $index => $extraGuest)
                                 <div wire:key="booking-extra-guest-{{ $index }}" class="grid gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 md:grid-cols-3">
-                                    <flux:field>
+                                    <flux:field class="relative">
                                         <flux:label>Extra guest {{ $index + 1 }} first name <span class="text-red-500">*</span></flux:label>
                                         <flux:input wire:model="extra_guests.{{ $index }}.first_name" :invalid="$errors->has('extra_guests.'.$index.'.first_name')" />
                                         @if ($msg = $this->visibleError('extra_guests.'.$index.'.first_name'))
-                                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                         @endif
                                     </flux:field>
                                     <flux:input wire:model="extra_guests.{{ $index }}.middle_name" label="Middle name" />
-                                    <flux:field>
+                                    <flux:field class="relative">
                                         <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                                         <flux:input wire:model="extra_guests.{{ $index }}.last_name" :invalid="$errors->has('extra_guests.'.$index.'.last_name')" />
                                         @if ($msg = $this->visibleError('extra_guests.'.$index.'.last_name'))
-                                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                         @endif
                                     </flux:field>
                                 </div>
@@ -453,51 +453,51 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     <h2 class="text-lg font-semibold text-zinc-950 dark:text-white">3. Guest details</h2>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-3">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>First name <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="first_name" :invalid="$errors->has('first_name')" />
                             @if ($msg = $this->visibleError('first_name'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                         <flux:input wire:model="middle_name" label="Middle name" />
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="last_name" :invalid="$errors->has('last_name')" />
                             @if ($msg = $this->visibleError('last_name'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
                     <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="contact_no" maxlength="11" :invalid="$errors->has('contact_no')" />
                             @if ($msg = $this->visibleError('contact_no'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Email <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
                             @if ($msg = $this->visibleError('email'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
                     <div class="mt-4 grid gap-4 md:grid-cols-4">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Province <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="province" :invalid="$errors->has('province')" />
                             @if ($msg = $this->visibleError('province'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>City <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="city" :invalid="$errors->has('city')" />
                             @if ($msg = $this->visibleError('city'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                         <flux:input wire:model="barangay" label="Barangay" />
@@ -512,18 +512,18 @@ new #[Layout('layouts.public')] #[Title('Book a Facility - Olaer Spring Resort')
                     </p>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>GCash amount paid <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="payment_amount" type="number" step="0.01" min="1" :invalid="$errors->has('payment_amount')" />
                             @if ($msg = $this->visibleError('payment_amount'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>GCash reference number <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="reference_number" :invalid="$errors->has('reference_number')" />
                             @if ($msg = $this->visibleError('reference_number'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>

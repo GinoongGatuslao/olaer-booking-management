@@ -811,57 +811,57 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 
                 <form wire:submit="saveUser" novalidate class="space-y-4">
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>First name <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="firstName" :invalid="$errors->has('firstName')" />
                             @if ($msg = $this->visibleError('firstName'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Middle name </flux:label>
                             <flux:input wire:model="middleName" :invalid="$errors->has('middleName')" />
                             @if ($msg = $this->visibleError('middleName'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="lastName" :invalid="$errors->has('lastName')" />
                         @if ($msg = $this->visibleError('lastName'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Username <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="username" :disabled="$isDisabled" :invalid="$errors->has('username')" />
                             @if ($msg = $this->visibleError('username'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Email <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
                             @if ($msg = $this->visibleError('email'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="contactNo" placeholder="Example: 09123456789" maxlength="11" :invalid="$errors->has('contactNo')" />
                         @if ($msg = $this->visibleError('contactNo'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Role <span class="text-red-500">*</span></flux:label>
                             <flux:select wire:model="roleId" :invalid="$errors->has('roleId')">
                                 <option value="">Select role</option>
@@ -872,18 +872,18 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                 @endforeach
                             </flux:select>
                             @if ($msg = $this->visibleError('roleId'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Status <span class="text-red-500">*</span></flux:label>
                             <flux:select wire:model="status" :invalid="$errors->has('status')">
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                             </flux:select>
                             @if ($msg = $this->visibleError('status'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
@@ -892,32 +892,32 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         <h3 class="text-sm font-semibold">Address</h3>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Province <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model="province" :invalid="$errors->has('province')" />
                                 @if ($msg = $this->visibleError('province'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>City / Municipality <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model="city" :invalid="$errors->has('city')" />
                                 @if ($msg = $this->visibleError('city'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Barangay </flux:label>
                                 <flux:input wire:model="barangay" :invalid="$errors->has('barangay')" />
                                 @if ($msg = $this->visibleError('barangay'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Purok / Street </flux:label>
                                 <flux:input wire:model="purok" :invalid="$errors->has('purok')" />
                                 @if ($msg = $this->visibleError('purok'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
                         </div>
@@ -933,18 +933,18 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         </p>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Password @if ($editingUserId === null) <span class="text-red-500">*</span> @endif</flux:label>
                                 <flux:input wire:model="password" type="password" autocomplete="new-password" viewable :invalid="$errors->has('password')" />
                                 @if ($msg = $this->visibleError('password'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Confirm password @if ($editingUserId === null || $password !== '') <span class="text-red-500">*</span> @endif</flux:label>
                                 <flux:input wire:model="passwordConfirmation" type="password" autocomplete="new-password" viewable :invalid="$errors->has('passwordConfirmation')" />
                                 @if ($msg = $this->visibleError('passwordConfirmation'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
                         </div>

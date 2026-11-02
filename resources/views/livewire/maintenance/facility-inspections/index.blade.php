@@ -1328,7 +1328,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             @endforeach
                         </flux:select>
 
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Fine <span class="text-red-500">*</span></flux:label>
                             <flux:select wire:model="fineId" :invalid="$errors->has('fineId')">
                             <option value="">Select fine</option>
@@ -1340,15 +1340,15 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             @endforeach
                         </flux:select>
                             @if ($msg = $this->visibleError('fineId'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
                             <flux:input type="number" min="1" wire:model="fineQuantity" :invalid="$errors->has('fineQuantity')" />
                             @if ($msg = $this->visibleError('fineQuantity'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 

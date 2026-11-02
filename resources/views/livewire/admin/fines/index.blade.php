@@ -886,14 +886,14 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                 </div>
 
                 <form wire:submit="saveFine" novalidate class="mt-5 space-y-4">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Fine type <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model.live="fineType" :invalid="$errors->has('fineType')">
                         <option value="Situational">Situational</option>
                         <option value="Amenity">Amenity</option>
                     </flux:select>
                         @if ($msg = $this->visibleError('fineType'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
@@ -938,11 +938,11 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                         />
                     @endif
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Fine charge <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="fineCharge" type="number" step="0.01" min="0.01" placeholder="Example: 200.00" :invalid="$errors->has('fineCharge')" />
                         @if ($msg = $this->visibleError('fineCharge'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
@@ -979,11 +979,11 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
                 </div>
 
                 <form wire:submit="saveDamageType" novalidate class="mt-5 space-y-4">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Damage type <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="damageType" placeholder="Damaged, Missing, Stained" :invalid="$errors->has('damageType')" />
                         @if ($msg = $this->visibleError('damageType'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 

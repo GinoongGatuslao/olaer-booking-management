@@ -658,18 +658,18 @@ new class extends Component {
             <h2 class="text-lg font-semibold text-amber-950 dark:text-amber-100">Reschedule Booking</h2>
             <p class="text-sm text-amber-800 dark:text-amber-200">{{ $rescheduleForm['label'] }}</p>
             <form wire:submit.prevent="saveReschedule" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>New check-in date <span class="text-red-500">*</span></flux:label>
                     <flux:input type="date" wire:model="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
                     @if ($msg = $this->visibleError('rescheduleForm.new_check_in_date'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>New check-out date <span class="text-red-500">*</span></flux:label>
                     <flux:input type="date" wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
                     @if ($msg = $this->visibleError('rescheduleForm.new_check_out_date'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
                 <div class="flex gap-3 sm:mt-6">
@@ -717,19 +717,19 @@ new class extends Component {
             <form wire:submit="saveOccupants" novalidate class="mt-4 space-y-4">
                 @forelse ($occupantForm['occupants'] as $index => $occupant)
                     <div class="grid gap-3 md:grid-cols-3">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Occupant {{ $index + 1 }} first name * <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.first_name')" />
                             @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.first_name'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                         <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Last name * <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.last_name')" />
                             @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.last_name'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>

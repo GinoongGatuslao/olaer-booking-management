@@ -905,7 +905,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
                         @if ($this->selectedSlip->status !== 'Paid' && (float) $this->selectedSlip->amount_due > 0)
                             <form wire:submit="recordPayment" novalidate class="space-y-4">
-                                <flux:field>
+                                <flux:field class="relative">
                                     <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
                                     <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
                                     <option value="">Select mode</option>
@@ -917,7 +917,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                     @endforeach
                                 </flux:select>
                                     @if ($msg = $this->visibleError('modeOfPaymentId'))
-                                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                     @endif
                                 </flux:field>
 

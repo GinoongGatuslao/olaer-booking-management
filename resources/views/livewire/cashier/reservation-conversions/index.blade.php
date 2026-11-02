@@ -278,11 +278,11 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     </div>
 
                     <div class="mt-4 space-y-4">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Payment Amount <span class="text-red-500">*</span></flux:label>
                             <flux:input type="number" step="0.01" min="0" wire:model.live="paymentAmount" :invalid="$errors->has('paymentAmount')" />
                             @if ($msg = $this->visibleError('paymentAmount'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 

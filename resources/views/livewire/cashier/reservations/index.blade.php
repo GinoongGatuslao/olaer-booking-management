@@ -619,11 +619,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             <h2 class="font-semibold">Cancel reservation #{{ $cancelReservationId }}</h2>
             @error('cancelReservationId') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
             <form wire:submit="cancelReservation" novalidate class="mt-4 space-y-4">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Cancellation reason <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="cancellationReason" :invalid="$errors->has('cancellationReason')" />
                     @if ($msg = $this->visibleError('cancellationReason'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
                 <div class="flex gap-3">

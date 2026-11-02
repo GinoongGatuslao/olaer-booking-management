@@ -440,7 +440,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
     @if (! $printAll)
         <flux:card class="print:hidden">
             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Report Type <span class="text-red-500">*</span></flux:label>
                     <flux:select wire:model.live="reportType" :invalid="$errors->has('reportType')">
                     <option value="revenue">My Handled Revenue</option>
@@ -450,7 +450,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
                     <option value="available_facilities">Available Facilities</option>
                 </flux:select>
                     @if ($msg = $this->visibleError('reportType'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
 

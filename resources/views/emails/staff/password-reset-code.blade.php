@@ -22,16 +22,15 @@
                 <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold; width: 35%;">Expires in</td>
                 <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $minutes }} minutes</td>
             </tr>
-            <tr>
-                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold;">Only the newest code works</td>
-                <td style="border: 1px solid #e5e7eb; padding: 8px;">Requesting another code cancels this one.</td>
-            </tr>
         </tbody>
     </table>
 
     <p style="margin-top: 20px; font-size: 13px; color: #4b5563;">
-        Do not share this code with anyone. Resort staff will never ask you for it.
-        If you did not request a password reset, you can ignore this email and your password will stay the same.
+        Do not share this code with anyone. Resort staff will never ask you for it. 
+        Only the most recently requested code is valid. 
+        Requesting a new code will invalidate the previous one. 
+        If you did not request a password reset, you can ignore this email. 
+        Your password will remain unchanged.
     </p>
     <p style="margin-top: 12px; font-size: 13px; color: #4b5563;">
         This is an automated email. Please contact the resort directly for urgent concerns.

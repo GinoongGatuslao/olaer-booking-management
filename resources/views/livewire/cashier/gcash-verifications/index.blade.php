@@ -390,11 +390,11 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                             </flux:button>
 
                             <div class="mt-4">
-                                <flux:field>
+                                <flux:field class="relative">
                                     <flux:label>Rejection reason <span class="text-red-500">*</span></flux:label>
                                     <flux:textarea wire:model="rejectionReason" placeholder="Example: Amount/reference does not match or proof is unreadable." :invalid="$errors->has('rejectionReason')" />
                                     @if ($msg = $this->visibleError('rejectionReason'))
-                                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                     @endif
                                 </flux:field>
                                 <flux:button variant="danger" class="mt-3 w-full" wire:click="$set('showRejectDialog', true)">
@@ -452,11 +452,11 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     Reject this proof only when the amount, reference, or uploaded evidence cannot be verified.
                 </flux:text>
             </div>
-            <flux:field>
+            <flux:field class="relative">
                 <flux:label>Rejection reason <span class="text-red-500">*</span></flux:label>
                 <flux:textarea wire:model="rejectionReason" placeholder="Explain why this proof is being rejected." :invalid="$errors->has('rejectionReason')" />
                 @if ($msg = $this->visibleError('rejectionReason'))
-                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                 @endif
             </flux:field>
             <div class="flex justify-end gap-3">

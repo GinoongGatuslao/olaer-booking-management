@@ -127,11 +127,11 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
                 <flux:heading size="lg">Edit entrance fee rate</flux:heading>
                 <flux:text class="mt-1">{{ $entranceFeeName }}</flux:text>
             </div>
-            <flux:field>
+            <flux:field class="relative">
                 <flux:label>Entrance fee rate <span class="text-red-500">*</span></flux:label>
                 <flux:input wire:model="entranceFeeRate" type="number" min="0.01" step="0.01" prefix="₱" :invalid="$errors->has('entranceFeeRate')" />
                 @if ($msg = $this->visibleError('entranceFeeRate'))
-                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                 @endif
             </flux:field>
             <div class="flex justify-end gap-3">

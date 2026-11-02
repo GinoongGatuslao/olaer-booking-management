@@ -511,7 +511,7 @@ protected function validationAttributes(): array
                     @php($selectedProduct = $this->productFor($index))
                     <div wire:key="facility-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
                         <div class="grid gap-4 lg:grid-cols-5">
-                            <flux:field >
+                            <flux:field class="relative" >
                                 <flux:label>Facility name <span class="text-red-500">*</span></flux:label>
                                 <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" :invalid="$errors->has('groups.'.$index.'.facility_product_id')">
                                 <option value="">Choose a facility</option>
@@ -520,11 +520,11 @@ protected function validationAttributes(): array
                                 @endforeach
                             </flux:select>
                                 @if ($msg = $this->visibleError('groups.'.$index.'.facility_product_id'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
 
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Schedule <span class="text-red-500">*</span></flux:label>
                                 <flux:select wire:model.live="groups.{{ $index }}.rate_code" :invalid="$errors->has('groups.'.$index.'.rate_code')">
                                 <option value="">Choose rate</option>
@@ -533,21 +533,21 @@ protected function validationAttributes(): array
                                 @endforeach
                             </flux:select>
                                 @if ($msg = $this->visibleError('groups.'.$index.'.rate_code'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" :invalid="$errors->has('groups.'.$index.'.quantity')" />
                                 @if ($msg = $this->visibleError('groups.'.$index.'.quantity'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Estimated guests <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" :invalid="$errors->has('groups.'.$index.'.estimated_users')" />
                                 @if ($msg = $this->visibleError('groups.'.$index.'.estimated_users'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
                             <div class="flex items-end">
@@ -556,18 +556,18 @@ protected function validationAttributes(): array
                         </div>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Check-in / use date <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_in_date')" />
                                 @if ($msg = $this->visibleError('groups.'.$index.'.check_in_date'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Check-out / end date <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_out_date')" />
                                 @if ($msg = $this->visibleError('groups.'.$index.'.check_out_date'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
                         </div>
@@ -599,51 +599,51 @@ protected function validationAttributes(): array
         <flux:card>
             <flux:heading size="lg">Primary guest</flux:heading>
             <div class="mt-5 grid gap-4 md:grid-cols-3">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>First name <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="firstName" :invalid="$errors->has('firstName')" />
                     @if ($msg = $this->visibleError('firstName'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
                 <flux:input wire:model="middleName" label="Middle name" />
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="lastName" :invalid="$errors->has('lastName')" />
                     @if ($msg = $this->visibleError('lastName'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Email <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
                     @if ($msg = $this->visibleError('email'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="contactNo" placeholder="09XXXXXXXXX" :invalid="$errors->has('contactNo')" />
                     @if ($msg = $this->visibleError('contactNo'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-4">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Province <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="province" :invalid="$errors->has('province')" />
                     @if ($msg = $this->visibleError('province'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>City/Municipality <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="city" :invalid="$errors->has('city')" />
                     @if ($msg = $this->visibleError('city'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
                 <flux:input wire:model="barangay" label="Barangay" />
@@ -665,19 +665,19 @@ protected function validationAttributes(): array
                             <div class="space-y-3">
                                 @foreach ($occupants as $occupantIndex => $occupant)
                                     <div wire:key="room-{{ $roomIndex }}-occupant-{{ $occupantIndex }}" class="grid gap-3 md:grid-cols-3">
-                                        <flux:field>
+                                        <flux:field class="relative">
                                             <flux:label>Occupant {{ $occupantIndex + 1 }} first name <span class="text-red-500">*</span></flux:label>
                                             <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name')" />
                                             @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name'))
-                                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                             @endif
                                         </flux:field>
                                         <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
-                                        <flux:field>
+                                        <flux:field class="relative">
                                             <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                                             <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name')" />
                                             @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name'))
-                                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                             @endif
                                         </flux:field>
                                     </div>
@@ -700,18 +700,18 @@ protected function validationAttributes(): array
                 The payment remains Pending until a Cashier verifies the reference and private proof.
             </flux:text>
             <div class="mt-5 grid gap-4 md:grid-cols-2">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Payment amount <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="paymentAmount" type="number" step="0.01" min="0.01" :readonly="$bookingMode" :invalid="$errors->has('paymentAmount')" />
                     @if ($msg = $this->visibleError('paymentAmount'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>GCash reference number <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="referenceNumber" :invalid="$errors->has('referenceNumber')" />
                     @if ($msg = $this->visibleError('referenceNumber'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
             </div>

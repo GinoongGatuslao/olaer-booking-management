@@ -795,7 +795,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
             <form wire:submit="createRequest" novalidate class="space-y-4">
                 <div class="grid gap-4 md:grid-cols-2">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Checked-in Booking <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model.live="form.booking_id" :invalid="$errors->has('form.booking_id')">
                         <option value="">Select booking</option>
@@ -810,11 +810,11 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                         @endforeach
                     </flux:select>
                         @if ($msg = $this->visibleError('form.booking_id'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Delivery Facility <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model="form.facility_id" :invalid="$errors->has('form.facility_id')">
                         <option value="">Select facility</option>
@@ -826,7 +826,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                         @endforeach
                     </flux:select>
                         @if ($msg = $this->visibleError('form.facility_id'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
                 </div>
@@ -851,7 +851,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                             wire:key="create-amenity-item-{{ $index }}"
                             class="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800 md:grid-cols-[1fr_120px_auto]"
                         >
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Amenity <span class="text-red-500">*</span></flux:label>
                                 <flux:select wire:model.live="items.{{ $index }}.amenity_id" :invalid="$errors->has('items.'.$index.'.amenity_id')">
                                 <option value="">Select amenity</option>
@@ -867,15 +867,15 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 @endforeach
                             </flux:select>
                                 @if ($msg = $this->visibleError('items.'.$index.'.amenity_id'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
 
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Qty <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="items.{{ $index }}.quantity" type="number" min="1" :invalid="$errors->has('items.'.$index.'.quantity')" />
                                 @if ($msg = $this->visibleError('items.'.$index.'.quantity'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
 
@@ -931,7 +931,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             @enderror
 
             <form wire:submit="saveEdit" novalidate class="space-y-4">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Delivery Facility <span class="text-red-500">*</span></flux:label>
                     <flux:select wire:model="editForm.facility_id" :invalid="$errors->has('editForm.facility_id')">
                     <option value="">Select facility</option>
@@ -943,7 +943,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     @endforeach
                 </flux:select>
                     @if ($msg = $this->visibleError('editForm.facility_id'))
-                        <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
 
@@ -952,7 +952,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                         wire:key="edit-amenity-item-{{ $index }}"
                         class="grid gap-3 rounded-lg border border-amber-200 p-3 dark:border-amber-800 md:grid-cols-[1fr_120px_auto]"
                     >
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Amenity <span class="text-red-500">*</span></flux:label>
                             <flux:select wire:model.live="editItems.{{ $index }}.amenity_id" :invalid="$errors->has('editItems.'.$index.'.amenity_id')">
                             <option value="">Select amenity</option>
@@ -966,15 +966,15 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                             @endforeach
                         </flux:select>
                             @if ($msg = $this->visibleError('editItems.'.$index.'.amenity_id'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Qty <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model.live="editItems.{{ $index }}.quantity" type="number" min="1" :invalid="$errors->has('editItems.'.$index.'.quantity')" />
                             @if ($msg = $this->visibleError('editItems.'.$index.'.quantity'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 

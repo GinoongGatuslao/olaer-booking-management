@@ -586,30 +586,30 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 </div>
 
                 <form wire:submit="save" novalidate class="mt-5 space-y-4">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Amenity name <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="amenityName" placeholder="Example: Chair, Pillow, Table Set" :invalid="$errors->has('amenityName')" />
                         @if ($msg = $this->visibleError('amenityName'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Description <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="amenityDescription" placeholder="Example: Monoblock, Room inclusive item" :invalid="$errors->has('amenityDescription')" />
                         @if ($msg = $this->visibleError('amenityDescription'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Amenity type <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model.live="amenityType" :invalid="$errors->has('amenityType')">
                         <option value="Rentable">Rentable</option>
                         <option value="Inclusive">Inclusive</option>
                     </flux:select>
                         @if ($msg = $this->visibleError('amenityType'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 

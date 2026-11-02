@@ -209,3 +209,19 @@ select:focus[data-flux-control] {
     from { opacity: 0.55; translate: 0 22px; }
     to { opacity: 1; translate: 0 0; }
 }
+
+[data-flux-field] {
+    position: relative;
+}
+
+[data-flux-field] [data-flux-error],
+.field-error {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    margin-top: 0.125rem;
+    line-height: 1.25;
+    pointer-events: none; /* clicks pass through to whatever the message overlaps */
+}

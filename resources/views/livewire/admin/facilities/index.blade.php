@@ -713,15 +713,15 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                 </div>
 
                 <form wire:submit="save" novalidate class="space-y-5">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Facility number <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="facilityName" placeholder="Example: C300-056" :invalid="$errors->has('facilityName')" />
                         @if ($msg = $this->visibleError('facilityName'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Facility type <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model.live="facilityTypeId" :invalid="$errors->has('facilityTypeId')">
                         <flux:select.option value="">Select facility type</flux:select.option>
@@ -732,7 +732,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             @endforeach
                     </flux:select>
                         @if ($msg = $this->visibleError('facilityTypeId'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
@@ -743,7 +743,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                     @endphp
 
                     <div class="grid gap-4">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Facility name <span class="text-red-500">*</span></flux:label>
                             <flux:select wire:model.live="sizeChoice" :disabled="$facilityTypeId === ''" :invalid="$errors->has('sizeChoice')">
                             <flux:select.option value="">
@@ -759,17 +759,17 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                             @endif
                         </flux:select>
                             @if ($msg = $this->visibleError('sizeChoice'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
 
                         @if ($creatingNewSize)
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>New facility name <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model="facilitySize" placeholder="Example: Jumbo Cottage" :invalid="$errors->has('facilitySize')" />
                                 @if ($msg = $this->visibleError('facilitySize'))
-                                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
 
@@ -787,24 +787,24 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Minimum Capacity <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="min_capacity" placeholder="Example: 1" type="number" min="1" :readonly="$capacityLocked" :invalid="$errors->has('min_capacity')" />
                             @if ($msg = $this->visibleError('min_capacity'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
 
-                        <flux:field>
+                        <flux:field class="relative">
                             <flux:label>Maximum Capacity <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="max_capacity" placeholder="Example: 25" type="number" min="1" :readonly="$capacityLocked" :invalid="$errors->has('max_capacity')" />
                             @if ($msg = $this->visibleError('max_capacity'))
-                                <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
                         </flux:field>
                     </div>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Operational availability <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model="facilityStatus" :disabled="$statusLocked" :invalid="$errors->has('facilityStatus')">
                         @if ($statusLocked)
@@ -815,7 +815,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
                         @endif
                     </flux:select>
                         @if ($msg = $this->visibleError('facilityStatus'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
@@ -843,11 +843,11 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             </div>
 
             <!-- Price Input -->
-            <flux:field>
+            <flux:field class="relative">
                 <flux:label>Price <span class="text-red-500">*</span></flux:label>
                 <flux:input wire:model="priceRows.{{ $index }}.facility_price" type="number" step="0.01" min="0" placeholder="0.00" :invalid="$errors->has('priceRows.'.$index.'.facility_price')" />
                 @if ($msg = $this->visibleError('priceRows.'.$index.'.facility_price'))
-                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                 @endif
             </flux:field>
         </div>

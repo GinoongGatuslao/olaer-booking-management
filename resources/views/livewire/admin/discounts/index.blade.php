@@ -784,19 +784,19 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                 </div>
 
                 <form wire:submit="save" novalidate class="mt-5 space-y-4">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Discount name <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="discountName" placeholder="Christmas Promo" :invalid="$errors->has('discountName')" />
                         @if ($msg = $this->visibleError('discountName'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Discount percentage <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="discountPercent" type="number" step="1" min="1" max="100" placeholder="10" :invalid="$errors->has('discountPercent')" />
                         @if ($msg = $this->visibleError('discountPercent'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 
@@ -836,14 +836,14 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                         </div>
                     @endif
 
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Status <span class="text-red-500">*</span></flux:label>
                         <flux:select wire:model="status" :invalid="$errors->has('status')">
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                     </flux:select>
                         @if ($msg = $this->visibleError('status'))
-                            <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
 

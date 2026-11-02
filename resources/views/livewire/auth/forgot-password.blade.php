@@ -203,7 +203,7 @@ new #[Layout('layouts.guest')] #[Title('Forgot Password - Olaer Spring Resort')]
                         viewable
                     />
                     <p class="mt-1 text-xs text-zinc-500">
-                        Minimum 8 characters with uppercase, lowercase, number, and symbol.
+                        Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.
                     </p>
                 </div>
 

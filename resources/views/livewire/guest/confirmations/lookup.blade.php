@@ -172,26 +172,26 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                 </div>
 
                 <form wire:submit="search" class="mt-6 space-y-5">
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Confirmation type</flux:label>
                     <flux:select wire:model.live="type">
                         <option value="reservation">Reservation</option>
                         <option value="booking">Booking</option>
                     </flux:select>
-                    <flux:error name="type" />
+                    <flux:error class="field-error" name="type" />
                 </flux:field>
 
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Reference number</flux:label>
                     <flux:input
                         wire:model.live.debounce.500ms="reference_no"
                         autocomplete="off"
                         placeholder="Enter your reference"
                     />
-                    <flux:error name="reference_no" />
+                    <flux:error class="field-error" name="reference_no" />
                 </flux:field>
 
-                <flux:field>
+                <flux:field class="relative">
                     <flux:label>Email address</flux:label>
                     <flux:input
                         type="email"
@@ -199,7 +199,7 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                         autocomplete="email"
                         placeholder="guest@example.com"
                     />
-                    <flux:error name="email" />
+                    <flux:error class="field-error" name="email" />
                 </flux:field>
 
                 <div class="grid gap-2 sm:grid-cols-[1fr_auto] lg:grid-cols-1 xl:grid-cols-[1fr_auto]">

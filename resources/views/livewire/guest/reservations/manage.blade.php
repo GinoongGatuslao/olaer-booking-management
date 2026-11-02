@@ -633,17 +633,17 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
                         <form wire:submit="requestOtp" class="mt-6 space-y-5">
                             <div class="grid gap-5 md:grid-cols-2">
-                                <flux:field>
+                                <flux:field class="relative">
                                     <flux:label>Reservation reference</flux:label>
                                     <flux:input
                                         wire:model.live="referenceNumber"
                                         autocomplete="off"
                                         placeholder="Enter your reservation reference"
                                     />
-                                    <flux:error name="referenceNumber" />
+                                    <flux:error class="field-error" name="referenceNumber" />
                                 </flux:field>
 
-                                <flux:field>
+                                <flux:field class="relative">
                                     <flux:label>Reservation email</flux:label>
                                     <flux:input
                                         type="email"
@@ -651,7 +651,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                         autocomplete="email"
                                         placeholder="guest@example.com"
                                     />
-                                    <flux:error name="email" />
+                                    <flux:error class="field-error" name="email" />
                                 </flux:field>
                             </div>
 
@@ -681,7 +681,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                         @endif
 
                         <form wire:submit="verifyOtp" class="mt-6 space-y-5">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Six-digit code</flux:label>
                                 <flux:input
                                     wire:model.live="otp"
@@ -691,7 +691,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                     class="max-w-xs"
                                     placeholder="000000"
                                 />
-                                <flux:error name="otp" />
+                                <flux:error class="field-error" name="otp" />
                             </flux:field>
 
                             <div class="flex flex-wrap gap-3">
@@ -841,12 +841,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                         </div>
 
                         <div class="mt-5 grid gap-5 md:grid-cols-2">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Check-in date</flux:label>
                                 <flux:input type="date" min="{{ now()->toDateString() }}" wire:model.live="details.{{ $detailId }}.check_in_date" />
-                                <flux:error name="details.{{ $detailId }}.check_in_date" />
+                                <flux:error class="field-error" name="details.{{ $detailId }}.check_in_date" />
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Check-out date</flux:label>
                                 <flux:input type="date" readonly wire:model.live="details.{{ $detailId }}.check_out_date" />
                                 <p class="mt-1 text-xs text-public-muted dark:text-zinc-400">
@@ -856,9 +856,9 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                         Set automatically: {{ $originalDays[$detailId] }} {{ $originalDays[$detailId] === 1 ? 'day' : 'days' }} after check-in, the same length as your original stay.
                                     @endif
                                 </p>
-                                <flux:error name="details.{{ $detailId }}.check_out_date" />
+                                <flux:error class="field-error" name="details.{{ $detailId }}.check_out_date" />
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Facility type</flux:label>
                                 <flux:select wire:model.live="details.{{ $detailId }}.facility_type_id">
                                     <option value="">Select type</option>
@@ -866,9 +866,9 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                         <option wire:key="manage-{{ $detailId }}-facility-type-{{ $type->facility_type_id }}" value="{{ $type->facility_type_id }}">{{ $type->facility_type }}</option>
                                     @endforeach
                                 </flux:select>
-                                <flux:error name="details.{{ $detailId }}.facility_type_id" />
+                                <flux:error class="field-error" name="details.{{ $detailId }}.facility_type_id" />
                             </flux:field>
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Rate type</flux:label>
                                 <flux:select wire:model.live="details.{{ $detailId }}.rate_type">
                                     <option value="">Select rate</option>
@@ -876,7 +876,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                         <option wire:key="manage-{{ $detailId }}-rate-type-{{ Str::slug($rate) }}" value="{{ $rate }}">{{ $rate }}</option>
                                     @endforeach
                                 </flux:select>
-                                <flux:error name="details.{{ $detailId }}.rate_type" />
+                                <flux:error class="field-error" name="details.{{ $detailId }}.rate_type" />
                             </flux:field>
                         </div>
 
@@ -898,10 +898,10 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                         </fieldset>
 
                         <div class="mt-6 max-w-xl">
-                            <flux:field>
+                            <flux:field class="relative">
                                 <flux:label>Total guests</flux:label>
                                 <flux:input type="number" min="1" max="{{ $this->strictMaximumFor($detailId) }}" wire:model.live="details.{{ $detailId }}.total_guest_count" />
-                                <flux:error name="details.{{ $detailId }}.total_guest_count" />
+                                <flux:error class="field-error" name="details.{{ $detailId }}.total_guest_count" />
                             </flux:field>
                             <p class="mt-2 text-xs leading-5 text-public-muted dark:text-zinc-400">
                                 Total guests includes the primary guest. Rooms include 4 guests and enforce the maximum shown below. Cottage and function-hall capacities are recommendations only and never create extra-guest charges.
@@ -968,10 +968,10 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                 <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Cancellation releases the held facility. It is allowed only for an active reservation without verified payment.</p>
 
                 <div class="mt-6">
-                    <flux:field>
+                    <flux:field class="relative">
                         <flux:label>Reason for cancellation</flux:label>
                         <flux:textarea wire:model.live="cancellationReason" rows="3" placeholder="Tell us why you need to cancel" />
-                        <flux:error name="cancellationReason" />
+                        <flux:error class="field-error" name="cancellationReason" />
                     </flux:field>
                 </div>
 
