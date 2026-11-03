@@ -66,6 +66,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
+    public bool $showDetailActionModal = false;
+    public bool $showCancelReservationModal = false;
+
     public ?int $cancelReservationId = null;
     public string $cancellationReason = '';
 
@@ -228,6 +231,15 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->cancelReservationId = $reservation->reservation_id;
         $this->cancellationReason = '';
         $this->resetValidation();
+        $this->showCancelReservationModal = true;
+    }
+
+    public function closeCancellation(): void
+    {
+        $this->showCancelReservationModal = false;
+        $this->cancelReservationId = null;
+        $this->cancellationReason = '';
+        $this->resetValidation();
     }
 
     public function cancelReservation(
@@ -254,6 +266,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             return;
         }
 
+        $this->showCancelReservationModal = false;
         $this->cancelReservationId = null;
         $this->cancellationReason = '';
         session()->flash('success', 'Reservation cancelled successfully.');
@@ -300,10 +313,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ])
             ->all();
         $this->resetValidation();
+        $this->showDetailActionModal = true;
     }
 
     public function closeDetailAction(): void
     {
+        $this->showDetailActionModal = false;
         $this->detailActionId = null;
         $this->detailAction = null;
         $this->detailCheckInDate = '';
@@ -602,104 +617,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         </div>
     @endif
 
-    @if ($detailActionId && $detailAction)
-        <flux:card>
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <flux:heading size="lg">
-                        @switch($detailAction)
-                            @case('reschedule') Reschedule facility @break
-                            @case('transfer') Upgrade / transfer facility @break
-                            @case('cancel') Cancel facility @break
-                            @case('occupants') Edit room occupants @break
-                        @endswitch
-                    </flux:heading>
-                    <flux:text class="mt-1">This action changes only the selected facility detail, not the other facilities under the reservation.</flux:text>
-                </div>
-                <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Close</flux:button>
-            </div>
-
-            {{-- Service errors and stale-row errors only. Field errors show under their own inputs below. --}}
-            @php($actionError = $errors->first('detailAction') ?: $errors->first('detailActionId') ?: $errors->first('detailOccupants'))
-            @if ($actionError)
-                <div class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $actionError }}</div>
-            @endif
-
-            <form wire:submit="saveDetailAction" novalidate class="mt-5 space-y-4">
-                @if ($detailAction === 'reschedule')
-                    <div class="grid gap-4 md:grid-cols-2">
-                        <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
-                        <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
-                    </div>
-                    @if ($detailOriginalDays !== '')
-                        <p class="text-xs text-zinc-500">
-                            The original stay is {{ $detailOriginalDays }} {{ \Illuminate\Support\Str::plural('day', (int) $detailOriginalDays) }} between check-in and check-out. The new dates must keep the same length.
-                        </p>
-                    @endif
-                @elseif ($detailAction === 'transfer')
-                    <flux:select wire:model.live="detailFacilityProductId" label="Destination facility product *">
-                        <option value="">Choose an upgrade product</option>
-                        @foreach ($this->detailTransferProducts() as $product)
-                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
-                        @endforeach
-                    </flux:select>
-                    <flux:select wire:model="detailFacilityId" label="Facility *">
-                        <option value="">Choose a facility</option>
-                        @foreach ($this->detailTransferFacilities() as $transferFacility)
-                            <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
-                        @endforeach
-                    </flux:select>
-                    @if ($detailFacilityProductId !== '' && $this->detailTransferFacilities()->isEmpty())
-                        <p class="text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this reservation's schedule.</p>
-                    @endif
-                    <p class="text-xs text-zinc-500">Choose the exact facility to assign. Cheaper/downgrade transfers are rejected by the service.</p>
-                @elseif ($detailAction === 'cancel')
-                    <flux:textarea wire:model="detailCancellationReason" label="Cancellation reason *" rows="3" />
-                    <p class="text-xs text-zinc-500">Paid value remains as same-transaction credit and is not refunded or moved to another booking.</p>
-                @elseif ($detailAction === 'occupants')
-                    <div class="space-y-3">
-                        @forelse ($detailOccupants as $index => $occupant)
-                            <div class="grid gap-3 md:grid-cols-3">
-                                <flux:input wire:model="detailOccupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
-                                <flux:input wire:model="detailOccupants.{{ $index }}.middle_name" label="Middle name" />
-                                <flux:input wire:model="detailOccupants.{{ $index }}.last_name" label="Last name *" />
-                            </div>
-                        @empty
-                            <p class="text-sm text-zinc-500">This facility has no room occupant list.</p>
-                        @endforelse
-                    </div>
-                @endif
-
-                <div class="flex justify-end gap-3">
-                    <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Cancel</flux:button>
-                    <flux:button type="submit" variant="{{ $detailAction === 'cancel' ? 'danger' : 'primary' }}">
-                        Save
-                    </flux:button>
-                </div>
-            </form>
-        </flux:card>
-    @endif
-
-    @if ($cancelReservationId)
-        <section class="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm dark:border-red-900/60 dark:bg-red-950/30">
-            <h2 class="font-semibold">Cancel reservation #{{ $cancelReservationId }}</h2>
-            @error('cancelReservationId') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-            <form wire:submit="cancelReservation" novalidate class="mt-4 space-y-4">
-                <flux:field class="relative">
-                    <flux:label>Cancellation reason <span class="text-red-500">*</span></flux:label>
-                    <flux:input wire:model="cancellationReason" :invalid="$errors->has('cancellationReason')" />
-                    @if ($msg = $this->visibleError('cancellationReason'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-                <div class="flex gap-3">
-                    <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
-                    <flux:button type="button" variant="ghost" wire:click="$set('cancelReservationId', null)">Close</flux:button>
-                </div>
-            </form>
-        </section>
-    @endif
-
     <flux:card class="overflow-hidden p-0">
 
             <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-5 dark:border-zinc-800">
@@ -875,4 +792,102 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             {{ $reservations->links() }}
         </div>
     </flux:card>
+    {{-- Facility actions: reschedule / transfer / cancel facility / occupants --}}
+    <flux:modal wire:model="showDetailActionModal" class="{{ $detailAction === 'occupants' ? 'md:w-[46rem]' : 'md:w-[34rem]' }}">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">
+                    @switch($detailAction)
+                        @case('reschedule') Reschedule facility @break
+                        @case('transfer') Upgrade / transfer facility @break
+                        @case('cancel') Cancel facility @break
+                        @case('occupants') Edit room occupants @break
+                    @endswitch
+                </flux:heading>
+                <flux:text class="mt-1">This action changes only the selected facility detail, not the other facilities under the reservation.</flux:text>
+            </div>
+
+            {{-- Service errors and stale-row errors only. Field errors show under their own inputs below. --}}
+            @php($actionError = $errors->first('detailAction') ?: $errors->first('detailActionId') ?: $errors->first('detailOccupants'))
+            @if ($actionError)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $actionError }}</div>
+            @endif
+
+            <form wire:submit="saveDetailAction" novalidate class="space-y-4">
+                @if ($detailAction === 'reschedule')
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
+                        <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
+                    </div>
+
+                @elseif ($detailAction === 'transfer')
+                    <flux:select wire:model.live="detailFacilityProductId" label="Destination facility product *">
+                        <option value="">Choose an upgrade product</option>
+                        @foreach ($this->detailTransferProducts() as $product)
+                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    <flux:select wire:model="detailFacilityId" label="Facility *">
+                        <option value="">Choose a facility</option>
+                        @foreach ($this->detailTransferFacilities() as $transferFacility)
+                            <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    @if ($detailFacilityProductId !== '' && $this->detailTransferFacilities()->isEmpty())
+                        <p class="text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this reservation's schedule.</p>
+                    @endif
+                    <p class="text-xs text-zinc-500">Choose the exact facility to assign. Cheaper/downgrade transfers are rejected by the service.</p>
+                @elseif ($detailAction === 'cancel')
+                    <flux:textarea wire:model="detailCancellationReason" label="Cancellation reason *" rows="3" />
+                    <p class="text-xs text-zinc-500">Paid value remains as same-transaction credit and is not refunded or moved to another booking.</p>
+                @elseif ($detailAction === 'occupants')
+                    <div class="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+                        @forelse ($detailOccupants as $index => $occupant)
+                            <div class="grid gap-3 md:grid-cols-3" wire:key="detail-occupant-{{ $index }}">
+                                <flux:input wire:model="detailOccupants.{{ $index }}.first_name" label="Occupant {{ $index + 1 }} first name *" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.middle_name" label="Middle name" />
+                                <flux:input wire:model="detailOccupants.{{ $index }}.last_name" label="Last name *" />
+                            </div>
+                        @empty
+                            <p class="text-sm text-zinc-500">This facility has no room occupant list.</p>
+                        @endforelse
+                    </div>
+                @endif
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="closeDetailAction">Cancel</flux:button>
+                    <flux:button type="submit" variant="{{ $detailAction === 'cancel' ? 'danger' : 'primary' }}">
+                        Save
+                    </flux:button>
+                </div>
+            </form>
+        </div>
+    </flux:modal>
+
+    {{-- Cancel whole reservation --}}
+    <flux:modal wire:model="showCancelReservationModal" class="md:w-[30rem]">
+        <form wire:submit="cancelReservation" novalidate class="space-y-5">
+            <div>
+                <flux:heading size="lg">Cancel reservation #{{ $cancelReservationId }}</flux:heading>
+                <flux:text class="mt-1">Provide a reason. This cancels the whole reservation.</flux:text>
+            </div>
+
+            @error('cancelReservationId')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            <flux:field class="relative">
+                <flux:label>Cancellation reason <span class="text-red-500">*</span></flux:label>
+                <flux:input wire:model="cancellationReason" :invalid="$errors->has('cancellationReason')" />
+                @if ($msg = $this->visibleError('cancellationReason'))
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="closeCancellation">Close</flux:button>
+                <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

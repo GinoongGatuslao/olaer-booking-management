@@ -104,13 +104,7 @@ class ReservationFacilityOperationService
 
     public function stayLengthMismatchMessage(int $originalDays, int $newDays): string
     {
-        return sprintf(
-            'The new dates are %d %s apart, but the original reservation is %d %s. Rescheduling must keep the same length of stay.',
-            $newDays,
-            Str::plural('day', $newDays),
-            $originalDays,
-            Str::plural('day', $originalDays),
-        );
+        return 'Rescheduling must keep the same length of stay.';
     }
 
     /**

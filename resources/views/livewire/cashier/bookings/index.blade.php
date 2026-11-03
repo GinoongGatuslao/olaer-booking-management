@@ -81,6 +81,16 @@ new class extends Component {
         'reason' => '',
     ];
 
+    public bool $showRescheduleModal = false;
+    public bool $showTransferModal = false;
+    public bool $showExtendModal = false;
+    public bool $showOccupantsModal = false;
+
+    public array $extendForm = [
+        'booking_details_id' => '',
+        'label' => '',
+    ];
+
     public array $occupantForm = [
         'booking_details_id' => '',
         'label' => '',
@@ -203,10 +213,12 @@ new class extends Component {
             'new_check_in_date' => \Illuminate\Support\Carbon::parse($detail->check_in_date)->toDateString(),
             'new_check_out_date' => \Illuminate\Support\Carbon::parse($detail->check_out_date)->toDateString(),
         ];
+        $this->showRescheduleModal = true;
     }
 
     public function cancelReschedule(): void
     {
+        $this->showRescheduleModal = false;
         $this->rescheduleForm = [
             'booking_details_id' => '',
             'label' => '',
@@ -348,10 +360,13 @@ new class extends Component {
             'facility_product_id' => (string) ($detail->facility_product_id ?? ''),
             'facility_id' => '',
         ];
+        $this->resetValidation();
+        $this->showTransferModal = true;
     }
 
     public function cancelTransfer(): void
     {
+        $this->showTransferModal = false;
         $this->transferForm = [
             'booking_details_id' => '',
             'label' => '',
@@ -397,10 +412,52 @@ new class extends Component {
         }
     }
 
+    public function openExtend(int $bookingDetailsId): void
+    {
+        $detail = BookingDetail::query()->with(['booking', 'facility'])->find($bookingDetailsId);
+
+        if (! $detail?->booking || ! $detail->facility) {
+            $this->cancelExtend();
+            $this->addError('booking', 'This booking facility is no longer available. Refresh the list and try again.');
+
+            return;
+        }
+
+        $this->resetValidation();
+        $this->extendForm = [
+            'booking_details_id' => (string) $bookingDetailsId,
+            'label' => $detail->booking->b_ref_no . ' - ' . $detail->facility->facility_name,
+        ];
+        $this->showExtendModal = true;
+    }
+
+    public function cancelExtend(): void
+    {
+        $this->showExtendModal = false;
+        $this->extendForm = [
+            'booking_details_id' => '',
+            'label' => '',
+        ];
+    }
+
+    public function confirmExtend(BookingWorkflowService $bookingWorkflow): void
+    {
+        $id = (int) ($this->extendForm['booking_details_id'] ?? 0);
+
+        if ($id < 1) {
+            $this->cancelExtend();
+
+            return;
+        }
+
+        $this->extendBooking($id, $bookingWorkflow);
+    }
+
     public function extendBooking(int $bookingDetailsId, BookingWorkflowService $bookingWorkflow): void
     {
         try {
             $bookingWorkflow->extendCottageDayRate($bookingDetailsId);
+            $this->cancelExtend();
             $this->resetPage();
             session()->flash('success', 'Cottage extension recorded. The extension charge was added to amount due.');
         } catch (\InvalidArgumentException $exception) {
@@ -483,10 +540,13 @@ new class extends Component {
                 'last_name' => $occupant->last_name,
             ])->all(),
         ];
+        $this->resetValidation();
+        $this->showOccupantsModal = true;
     }
 
     public function cancelOccupants(): void
     {
+        $this->showOccupantsModal = false;
         $this->occupantForm = [
             'booking_details_id' => '',
             'label' => '',
@@ -710,119 +770,12 @@ new class extends Component {
     {{-- One banner for page-level problems (service errors and stale-row errors), instead of four stacked ones. --}}
     @php
         $pageError = collect([
-            'booking', 'reschedule', 'transfer', 'extend',
-            'rescheduleForm.booking_details_id', 'transferForm.booking_details_id',
-            'cancelDetailForm.booking_details_id', 'occupantForm.booking_details_id',
+            'booking',
+            'cancelDetailForm.booking_details_id',
         ])->map(fn (string $key): ?string => $errors->first($key) ?: null)->filter()->first();
     @endphp
     @if ($pageError)
         <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $pageError }}</div>
-    @endif
-
-    @if ($rescheduleForm['booking_details_id'] !== '')
-        <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
-            <h2 class="text-lg font-semibold text-amber-950 dark:text-amber-100">Reschedule Booking</h2>
-            <p class="text-sm text-amber-800 dark:text-amber-200">{{ $rescheduleForm['label'] }}</p>
-            <form wire:submit.prevent="saveReschedule" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <flux:field class="relative">
-                    <flux:label>New check-in date <span class="text-red-500">*</span></flux:label>
-                    <flux:input type="date" wire:model="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
-                    @if ($msg = $this->visibleError('rescheduleForm.new_check_in_date'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-                <flux:field class="relative">
-                    <flux:label>New check-out date <span class="text-red-500">*</span></flux:label>
-                    <flux:input type="date" wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
-                    @if ($msg = $this->visibleError('rescheduleForm.new_check_out_date'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-                <div class="flex gap-3 sm:mt-6">
-                    <flux:button type="submit" variant="primary">Save Reschedule</flux:button>
-                    <flux:button type="button" wire:click="cancelReschedule">Cancel</flux:button>
-                </div>
-            </form>
-            @if ($rescheduleForm['original_days'] !== '')
-                <p class="mt-2 text-xs text-amber-800 dark:text-amber-200">
-                    The original stay is {{ $rescheduleForm['original_days'] }} {{ \Illuminate\Support\Str::plural('day', (int) $rescheduleForm['original_days']) }} between check-in and check-out. The new dates must keep the same length.
-                </p>
-            @endif
-        </div>
-    @endif
-
-    @if ($transferForm['booking_details_id'] !== '')
-        <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950">
-            <h2 class="text-lg font-semibold text-blue-950 dark:text-blue-100">Transfer Facility</h2>
-            <p class="text-sm text-blue-800 dark:text-blue-200">{{ $transferForm['label'] }}</p>
-            <form wire:submit.prevent="saveTransfer" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div>
-                    <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product <span class="text-red-500">*</span></label>
-                    <select wire:model.live="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100{{ $errors->has('transferForm.facility_product_id') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}">
-                        <option value="">Choose upgrade product</option>
-                        @foreach ($transferProducts as $product)
-                            <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
-                        @endforeach
-                    </select>
-                    @if ($message = $this->visibleError('transferForm.facility_product_id')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif
-                    
-                </div>
-                <div>
-                    <flux:field class="relative">
-                        <flux:label>Facility <span class="text-red-500">*</span></flux:label>
-                        <flux:select wire:model="transferForm.facility_id" :invalid="$errors->has('transferForm.facility_id')">
-                            <option value="">Choose a facility</option>
-                            @foreach ($transferFacilities as $transferFacility)
-                                <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
-                            @endforeach
-                        </flux:select>
-                        @if ($message = $this->visibleError('transferForm.facility_id')) <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @endif
-                    </flux:field>
-                    @if ($transferForm['facility_product_id'] !== '' && $transferFacilities->isEmpty())
-                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this booking's schedule.</p>
-                    @endif
-                </div>
-                <flux:button type="submit" variant="primary">Assign Transfer</flux:button>
-                <flux:button type="button" wire:click="cancelTransfer">Cancel</flux:button>
-            </form>
-        </div>
-    @endif
-
-
-    @if ($occupantForm['booking_details_id'] !== '')
-        <flux:card>
-            <flux:heading size="lg">Edit room occupants</flux:heading>
-            <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
-            @error('occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-            @error('occupantForm.occupants') <p class="mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
-            <form wire:submit="saveOccupants" novalidate class="mt-4 space-y-4">
-                @forelse ($occupantForm['occupants'] as $index => $occupant)
-                    <div class="grid gap-3 md:grid-cols-3">
-                        <flux:field class="relative">
-                            <flux:label>Occupant {{ $index + 1 }} first name * <span class="text-red-500">*</span></flux:label>
-                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.first_name')" />
-                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.first_name'))
-                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                            @endif
-                        </flux:field>
-                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
-                        <flux:field class="relative">
-                            <flux:label>Last name * <span class="text-red-500">*</span></flux:label>
-                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.last_name')" />
-                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.last_name'))
-                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                            @endif
-                        </flux:field>
-                    </div>
-                @empty
-                    <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>
-                @endforelse
-                <div class="flex justify-end gap-3">
-                    <flux:button type="button" variant="ghost" wire:click="cancelOccupants">Close</flux:button>
-                    <flux:button type="submit" variant="primary">Save Occupants</flux:button>
-                </div>
-            </form>
-        </flux:card>
     @endif
 
     <flux:card class="overflow-hidden p-0">
@@ -921,7 +874,7 @@ new class extends Component {
                                             <flux:menu.separator />
                                             <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:menu.item>
                                             <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:menu.item>
-                                            <flux:menu.item icon="clock" wire:click="extendBooking({{ $booking->booking_details_id }})">Extend</flux:menu.item>
+                                            <flux:menu.item icon="clock" wire:click="openExtend({{ $booking->booking_details_id }})">Extend</flux:menu.item>
                                             <flux:menu.item icon="user-group" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:menu.item>
                                             <flux:menu.separator />
                                         @endif
@@ -950,4 +903,156 @@ new class extends Component {
             {{ $bookings->links() }}
         </div>
     </flux:card>
+    {{-- Reschedule --}}
+    <flux:modal wire:model="showRescheduleModal" class="md:w-[34rem]">
+        @php $rescheduleError = $errors->first('reschedule') ?: $errors->first('rescheduleForm.booking_details_id'); @endphp
+        <form wire:submit.prevent="saveReschedule" novalidate class="space-y-5">
+            <div>
+                <flux:heading size="lg">Reschedule booking</flux:heading>
+                <flux:text class="mt-1">{{ $rescheduleForm['label'] }}</flux:text>
+            </div>
+
+            @if ($rescheduleError)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $rescheduleError }}</div>
+            @endif
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <flux:field class="relative">
+                    <flux:label>New check-in date <span class="text-red-500">*</span></flux:label>
+                    <flux:input type="date" wire:model="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
+                    @if ($msg = $this->visibleError('rescheduleForm.new_check_in_date'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <flux:field class="relative">
+                    <flux:label>New check-out date <span class="text-red-500">*</span></flux:label>
+                    <flux:input type="date" wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
+                    @if ($msg = $this->visibleError('rescheduleForm.new_check_out_date'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+            </div>
+
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="cancelReschedule">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Save Reschedule</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Transfer --}}
+    <flux:modal wire:model="showTransferModal" class="md:w-[34rem]">
+        @php $transferError = $errors->first('transfer') ?: $errors->first('transferForm.booking_details_id'); @endphp
+        <form wire:submit.prevent="saveTransfer" novalidate class="space-y-5">
+            <div>
+                <flux:heading size="lg">Transfer facility</flux:heading>
+                <flux:text class="mt-1">{{ $transferForm['label'] }}</flux:text>
+            </div>
+
+            @if ($transferError)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $transferError }}</div>
+            @endif
+
+            <div>
+                <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product <span class="text-red-500">*</span></label>
+                <select wire:model.live="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100{{ $errors->has('transferForm.facility_product_id') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}">
+                    <option value="">Choose upgrade product</option>
+                    @foreach ($transferProducts as $product)
+                        <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
+                    @endforeach
+                </select>
+                @if ($message = $this->visibleError('transferForm.facility_product_id')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif
+            </div>
+
+            <div>
+                <flux:field class="relative">
+                    <flux:label>Facility <span class="text-red-500">*</span></flux:label>
+                    <flux:select wire:model="transferForm.facility_id" :invalid="$errors->has('transferForm.facility_id')">
+                        <option value="">Choose a facility</option>
+                        @foreach ($transferFacilities as $transferFacility)
+                            <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    @if ($message = $this->visibleError('transferForm.facility_id')) <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @endif
+                </flux:field>
+                @if ($transferForm['facility_product_id'] !== '' && $transferFacilities->isEmpty())
+                    <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this booking's schedule.</p>
+                @endif
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="cancelTransfer">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Assign Transfer</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Extend --}}
+    <flux:modal wire:model="showExtendModal" class="md:w-[30rem]">
+        @php $extendError = $errors->first('extend'); @endphp
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Extend cottage booking</flux:heading>
+                <flux:text class="mt-1">{{ $extendForm['label'] }}</flux:text>
+            </div>
+
+            <flux:text>
+                This extends the Day Rate stay and adds the extension charge to the booking's amount due. Only eligible cottage or function hall bookings can be extended.
+            </flux:text>
+
+            @if ($extendError)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $extendError }}</div>
+            @endif
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="cancelExtend">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="confirmExtend">Confirm Extension</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    {{-- Occupants --}}
+    <flux:modal wire:model="showOccupantsModal" class="md:w-[46rem]">
+        @php $occupantError = $errors->first('occupants') ?: $errors->first('occupantForm.occupants') ?: $errors->first('occupantForm.booking_details_id'); @endphp
+        <form wire:submit="saveOccupants" novalidate class="space-y-5">
+            <div>
+                <flux:heading size="lg">Edit room occupants</flux:heading>
+                <flux:text class="mt-1">{{ $occupantForm['label'] }}</flux:text>
+            </div>
+
+            @if ($occupantError)
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $occupantError }}</div>
+            @endif
+
+            <div class="max-h-[55vh] space-y-4 overflow-y-auto pr-1">
+                @forelse ($occupantForm['occupants'] as $index => $occupant)
+                    <div class="grid gap-3 md:grid-cols-3" wire:key="occupant-row-{{ $index }}">
+                        <flux:field class="relative">
+                            <flux:label>Occupant {{ $index + 1 }} first name <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.first_name')" />
+                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.first_name'))
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
+                        <flux:input wire:model="occupantForm.occupants.{{ $index }}.middle_name" label="Middle name" />
+                        <flux:field class="relative">
+                            <flux:label>Last name <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model="occupantForm.occupants.{{ $index }}.last_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.last_name')" />
+                            @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.last_name'))
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
+                    </div>
+                @empty
+                    <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>
+                @endforelse
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="cancelOccupants">Close</flux:button>
+                <flux:button type="submit" variant="primary">Save Occupants</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

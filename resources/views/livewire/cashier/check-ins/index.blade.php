@@ -145,6 +145,8 @@ new class extends Component {
         $this->resetPage();
     }
 
+    public bool $showCheckInModal = false;
+
     public function selectCheckIn(int $bookingDetailsId): void
     {
         $detail = BookingDetail::query()
@@ -163,10 +165,13 @@ new class extends Component {
 
         $this->selectedBookingDetailsId = $bookingDetailsId;
         $this->selectedLabel = $detail->booking->b_ref_no . ' - ' . $guest->first_name . ' ' . $guest->last_name . ' - ' . $facilityName;
+        $this->resetErrorBag('checkIn');
+        $this->showCheckInModal = true;
     }
 
     public function cancelSelection(): void
     {
+        $this->showCheckInModal = false;
         $this->selectedBookingDetailsId = null;
         $this->selectedLabel = '';
     }
@@ -291,25 +296,12 @@ new class extends Component {
         </div>
     @endif
 
+    @if (! $showCheckInModal)
     @error('checkIn')
         <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
             {{ $message }}
         </div>
     @enderror
-
-    @if ($selectedBookingDetailsId !== null)
-        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <p class="text-sm font-medium text-amber-900 dark:text-amber-100">Confirm check-in</p>
-                    <p class="text-sm text-amber-800 dark:text-amber-200">{{ $selectedLabel }}</p>
-                </div>
-                <div class="flex gap-2">
-                    <flux:button variant="primary" wire:click="confirmCheckIn">Confirm Check-in</flux:button>
-                    <flux:button variant="ghost" wire:click="cancelSelection">Cancel</flux:button>
-                </div>
-            </div>
-        </div>
     @endif
 
     <flux:card class="overflow-hidden p-0">
@@ -521,4 +513,21 @@ new class extends Component {
             {{ $bookingDetails->links() }}
         </div>
     </flux:card>
+    <flux:modal wire:model="showCheckInModal" class="md:w-[30rem]">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Confirm check-in</flux:heading>
+                <flux:text class="mt-1">{{ $selectedLabel }}</flux:text>
+            </div>
+
+            @error('checkIn')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="cancelSelection">Cancel</flux:button>
+                <flux:button type="button" variant="primary" wire:click="confirmCheckIn">Confirm Check-in</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

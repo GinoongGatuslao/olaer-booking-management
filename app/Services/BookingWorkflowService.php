@@ -221,13 +221,7 @@ class BookingWorkflowService
 
     public function stayLengthMismatchMessage(int $originalDays, int $newDays): string
     {
-        return sprintf(
-            'The new dates are %d %s apart, but the original booking is %d %s. Rescheduling must keep the same length of stay.',
-            $newDays,
-            Str::plural('day', $newDays),
-            $originalDays,
-            Str::plural('day', $originalDays),
-        );
+        return 'Rescheduling must keep the same length of stay.';
     }
 
     public function transferBookingDetail(int $bookingDetailsId, int $newFacilityId): void

@@ -198,6 +198,8 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->resetPage('paymentsPage');
     }
 
+    public bool $showPaymentModal = false;
+
     public function selectPayable(string $type, int $id): void
     {
         if (! in_array($type, ['booking', 'reservation', 'entrance_slip'], true)) {
@@ -223,10 +225,12 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->referenceNumber = '';
 
         $this->resetValidation();
+        $this->showPaymentModal = true;
     }
 
     public function clearSelection(): void
     {
+        $this->showPaymentModal = false;
         $this->selectedTargetId = null;
         $this->selectedTargetLabel = '';
         $this->selectedAmountDue = '0.00';
@@ -836,11 +840,13 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         </div>
     @endif
 
+    @if (! $showPaymentModal)
     @error('payment')
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             {{ $message }}
         </div>
     @enderror
+    @endif
 
     @if ($selectedPayment !== null)
         <flux:card class="print:border-0 print:shadow-none">
@@ -922,81 +928,6 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 </div>
             </dl>
         </flux:card>
-    @endif
-
-    @if ($selectedTargetId !== null)
-        <div class="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950/40">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <p class="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                        Selected payable
-                    </p>
-
-                    <p class="mt-1 text-sm text-blue-800 dark:text-blue-200">
-                        {{ $selectedTargetLabel }}
-                    </p>
-
-                    <p class="mt-1 text-sm text-blue-800 dark:text-blue-200">
-                        Balance:
-                        <span class="font-semibold">
-                            ₱{{ number_format($selectedAmountDue, 2) }}
-                        </span>
-                    </p>
-                </div>
-
-                <flux:button wire:click="clearSelection" variant="ghost">
-                    Cancel
-                </flux:button>
-            </div>
-
-            <div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <flux:field class="relative">
-                    <flux:label>Amount paid <span class="text-red-500">*</span></flux:label>
-                    <flux:input wire:model="amountPaid" type="number" min="0.01" step="0.01" :invalid="$errors->has('amountPaid')" />
-                    @if ($msg = $this->visibleError('amountPaid'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-
-                <flux:field class="relative">
-                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
-                    <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
-                    @foreach ($modeOfPayments as $mode)
-                        <option value="{{ $mode->mode_of_payment_id }}">
-                            {{ $mode->mode_of_payment }}
-                        </option>
-                    @endforeach
-                </flux:select>
-                    @if ($msg = $this->visibleError('modeOfPaymentId'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-                @if($this->modeOfPaymentId === '2')
-                    <flux:input
-                        wire:model="referenceNumber"
-                        label="GCash reference number"
-                        placeholder="Required for GCash" 
-                    />
-                @endif
-                <div class="flex items-end">
-                    <flux:button
-                        wire:click="recordPayment"
-                        variant="primary"
-                        class="w-full"
-                    >
-                        Record Payment
-                    </flux:button>
-                </div>
-            </div>
-
-            
-
-            
-
-            @error('referenceNumber')
-                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-            @enderror
-        </div>
     @endif
 
     <flux:card class="overflow-hidden p-0">
@@ -1343,4 +1274,58 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             {{ $payments->links() }}
         </div>
     </flux:card>
+    <flux:modal wire:model="showPaymentModal" class="md:w-[32rem]">
+        <form wire:submit.prevent="recordPayment" novalidate class="space-y-5">
+            <div>
+                <flux:heading size="lg">Record payment</flux:heading>
+                <flux:text class="mt-1">{{ $selectedTargetLabel }}</flux:text>
+                <flux:text class="mt-1">
+                    Balance: <span class="font-semibold">₱{{ number_format((float) $selectedAmountDue, 2) }}</span>
+                </flux:text>
+            </div>
+
+            @error('payment')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            <flux:field class="relative">
+                <flux:label>Amount paid <span class="text-red-500">*</span></flux:label>
+                <flux:input wire:model="amountPaid" type="number" min="0.01" step="0.01" :invalid="$errors->has('amountPaid')" />
+                @if ($msg = $this->visibleError('amountPaid'))
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
+
+            <flux:field class="relative">
+                <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
+                    @foreach ($modeOfPayments as $mode)
+                        <option value="{{ $mode->mode_of_payment_id }}">
+                            {{ $mode->mode_of_payment }}
+                        </option>
+                    @endforeach
+                </flux:select>
+                @if ($msg = $this->visibleError('modeOfPaymentId'))
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
+
+            @if ($this->modeOfPaymentId === '2')
+                <flux:input
+                    wire:model="referenceNumber"
+                    label="GCash reference number"
+                    placeholder="Required for GCash"
+                />
+            @endif
+
+            @error('referenceNumber')
+                <p class="text-sm text-red-600">{{ $message }}</p>
+            @enderror
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="clearSelection">Cancel</flux:button>
+                <flux:button type="submit" variant="primary">Record Payment</flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>

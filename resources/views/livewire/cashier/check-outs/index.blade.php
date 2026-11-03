@@ -45,6 +45,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
     public ?int $selectedBookingId = null;
     public string $selectedLabel = '';
     public float $selectedBookingAmountDue = 0.00;
+    public bool $showCheckOutPanel = false;
+    // Inline "are you sure" step inside the check-out modal (no nested modal).
     public bool $showCheckOutDialog = false;
 
     public function mount(): void
@@ -205,10 +207,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         $this->selectedBookingId = (int) $detail->booking_id;
         $this->selectedBookingAmountDue = (float) $detail->booking->amount_due;
         $this->selectedLabel = $detail->booking->b_ref_no . ' - ' . $guest->first_name . ' ' . $guest->last_name . ' - ' . $facilityName;
+        $this->resetErrorBag('checkOut');
+        $this->showCheckOutDialog = false;
+        $this->showCheckOutPanel = true;
     }
 
     public function cancelSelection(): void
     {
+        $this->showCheckOutPanel = false;
+        $this->showCheckOutDialog = false;
         $this->selectedBookingDetailsId = null;
         $this->selectedBookingId = null;
         $this->selectedLabel = '';
@@ -586,146 +593,12 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         </div>
     @endif
 
+    @if (! $showCheckOutPanel)
     @error('checkOut')
         <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
             {{ $message }}
         </div>
     @enderror
-
-    @if ($selectedBookingDetailsId !== null)
-        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <p class="text-sm font-medium text-amber-900 dark:text-amber-100">Selected check-out</p>
-                    <p class="text-sm text-amber-800 dark:text-amber-200">{{ $selectedLabel }}</p>
-                    <p class="mt-1 text-sm text-amber-800 dark:text-amber-200">
-                        Current balance: <span class="font-semibold">₱{{ number_format($selectedBookingAmountDue, 2) }}</span>
-                    </p>
-
-                    @if ($selectedInspectionRequest === null)
-                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">No inspection request has been sent yet.</p>
-                    @else
-                        <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                            Inspection request: <span class="font-semibold">{{ $selectedInspectionRequest->status }}</span>
-                            requested by {{ $selectedInspectionRequest->requestedBy?->first_name }} {{ $selectedInspectionRequest->requestedBy?->last_name }}
-                            @if ($selectedInspectionRequest->requested_at)
-                                on {{ $selectedInspectionRequest->requested_at->format('M d, Y h:i A') }}
-                            @endif
-                        </p>
-                    @endif
-
-                    @if ($selectedInspection === null)
-                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Maintenance inspection result is still required before check-out.</p>
-                    @else
-                        <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                            Inspection result: <span class="font-semibold">{{ $selectedInspection->inspection_status }}</span>
-                            by {{ $selectedInspection->inspectedBy?->first_name }} {{ $selectedInspection->inspectedBy?->last_name }}
-                            @if ($selectedInspection->inspected_at)
-                                on {{ $selectedInspection->inspected_at->format('M d, Y h:i A') }}
-                            @endif
-                        </p>
-                        @if ($selectedInspection->remarks)
-                            <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">Remarks: {{ $selectedInspection->remarks }}</p>
-                        @endif
-                    @endif
-
-                    @if ($selectedBookingAmountDue > 0)
-                        <p class="mt-1 text-xs font-semibold text-red-700 dark:text-red-300">Settle this balance in the Payment module before check-out.</p>
-                    @endif
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                    @if ($selectedBookingId !== null && Route::has('cashier.bookings.show'))
-                        <flux:button
-                            href="{{ route('cashier.bookings.show', $selectedBookingId) }}"
-                            wire:navigate
-                            variant="ghost"
-                        >
-                            Booking Workspace
-                        </flux:button>
-                    @endif
-
-                    @if (
-                        $selectedBookingId !== null
-                        && $selectedBookingAmountDue > 0
-                        && Route::has('cashier.payments.index')
-                    )
-                        <flux:button
-                            href="{{ route('cashier.payments.index', ['booking' => $selectedBookingId]) }}"
-                            wire:navigate
-                            variant="primary"
-                        >
-                            Settle Payment
-                        </flux:button>
-                    @endif
-
-                    @if ($selectedInspectionRequest === null)
-                        <flux:button wire:click="sendInspectionRequest">
-                            Send Inspection Request
-                        </flux:button>
-                    @elseif ($selectedInspectionRequest->status !== 'Completed')
-                        <flux:button disabled>
-                            Waiting for Maintenance
-                        </flux:button>
-                    @endif
-
-                    @if (
-                        $selectedInspectionRequest !== null
-                        && $selectedInspectionRequest->status === 'Completed'
-                        && $selectedInspection !== null
-                        && $selectedBookingAmountDue <= 0
-                    )
-                        <flux:button
-                            variant="primary"
-                            wire:click="requestCheckOut"
-                        >
-                            Confirm Check-out
-                        </flux:button>
-                    @else
-                        <flux:button variant="primary" disabled>
-                            Not Ready
-                        </flux:button>
-                    @endif
-
-                    <flux:button
-                        variant="ghost"
-                        wire:click="cancelSelection"
-                    >
-                        Cancel
-                    </flux:button>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <h2 class="text-sm font-semibold text-amber-950 dark:text-amber-50">Fines reported by maintenance</h2>
-                <div class="mt-2 overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-900">
-                    <table class="min-w-full divide-y divide-amber-200 text-sm dark:divide-amber-900">
-                        <thead>
-                            <tr>
-                                <th class="px-3 py-2 text-left">Fine</th>
-                                <th class="px-3 py-2 text-left">Qty</th>
-                                <th class="px-3 py-2 text-left">Charge</th>
-                                <th class="px-3 py-2 text-left">Reported by</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-amber-200 dark:divide-amber-900">
-                            @forelse ($selectedGuestFines as $guestFine)
-                                <tr>
-                                    <td class="px-3 py-2">{{ $this->formatFineLabel($guestFine->fine) }}</td>
-                                    <td class="px-3 py-2">{{ $guestFine->quantity }}</td>
-                                    <td class="px-3 py-2">₱{{ number_format((float) $guestFine->total_charge, 2) }}</td>
-                                    <td class="px-3 py-2">{{ $guestFine->reportedBy?->first_name }} {{ $guestFine->reportedBy?->last_name }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="4" class="px-3 py-4 text-center text-amber-800 dark:text-amber-200">No fines recorded for this facility.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     @endif
 
     <flux:card class="overflow-hidden p-0">
@@ -919,19 +792,151 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             {{ $bookingDetails->links() }}
         </div>
     </flux:card>
-    <flux:modal wire:model="showCheckOutDialog" class="md:w-[30rem]">
+
+
+    <flux:modal wire:model="showCheckOutPanel" class="md:w-[48rem]">
         <div class="space-y-5">
             <div>
-                <flux:heading size="lg">Confirm facility check-out</flux:heading>
-                <flux:text class="mt-1">
+                <flux:heading size="lg">{{ $showCheckOutDialog ? 'Confirm facility check-out' : 'Guest check-out' }}</flux:heading>
+                <flux:text class="mt-1">{{ $selectedLabel }}</flux:text>
+            </div>
+
+            @error('checkOut')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            @if ($showCheckOutDialog)
+                <flux:text>
                     {{ $selectedLabel }} will be checked out and the physical facility will be released for future availability.
                 </flux:text>
-            </div>
-            <div class="flex justify-end gap-3">
-                <flux:button type="button" variant="ghost" wire:click="$set('showCheckOutDialog', false)">Cancel</flux:button>
-                <flux:button type="button" variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
-            </div>
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="$set('showCheckOutDialog', false)">Back</flux:button>
+                    <flux:button type="button" variant="primary" wire:click="confirmCheckOut">Confirm Check-out</flux:button>
+                </div>
+            @else
+                <div class="space-y-1 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                    <p>
+                        Current balance: <span class="font-semibold">₱{{ number_format($selectedBookingAmountDue, 2) }}</span>
+                    </p>
+
+                    @if ($selectedInspectionRequest === null)
+                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">No inspection request has been sent yet.</p>
+                    @else
+                        <p class="text-xs text-zinc-600 dark:text-zinc-300">
+                            Inspection request: <span class="font-semibold">{{ $selectedInspectionRequest->status }}</span>
+                            requested by {{ $selectedInspectionRequest->requestedBy?->first_name }} {{ $selectedInspectionRequest->requestedBy?->last_name }}
+                            @if ($selectedInspectionRequest->requested_at)
+                                on {{ $selectedInspectionRequest->requested_at->format('M d, Y h:i A') }}
+                            @endif
+                        </p>
+                    @endif
+
+                    @if ($selectedInspection === null)
+                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">Maintenance inspection result is still required before check-out.</p>
+                    @else
+                        <p class="text-xs text-zinc-600 dark:text-zinc-300">
+                            Inspection result: <span class="font-semibold">{{ $selectedInspection->inspection_status }}</span>
+                            by {{ $selectedInspection->inspectedBy?->first_name }} {{ $selectedInspection->inspectedBy?->last_name }}
+                            @if ($selectedInspection->inspected_at)
+                                on {{ $selectedInspection->inspected_at->format('M d, Y h:i A') }}
+                            @endif
+                        </p>
+                        @if ($selectedInspection->remarks)
+                            <p class="text-xs text-zinc-600 dark:text-zinc-300">Remarks: {{ $selectedInspection->remarks }}</p>
+                        @endif
+                    @endif
+
+                    @if ($selectedBookingAmountDue > 0)
+                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">Settle this balance in the Payment module before check-out.</p>
+                    @endif
+                </div>
+
+                <div>
+                    <h2 class="text-sm font-semibold">Fines reported by maintenance</h2>
+                    <div class="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+                        <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
+                            <thead>
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Fine</th>
+                                    <th class="px-3 py-2 text-left">Qty</th>
+                                    <th class="px-3 py-2 text-left">Charge</th>
+                                    <th class="px-3 py-2 text-left">Reported by</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                                @forelse ($selectedGuestFines as $guestFine)
+                                    <tr>
+                                        <td class="px-3 py-2">{{ $this->formatFineLabel($guestFine->fine) }}</td>
+                                        <td class="px-3 py-2">{{ $guestFine->quantity }}</td>
+                                        <td class="px-3 py-2">₱{{ number_format((float) $guestFine->total_charge, 2) }}</td>
+                                        <td class="px-3 py-2">{{ $guestFine->reportedBy?->first_name }} {{ $guestFine->reportedBy?->last_name }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="4" class="px-3 py-4 text-center text-zinc-500">No fines recorded for this facility.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap justify-end gap-2">
+                    @if ($selectedBookingId !== null && Route::has('cashier.bookings.show'))
+                        <flux:button
+                            href="{{ route('cashier.bookings.show', $selectedBookingId) }}"
+                            wire:navigate
+                            variant="ghost"
+                        >
+                            Booking Workspace
+                        </flux:button>
+                    @endif
+
+                    @if (
+                        $selectedBookingId !== null
+                        && $selectedBookingAmountDue > 0
+                        && Route::has('cashier.payments.index')
+                    )
+                        <flux:button
+                            href="{{ route('cashier.payments.index', ['booking' => $selectedBookingId]) }}"
+                            wire:navigate
+                            variant="primary"
+                        >
+                            Settle Payment
+                        </flux:button>
+                    @endif
+
+                    @if ($selectedInspectionRequest === null)
+                        <flux:button wire:click="sendInspectionRequest">
+                            Send Inspection Request
+                        </flux:button>
+                    @elseif ($selectedInspectionRequest->status !== 'Completed')
+                        <flux:button disabled>
+                            Waiting for Maintenance
+                        </flux:button>
+                    @endif
+
+                    @if (
+                        $selectedInspectionRequest !== null
+                        && $selectedInspectionRequest->status === 'Completed'
+                        && $selectedInspection !== null
+                        && $selectedBookingAmountDue <= 0
+                    )
+                        <flux:button variant="primary" wire:click="requestCheckOut">
+                            Check-out
+                        </flux:button>
+                    @else
+                        <flux:button variant="primary" disabled>
+                            Not Ready
+                        </flux:button>
+                    @endif
+
+                    <flux:button variant="ghost" wire:click="cancelSelection">
+                        Close
+                    </flux:button>
+                </div>
+            @endif
         </div>
     </flux:modal>
-
 </div>

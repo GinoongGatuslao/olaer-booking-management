@@ -223,5 +223,11 @@ select:focus[data-flux-control] {
     z-index: 20;
     margin-top: 0.125rem;
     line-height: 1.25;
-    pointer-events: none; /* clicks pass through to whatever the message overlaps */
+    pointer-events: none;
+    /* padding-bottom removed: it did nothing useful here */
+}
+
+
+[data-flux-field]:has(.field-error, [data-flux-error]) {
+    margin-bottom: 1.5rem; 
 }
