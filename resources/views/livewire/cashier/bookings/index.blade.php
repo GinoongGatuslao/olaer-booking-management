@@ -765,7 +765,7 @@ new class extends Component {
                         @endforeach
                     </select>
                     @if ($message = $this->visibleError('transferForm.facility_product_id')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif
-                    <p class="mt-1 text-xs text-zinc-500">Pick the product first, then the exact facility. Cheaper transfers are rejected.</p>
+                    
                 </div>
                 <div>
                     <flux:field class="relative">

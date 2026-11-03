@@ -131,14 +131,18 @@ class TransactionLedgerService
         $charges = $this->money->add($charges, $debits);
         $discounts = $this->money->add($discounts, $adjustmentCredits);
 
-        $payments = $this->verifiedPayments($booking->payments);
+        // A payment recorded at reservation conversion carries both
+        // booking_id and reservation_id, so it appears in both relations.
+        // Merge and dedupe by primary key to avoid counting it twice.
+        $allPayments = collect($booking->payments);
 
         if ($booking->reservation !== null) {
-            $payments = $this->money->add(
-                $payments,
-                $this->verifiedPayments($booking->reservation->payments),
-            );
+            $allPayments = $allPayments->concat($booking->reservation->payments);
         }
+
+        $payments = $this->verifiedPayments(
+            $allPayments->unique(fn ($payment) => $payment->getKey())->values(),
+        );
 
         $payments = $this->netVerifiedPayments(
             $payments,
