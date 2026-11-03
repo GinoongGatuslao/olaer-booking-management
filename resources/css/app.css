@@ -229,6 +229,7 @@ select:focus[data-flux-control] {
 }
 
 
-[data-flux-field]:has(.field-error, [data-flux-error]) {
-    margin-bottom: 1.5rem; 
+/* Reserve room for the floating message only while a field actually has an error. */
+[data-flux-field]:has(.field-error, [data-invalid]) {
+    margin-bottom: 1.5rem;
 }
