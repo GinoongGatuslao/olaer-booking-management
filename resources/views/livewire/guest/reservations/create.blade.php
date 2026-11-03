@@ -15,6 +15,9 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
     {
         // Clear the red highlight of a field as soon as the user edits it.
         $this->resetValidation($property);
+
+        // Capitalise first/last names and lower-case emails.
+        \App\Support\PersonInput::normalize($this, $property);
     }
 
     /** Error text for a required field; an empty required field only turns red (no text). */

@@ -848,6 +848,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             'like',
                             $needle,
                         )
+                        ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                         ->orWhere(
                             'tbl_guest.contact_no',
                             'like',
@@ -873,6 +874,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             'like',
                             $needle,
                         )
+                        ->orWhereRaw(\App\Support\NameSearch::sql('requested_user.first_name', 'requested_user.middle_name', 'requested_user.last_name'), \App\Support\NameSearch::bindings($needle))
                         ->orWhere(
                             'assigned_user.first_name',
                             'like',
@@ -882,7 +884,8 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                             'assigned_user.last_name',
                             'like',
                             $needle,
-                        );
+                        )
+                        ->orWhereRaw(\App\Support\NameSearch::sql('assigned_user.first_name', 'assigned_user.middle_name', 'assigned_user.last_name'), \App\Support\NameSearch::bindings($needle));
 
                     if ($numeric !== null) {
                         $query->orWhere(

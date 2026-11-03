@@ -527,16 +527,19 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     ->orWhere('booking_guest.first_name', 'like', $needle)
                     ->orWhere('booking_guest.middle_name', 'like', $needle)
                     ->orWhere('booking_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('booking_guest.first_name', 'booking_guest.middle_name', 'booking_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('booking_guest.contact_no', 'like', $needle)
                     ->orWhere('booking_guest.email', 'like', $needle)
                     ->orWhere('reservation_guest.first_name', 'like', $needle)
                     ->orWhere('reservation_guest.middle_name', 'like', $needle)
                     ->orWhere('reservation_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('reservation_guest.first_name', 'reservation_guest.middle_name', 'reservation_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('reservation_guest.contact_no', 'like', $needle)
                     ->orWhere('reservation_guest.email', 'like', $needle)
                     ->orWhere('entrance_guest.first_name', 'like', $needle)
                     ->orWhere('entrance_guest.middle_name', 'like', $needle)
                     ->orWhere('entrance_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('entrance_guest.first_name', 'entrance_guest.middle_name', 'entrance_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('entrance_guest.contact_no', 'like', $needle)
                     ->orWhere('entrance_guest.email', 'like', $needle);
 
@@ -647,6 +650,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     ->orWhere('tbl_guest.first_name', 'like', $needle)
                     ->orWhere('tbl_guest.middle_name', 'like', $needle)
                     ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('tbl_guest.contact_no', 'like', $needle)
                     ->orWhere('tbl_guest.email', 'like', $needle);
             });
@@ -688,6 +692,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     ->orWhere('tbl_guest.first_name', 'like', $needle)
                     ->orWhere('tbl_guest.middle_name', 'like', $needle)
                     ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('tbl_guest.contact_no', 'like', $needle)
                     ->orWhere('tbl_guest.email', 'like', $needle);
             });
@@ -728,6 +733,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 $query->where('tbl_guest.first_name', 'like', $needle)
                     ->orWhere('tbl_guest.middle_name', 'like', $needle)
                     ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('tbl_guest.contact_no', 'like', $needle)
                     ->orWhere('tbl_guest.email', 'like', $needle);
 

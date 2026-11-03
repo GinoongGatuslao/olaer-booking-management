@@ -228,6 +228,7 @@ new class extends Component {
                     ->orWhere('tbl_guest.first_name', 'like', $needle)
                     ->orWhere('tbl_guest.middle_name', 'like', $needle)
                     ->orWhere('tbl_guest.last_name', 'like', $needle)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($needle))
                     ->orWhere('tbl_guest.contact_no', 'like', $needle)
                     ->orWhere('tbl_guest.email', 'like', $needle)
                     ->orWhere('tbl_facility.facility_name', 'like', $needle);

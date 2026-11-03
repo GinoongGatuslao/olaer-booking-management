@@ -436,6 +436,7 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
                                                 'like',
                                                 $like,
                                             )
+                                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($like))
                                             ->orWhere(
                                                 'email',
                                                 'like',

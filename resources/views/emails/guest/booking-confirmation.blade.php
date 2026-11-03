@@ -32,7 +32,7 @@
     <h1 style="font-size: 22px; margin-bottom: 4px;">Olaer Spring Resort</h1>
     <h2 style="font-size: 18px; color: #1d4ed8; margin-top: 0;">Booking Submitted for GCash Verification</h2>
 
-    <p>Hello {{ trim($guest->first_name . ' ' . $guest->last_name) }},</p>
+    <p>Hello {{ trim(\App\Support\PersonInput::name((string) $guest->first_name) . ' ' . \App\Support\PersonInput::name((string) $guest->last_name)) }},</p>
     <p>Your booking has been submitted. The cashier still needs to verify your uploaded GCash proof before the booking becomes fully confirmed.</p>
 
     <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
@@ -43,7 +43,7 @@
             </tr>
             <tr>
                 <td style="{{ $label }}">Guest</td>
-                <td style="{{ $value }}">{{ trim($guest->first_name . ' ' . ($guest->middle_name ? $guest->middle_name . ' ' : '') . $guest->last_name) }}</td>
+                <td style="{{ $value }}">{{ trim(\App\Support\PersonInput::name((string) $guest->first_name) . ' ' . ($guest->middle_name ? $guest->middle_name . ' ' : '') . \App\Support\PersonInput::name((string) $guest->last_name)) }}</td>
             </tr>
         </tbody>
     </table>
@@ -134,7 +134,7 @@
         <h3 style="font-size: 16px; margin-top: 20px;">Paid Room Extra Guest Names</h3>
         <ul>
             @foreach ($booking->extraGuests as $extraGuest)
-                <li>{{ trim($extraGuest->first_name . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . $extraGuest->last_name) }}</li>
+                <li>{{ trim(\App\Support\PersonInput::name((string) $extraGuest->first_name) . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . \App\Support\PersonInput::name((string) $extraGuest->last_name)) }}</li>
             @endforeach
         </ul>
     @endif

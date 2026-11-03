@@ -624,6 +624,7 @@ new class extends Component {
                 $subQuery->where('tbl_booking.b_ref_no', 'like', $search)
                     ->orWhere('tbl_guest.first_name', 'like', $search)
                     ->orWhere('tbl_guest.last_name', 'like', $search)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($search))
                     ->orWhere('tbl_guest.contact_no', 'like', $search)
                     ->orWhere('tbl_guest.email', 'like', $search)
                     ->orWhere('tbl_facility.facility_name', 'like', $search);

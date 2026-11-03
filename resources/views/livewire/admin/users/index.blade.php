@@ -112,6 +112,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     $query->where('first_name', 'like', $like)
                         ->orWhere('middle_name', 'like', $like)
                         ->orWhere('last_name', 'like', $like)
+                        ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($like))
                         ->orWhere('username', 'like', $like)
                         ->orWhere('email', 'like', $like)
                         ->orWhere('contact_no', 'like', $like)
@@ -145,6 +146,9 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
     {
         // Clear the red highlight of a field as soon as the user edits it.
         $this->resetValidation($property);
+
+        // Capitalise first/last names and lower-case emails.
+        \App\Support\PersonInput::normalize($this, $property);
     }
 
     /** Error text to display under a field; empty required errors only highlight the box. */
@@ -297,6 +301,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                 'required',
                 'string',
                 'max:50',
+                'not_regex:/[\s\p{Z}]/u', // no spaces anywhere (start, middle or end)
                 Rule::unique('tbl_user', 'username')
                     ->ignore($this->editingUserId, 'user_id'),
             ],
@@ -337,6 +342,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             'firstName.required' => self::REQUIRED_MESSAGE,
             'lastName.required' => self::REQUIRED_MESSAGE,
             'username.required' => self::REQUIRED_MESSAGE,
+            'username.not_regex' => 'Username cannot contain spaces.',
             'username.unique' => 'This username is already taken.',
             'email.required' => self::REQUIRED_MESSAGE,
             'email.email' => 'Enter a valid email address.',
@@ -422,9 +428,9 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             }
 
             $payload = [
-                'first_name' => $clean($validated['firstName']),
+                'first_name' => \App\Support\PersonInput::name((string) $clean($validated['firstName'])),
                 'middle_name' => $clean($validated['middleName']),
-                'last_name' => $clean($validated['lastName']),
+                'last_name' => \App\Support\PersonInput::name((string) $clean($validated['lastName'])),
                 'username' => $clean($validated['username']),
                 'email' => mb_strtolower((string) $clean($validated['email'])),
                 'contact_no' => $clean($validated['contactNo']),

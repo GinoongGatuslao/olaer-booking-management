@@ -159,6 +159,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     ->orWhereHas('booking.guest', function ($query) use ($term): void {
                         $query->where('first_name', 'like', $term)
                             ->orWhere('last_name', 'like', $term)
+                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($term))
                             ->orWhere('contact_no', 'like', $term)
                             ->orWhere('email', 'like', $term);
                     })
@@ -168,6 +169,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                     ->orWhereHas('reservation.guest', function ($query) use ($term): void {
                         $query->where('first_name', 'like', $term)
                             ->orWhere('last_name', 'like', $term)
+                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($term))
                             ->orWhere('contact_no', 'like', $term)
                             ->orWhere('email', 'like', $term);
                     });

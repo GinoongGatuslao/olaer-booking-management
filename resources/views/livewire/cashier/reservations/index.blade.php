@@ -127,6 +127,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         $guestQuery->where('first_name', 'like', $search)
                             ->orWhere('middle_name', 'like', $search)
                             ->orWhere('last_name', 'like', $search)
+                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($search))
                             ->orWhere('contact_no', 'like', $search)
                             ->orWhere('email', 'like', $search);
                     });

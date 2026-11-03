@@ -43,7 +43,7 @@
         <h2 style="font-size: 18px; color: #047857; margin-top: 0;">Reservation Confirmation</h2>
     @endif
 
-    <p>Hello {{ trim($guest->first_name . ' ' . $guest->last_name) }},</p>
+    <p>Hello {{ trim(\App\Support\PersonInput::name((string) $guest->first_name) . ' ' . \App\Support\PersonInput::name((string) $guest->last_name)) }},</p>
 
     @if ($action === 'cancelled')
         <p>Your reservation has been cancelled. Keep this email for your records.</p>
@@ -59,7 +59,7 @@
             </tr>
             <tr>
                 <td style="{{ $label }}">Guest</td>
-                <td style="{{ $value }}">{{ trim($guest->first_name . ' ' . ($guest->middle_name ? $guest->middle_name . ' ' : '') . $guest->last_name) }}</td>
+                <td style="{{ $value }}">{{ trim(\App\Support\PersonInput::name((string) $guest->first_name) . ' ' . ($guest->middle_name ? $guest->middle_name . ' ' : '') . \App\Support\PersonInput::name((string) $guest->last_name)) }}</td>
             </tr>
             <tr>
                 <td style="{{ $label }}">Contact No.</td>
@@ -145,7 +145,7 @@
         <h3 style="font-size: 16px; margin-top: 20px;">Paid Room Extra Guest Names</h3>
         <ul>
             @foreach ($reservation->extraGuests as $extraGuest)
-                <li>{{ trim($extraGuest->first_name . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . $extraGuest->last_name) }}</li>
+                <li>{{ trim(\App\Support\PersonInput::name((string) $extraGuest->first_name) . ' ' . ($extraGuest->middle_name ? $extraGuest->middle_name . ' ' : '') . \App\Support\PersonInput::name((string) $extraGuest->last_name)) }}</li>
             @endforeach
         </ul>
     @endif

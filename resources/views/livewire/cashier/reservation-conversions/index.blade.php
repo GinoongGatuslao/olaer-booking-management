@@ -53,6 +53,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                         ->orWhereHas('guest', function ($query) use ($search): void {
                             $query->where('first_name', 'like', "%{$search}%")
                                 ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings("%{$search}%"))
                                 ->orWhere('contact_no', 'like', "%{$search}%")
                                 ->orWhere('email', 'like', "%{$search}%");
                         });

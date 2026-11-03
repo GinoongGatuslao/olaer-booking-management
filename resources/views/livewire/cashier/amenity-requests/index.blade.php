@@ -585,6 +585,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                                 'like',
                                                 $search,
                                             )
+                                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($search))
                                             ->orWhere(
                                                 'contact_no',
                                                 'like',
@@ -642,6 +643,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                                 'like',
                                                 $search,
                                             )
+                                            ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($search))
                                             ->orWhere(
                                                 'username',
                                                 'like',

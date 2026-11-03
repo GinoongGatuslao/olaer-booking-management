@@ -159,12 +159,14 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             $query->where('first_name', 'like', $like)
                                 ->orWhere('middle_name', 'like', $like)
                                 ->orWhere('last_name', 'like', $like)
+                                ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($like))
                                 ->orWhere('username', 'like', $like);
                         })
                         ->orWhereHas('handledBy', function ($query) use ($like): void {
                             $query->where('first_name', 'like', $like)
                                 ->orWhere('middle_name', 'like', $like)
                                 ->orWhere('last_name', 'like', $like)
+                                ->orWhereRaw(\App\Support\NameSearch::sql('first_name', 'middle_name', 'last_name'), \App\Support\NameSearch::bindings($like))
                                 ->orWhere('username', 'like', $like);
                         })
                         ->orWhereHas('payments', function ($query) use ($like): void {
