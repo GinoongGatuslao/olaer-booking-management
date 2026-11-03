@@ -1,9 +1,12 @@
 <?php
 
 use App\Models\BookingDetail;
+use App\Models\Facility;
 use App\Models\FacilityProduct;
 use App\Services\BookingWorkflowService;
+use App\Services\FacilityAvailabilityService;
 use App\Services\RoomOccupantService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
@@ -69,6 +72,7 @@ new class extends Component {
         'booking_details_id' => '',
         'label' => '',
         'facility_product_id' => '',
+        'facility_id' => '',
     ];
 
     public array $cancelDetailForm = [
@@ -90,7 +94,16 @@ new class extends Component {
             'bookingStatuses' => $this->bookingStatuses(),
             'detailStatuses' => $this->detailStatuses(),
             'transferProducts' => $this->transferProducts(),
+            'transferFacilities' => $this->transferFacilities(),
         ];
+    }
+
+    public function updatedTransferForm(mixed $value, string $key): void
+    {
+        // A different destination product means the facility must be chosen again.
+        if ($key === 'facility_product_id') {
+            $this->transferForm['facility_id'] = '';
+        }
     }
 
     public function updatedSearch(): void
@@ -225,6 +238,9 @@ new class extends Component {
             'transferForm.facility_product_id.required' => 'Choose the facility to transfer to.',
             'transferForm.facility_product_id.integer' => 'Choose a facility from the list.',
             'transferForm.facility_product_id.exists' => 'That facility is no longer available. Choose another one.',
+            'transferForm.facility_id.required' => 'Choose the facility to assign.',
+            'transferForm.facility_id.integer' => 'Choose a facility from the list.',
+            'transferForm.facility_id.exists' => 'That facility is no longer available. Choose another one.',
 
             'cancelDetailForm.booking_details_id.required' => $unavailable,
             'cancelDetailForm.booking_details_id.integer' => $unavailable,
@@ -252,7 +268,8 @@ new class extends Component {
         return [
             'rescheduleForm.new_check_in_date' => 'new check-in date',
             'rescheduleForm.new_check_out_date' => 'new check-out date',
-            'transferForm.facility_product_id' => 'facility',
+            'transferForm.facility_product_id' => 'facility product',
+            'transferForm.facility_id' => 'facility',
             'cancelDetailForm.reason' => 'cancellation reason',
             'occupantForm.occupants' => 'occupants',
             'occupantForm.occupants.*.first_name' => 'occupant first name',
@@ -329,6 +346,7 @@ new class extends Component {
             'booking_details_id' => (string) $bookingDetailsId,
             'label' => $detail->booking->b_ref_no . ' - ' . $detail->facility->facility_name,
             'facility_product_id' => (string) ($detail->facility_product_id ?? ''),
+            'facility_id' => '',
         ];
     }
 
@@ -338,6 +356,7 @@ new class extends Component {
             'booking_details_id' => '',
             'label' => '',
             'facility_product_id' => '',
+            'facility_id' => '',
         ];
     }
 
@@ -346,12 +365,25 @@ new class extends Component {
         $validated = $this->validate([
             'transferForm.booking_details_id' => ['required', 'integer', 'exists:tbl_booking_details,booking_details_id'],
             'transferForm.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
+            'transferForm.facility_id' => ['required', 'integer', 'exists:tbl_facility,facility_id'],
         ]);
 
         try {
-            $bookingWorkflow->transferBookingDetailToProduct(
+            $facilityId = (int) $validated['transferForm']['facility_id'];
+
+            // The chosen facility must belong to the chosen destination product.
+            if (! Facility::query()
+                ->whereKey($facilityId)
+                ->where('facility_product_id', (int) $validated['transferForm']['facility_product_id'])
+                ->exists()
+            ) {
+                throw new \InvalidArgumentException('That facility does not belong to the chosen facility product.');
+            }
+
+            // Transfer to the exact facility the cashier picked.
+            $bookingWorkflow->transferBookingDetail(
                 (int) $validated['transferForm']['booking_details_id'],
-                (int) $validated['transferForm']['facility_product_id']
+                $facilityId,
             );
 
             $this->cancelTransfer();
@@ -598,6 +630,40 @@ new class extends Component {
             ->pluck('status');
     }
 
+    /** Facilities of the chosen product that are free for this booking's schedule. */
+    private function transferFacilities()
+    {
+        $productId = (int) ($this->transferForm['facility_product_id'] ?? 0);
+        $detailId = (int) ($this->transferForm['booking_details_id'] ?? 0);
+
+        if ($productId < 1 || $detailId < 1) {
+            return collect();
+        }
+
+        $detail = BookingDetail::query()->find($detailId);
+
+        if (! $detail) {
+            return collect();
+        }
+
+        try {
+            $facilityIds = app(FacilityAvailabilityService::class)->availableFacilityIds(
+                $productId,
+                $detail->getRawOriginal('rate_code') ?: (string) $detail->rate_type,
+                Carbon::parse($detail->check_in_date)->toDateString(),
+                Carbon::parse($detail->check_out_date)->toDateString(),
+            );
+        } catch (\Throwable) {
+            return collect();
+        }
+
+        return Facility::query()
+            ->whereIn('facility_id', $facilityIds->all())
+            ->get(['facility_id', 'facility_name'])
+            ->sortBy('facility_name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
     private function transferProducts()
     {
         if ($this->transferForm['booking_details_id'] === '') {
@@ -692,16 +758,31 @@ new class extends Component {
             <form wire:submit.prevent="saveTransfer" novalidate class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div>
                     <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Destination product <span class="text-red-500">*</span></label>
-                    <select wire:model="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100{{ $errors->has('transferForm.facility_product_id') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}">
+                    <select wire:model.live="transferForm.facility_product_id" class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100{{ $errors->has('transferForm.facility_product_id') ? ' !border-red-500 !ring-1 !ring-red-500' : '' }}">
                         <option value="">Choose upgrade product</option>
                         @foreach ($transferProducts as $product)
                             <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </select>
                     @if ($message = $this->visibleError('transferForm.facility_product_id')) <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @endif
-                    <p class="mt-1 text-xs text-zinc-500">Exact unit is assigned automatically; cheaper transfers are rejected.</p>
+                    <p class="mt-1 text-xs text-zinc-500">Pick the product first, then the exact facility. Cheaper transfers are rejected.</p>
                 </div>
-                <flux:button type="submit" variant="primary">Auto-assign Transfer</flux:button>
+                <div>
+                    <flux:field class="relative">
+                        <flux:label>Facility <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model="transferForm.facility_id" :invalid="$errors->has('transferForm.facility_id')">
+                            <option value="">Choose a facility</option>
+                            @foreach ($transferFacilities as $transferFacility)
+                                <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
+                            @endforeach
+                        </flux:select>
+                        @if ($message = $this->visibleError('transferForm.facility_id')) <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @endif
+                    </flux:field>
+                    @if ($transferForm['facility_product_id'] !== '' && $transferFacilities->isEmpty())
+                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this booking's schedule.</p>
+                    @endif
+                </div>
+                <flux:button type="submit" variant="primary">Assign Transfer</flux:button>
                 <flux:button type="button" wire:click="cancelTransfer">Cancel</flux:button>
             </form>
         </div>

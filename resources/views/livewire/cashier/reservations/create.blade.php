@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
@@ -85,6 +86,13 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
     public array $groups = [];
     public array $roomOccupants = [];
     public string $planTotal = '';
+
+    /** Facility picked for each unit: group index => unit position => facility id. */
+    public array $facilitySelection = [];
+
+    /** Assigned facilities with their available alternatives (display only). */
+    #[Locked]
+    public array $facilityPlan = [];
 
     public string $firstName = '';
     public string $middleName = '';
@@ -199,6 +207,7 @@ protected function messages(): array
         ];
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->clearFacilityPlan();
         $this->updatePartyCount();
     }
 
@@ -213,6 +222,7 @@ protected function messages(): array
         $this->resetErrorBag('groups');
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->clearFacilityPlan();
         $this->updatePartyCount();
     }
 
@@ -255,6 +265,7 @@ protected function messages(): array
 
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->clearFacilityPlan();
         $this->updatePartyCount();
     }
 
@@ -262,6 +273,7 @@ protected function messages(): array
     {
         $this->syncRoomOccupantRows();
         $this->planTotal = '';
+        $this->clearFacilityPlan();
     }
 
     public function savePlan(
@@ -278,12 +290,54 @@ protected function messages(): array
                 $this->groups,
             );
             $this->syncRoomOccupantRows();
-            $this->planTotal = $assignments->quoteIntentTotal($intent);
+            $this->planTotal = $assignments->quoteIntentTotal($intent, $this->facilitySelection);
+            $this->loadFacilityPlan($intent, $assignments);
         } catch (\InvalidArgumentException $exception) {
             $this->addError('plan', $exception->getMessage());
         } catch (\Throwable $exception) {
             report($exception);
             $this->addError('plan', 'The facility plan could not be saved. Please try again.');
+        }
+    }
+
+    private function clearFacilityPlan(): void
+    {
+        $this->facilityPlan = [];
+        $this->facilitySelection = [];
+    }
+
+    private function loadFacilityPlan(
+        \App\Models\FacilityRequirementIntent $intent,
+        FacilityAssignmentService $assignments,
+    ): void {
+        $rows = $assignments->previewAssignments($intent, $this->facilitySelection);
+        $selection = [];
+
+        foreach ($rows as $row) {
+            $selection[$row['group_index']][$row['position']] = (string) $row['facility_id'];
+        }
+
+        $this->facilityPlan = $rows;
+        $this->facilitySelection = $selection;
+    }
+
+    /** Re-quote when the cashier picks a different facility from a dropdown. */
+    public function updatedFacilitySelection(): void
+    {
+        $this->resetErrorBag('plan');
+
+        try {
+            $assignments = app(FacilityAssignmentService::class);
+            $intent = app(FacilityRequirementService::class)->ownedIntent($this->token, session()->getId());
+
+            $this->planTotal = $assignments->quoteIntentTotal($intent, $this->facilitySelection);
+            
+            $this->loadFacilityPlan($intent, $assignments);
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('plan', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('plan', 'The facility choice could not be applied. Check availability again.');
         }
     }
 
@@ -312,6 +366,7 @@ protected function messages(): array
                 'barangay' => $this->barangay,
                 'purok' => $this->purok,
                 'room_occupants' => $this->roomOccupants,
+                'facility_selection' => $this->facilitySelection,
                 'user_id' => (int) Auth::id(),
             ]);
 
@@ -598,6 +653,40 @@ protected function messages(): array
                     <span class="font-semibold">Total: ₱{{ number_format((float) $planTotal, 2) }}</span>
                 @endif
             </div>
+
+            @if ($facilityPlan !== [])
+                <div class="mt-6 space-y-4">
+                    <div>
+                        <h3 class="font-semibold">Assigned facilities</h3>
+                        <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                            Facilities were assigned automatically. Choose a different one from the list if the guest asks for a specific facility.
+                        </p>
+                    </div>
+
+                    @foreach (collect($facilityPlan)->groupBy('group_index') as $groupIndex => $planRows)
+                        @php($firstRow = $planRows->first())
+
+                        <div wire:key="facility-plan-{{ $groupIndex }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                            <p class="mb-3 text-sm font-medium">
+                                {{ $firstRow['product'] }} · {{ $firstRow['rate_code'] }} · {{ $firstRow['check_in_date'] }}@if ($firstRow['check_out_date'] !== $firstRow['check_in_date']) to {{ $firstRow['check_out_date'] }}@endif
+                            </p>
+
+                            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                @foreach ($planRows as $planRow)
+                                    <flux:field class="relative" wire:key="facility-plan-{{ $groupIndex }}-{{ $planRow['position'] }}">
+                                        <flux:label>Unit {{ $planRow['position'] + 1 }}</flux:label>
+                                        <flux:select wire:model.live="facilitySelection.{{ $planRow['group_index'] }}.{{ $planRow['position'] }}">
+                                            @foreach ($planRow['options'] as $option)
+                                                <option value="{{ $option['facility_id'] }}">{{ $option['facility_name'] }}</option>
+                                            @endforeach
+                                        </flux:select>
+                                    </flux:field>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </flux:card>
 
         @if ($roomOccupants !== [])

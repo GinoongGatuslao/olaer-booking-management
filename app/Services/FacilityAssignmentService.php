@@ -58,7 +58,11 @@ class FacilityAssignmentService
             }
 
             $facilities = $this->lockCandidateFacilities($lockedIntent);
-            $assignments = $this->allocate($lockedIntent, $facilities);
+            $assignments = $this->allocate(
+                $lockedIntent,
+                $facilities,
+                (array) ($guestData['facility_selection'] ?? []),
+            );
             $roomOccupantGroups = array_values($guestData['room_occupants'] ?? []);
             $roomAssignmentCount = collect($assignments)
                 ->filter(fn (array $assignment): bool => $this->isRoomAssignment($assignment))
@@ -211,9 +215,77 @@ class FacilityAssignmentService
     }
 
     /** @return numeric-string */
-    public function quoteIntentTotal(FacilityRequirementIntent $intent): string
+    /**
+     * Auto-assigned (or cashier-chosen) facilities for each requirement, with the
+     * other available facilities that could be chosen instead.
+     *
+     * @param  array<int, array<int, int|string|null>>  $selection  group index => unit position => facility id
+     * @return array<int, array<string, mixed>>
+     */
+    public function previewAssignments(FacilityRequirementIntent $intent, array $selection = []): array
     {
-        return DB::transaction(function () use ($intent): string {
+        return DB::transaction(function () use ($intent, $selection): array {
+            $lockedIntent = FacilityRequirementIntent::query()
+                ->with('groups.facilityProduct.productRates')
+                ->whereKey($intent->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedIntent->status !== 'Draft' || $lockedIntent->expires_at->isPast()) {
+                throw new InvalidArgumentException('This facility plan can no longer be quoted.');
+            }
+
+            $facilities = $this->lockCandidateFacilities($lockedIntent);
+            $assignments = $this->allocate($lockedIntent, $facilities, $selection);
+            $occupiedKeys = $this->occupiedKeys($facilities->modelKeys());
+
+            return collect($assignments)->map(function (array $assignment, int $index) use ($assignments, $facilities, $occupiedKeys): array {
+                $group = $assignment['group'];
+
+                // Keys held by the other units of this plan, so two units never pick the same facility.
+                $otherKeys = array_fill_keys(
+                    collect($assignments)
+                        ->reject(fn (array $other, int $otherIndex): bool => $otherIndex === $index)
+                        ->flatMap(fn (array $other): array => $other['keys'])
+                        ->all(),
+                    true,
+                );
+
+                $options = $facilities
+                    ->where('facility_product_id', $group->facility_product_id)
+                    ->filter(fn (Facility $candidate): bool => ! $this->conflicts(
+                        $this->keysFor($candidate, $group),
+                        $occupiedKeys,
+                        $otherKeys,
+                    ))
+                    ->sortBy('facility_name', SORT_NATURAL | SORT_FLAG_CASE)
+                    ->map(fn (Facility $candidate): array => [
+                        'facility_id' => (int) $candidate->facility_id,
+                        'facility_name' => (string) $candidate->facility_name,
+                    ])
+                    ->values()
+                    ->all();
+
+                return [
+                    'group_index' => $assignment['group_index'],
+                    'position' => $assignment['position'],
+                    'product' => (string) $group->facilityProduct->display_name,
+                    'rate_code' => $group->rate_code->value,
+                    'check_in_date' => $group->check_in_date->toDateString(),
+                    'check_out_date' => $group->check_out_date->toDateString(),
+                    'facility_id' => (int) $assignment['facility']->facility_id,
+                    'facility_name' => (string) $assignment['facility']->facility_name,
+                    'total_price' => (string) $assignment['quote']['total_price'],
+                    'options' => $options,
+                ];
+            })->values()->all();
+        }, attempts: 3);
+    }
+
+    /** @param  array<int, array<int, int|string|null>>  $selection */
+    public function quoteIntentTotal(FacilityRequirementIntent $intent, array $selection = []): string
+    {
+        return DB::transaction(function () use ($intent, $selection): string {
             $lockedIntent = FacilityRequirementIntent::query()
                 ->with('groups.facilityProduct.productRates')
                 ->whereKey($intent->getKey())
@@ -227,6 +299,7 @@ class FacilityAssignmentService
             $assignments = $this->allocate(
                 $lockedIntent,
                 $this->lockCandidateFacilities($lockedIntent),
+                $selection,
             );
 
             return $this->money->add(
@@ -435,6 +508,7 @@ class FacilityAssignmentService
             $assignments = $this->allocate(
                 $lockedIntent,
                 $this->lockCandidateFacilities($lockedIntent),
+                (array) ($guestData['facility_selection'] ?? []),
             );
             $roomOccupantGroups = array_values($guestData['room_occupants'] ?? []);
             $roomAssignmentCount = collect($assignments)
@@ -731,49 +805,77 @@ class FacilityAssignmentService
      * @param  EloquentCollection<int, Facility>  $facilities
      * @return array<int, array{group: FacilityRequirementGroup, facility: Facility, quote: array<string, mixed>, guest_count: int, paid_extra_guest_count: int}>
      */
-    private function allocate(FacilityRequirementIntent $intent, EloquentCollection $facilities): array
-    {
-        $candidateIds = $facilities->modelKeys();
-        $occupiedKeys = FacilityScheduleBlock::query()
-            ->whereIn('facility_id', $candidateIds)
-            ->lockForUpdate()
-            ->get()
-            ->mapWithKeys(fn (FacilityScheduleBlock $block): array => [
-                $this->blockKey(
-                    (int) $block->facility_id,
-                    $block->service_date->toDateString(),
-                    $block->slot->value,
-                ) => true,
-            ]);
+    /**
+     * @param  array<int, array<int, int|string|null>>  $selection  group index => unit position => facility id
+     */
+    private function allocate(
+        FacilityRequirementIntent $intent,
+        EloquentCollection $facilities,
+        array $selection = [],
+    ): array {
+        $occupiedKeys = $this->occupiedKeys($facilities->modelKeys());
         $plannedKeys = [];
         $assignments = [];
 
-        foreach ($intent->groups->sortBy('facility_requirement_group_id') as $group) {
+        foreach ($intent->groups->sortBy('facility_requirement_group_id')->values() as $groupIndex => $group) {
             $groupFacilities = $facilities
                 ->where('facility_product_id', $group->facility_product_id)
                 ->values();
             $guestCounts = $this->distributedGuestCounts($group);
-            $assigned = 0;
 
-            foreach ($groupFacilities as $facility) {
-                $blocks = $this->scheduleBlocks->requiredBlocks(
-                    (int) $facility->facility_id,
-                    $group->facilityProduct->schedule_policy,
-                    $group->rate_code,
-                    $group->check_in_date,
-                    $group->check_out_date,
-                );
-                $keys = collect($blocks)->map(fn (array $block): string => $this->blockKey(
-                    $block['facility_id'],
-                    $block['service_date'],
-                    $block['slot']->value,
-                ));
+            $chosen = [];
 
-                if ($keys->contains(fn (string $key): bool => $occupiedKeys->has($key) || isset($plannedKeys[$key]))) {
-                    continue;
+            for ($position = 0; $position < $group->quantity; $position++) {
+                $value = $selection[$groupIndex][$position] ?? null;
+                $chosen[$position] = filled($value) ? (int) $value : null;
+            }
+
+            $explicitIds = array_values(array_filter($chosen));
+
+            if (count($explicitIds) !== count(array_unique($explicitIds))) {
+                throw new InvalidArgumentException('The same facility cannot be selected more than once.');
+            }
+
+            $usedInGroup = [];
+
+            for ($position = 0; $position < $group->quantity; $position++) {
+                $facility = null;
+
+                if ($chosen[$position] !== null) {
+                    // The cashier picked this exact facility.
+                    $facility = $groupFacilities->firstWhere('facility_id', $chosen[$position]);
+
+                    if (
+                        $facility === null
+                        || $this->conflicts($this->keysFor($facility, $group), $occupiedKeys, $plannedKeys)
+                    ) {
+                        throw new InvalidArgumentException(
+                            'A selected facility is no longer available. Check availability again and choose another.',
+                        );
+                    }
+                } else {
+                    // Not chosen: assign the first free facility automatically.
+                    foreach ($groupFacilities as $candidate) {
+                        if (
+                            in_array((int) $candidate->facility_id, $explicitIds, true)
+                            || isset($usedInGroup[(int) $candidate->facility_id])
+                            || $this->conflicts($this->keysFor($candidate, $group), $occupiedKeys, $plannedKeys)
+                        ) {
+                            continue;
+                        }
+
+                        $facility = $candidate;
+
+                        break;
+                    }
+
+                    if ($facility === null) {
+                        throw new InvalidArgumentException('The requested facility quantity is no longer available. Please refresh the plan and try again.');
+                    }
                 }
 
-                $guestCount = $guestCounts[$assigned];
+                $keys = $this->keysFor($facility, $group);
+                $guestCount = $guestCounts[$position];
                 $discount = $this->discounts->resolveForFacility(
                     (int) $facility->facility_id,
                     $group->check_in_date->toDateString(),
@@ -792,29 +894,64 @@ class FacilityAssignmentService
                     $plannedKeys[$key] = true;
                 }
 
+                $usedInGroup[(int) $facility->facility_id] = true;
+
                 $assignments[] = [
                     'group' => $group,
+                    'group_index' => $groupIndex,
+                    'position' => $position,
                     'facility' => $facility,
+                    'keys' => $keys->all(),
                     'quote' => $quote,
                     'guest_count' => $guestCount,
                     'paid_extra_guest_count' => (int) $quote['extra_guest_count'],
                 ];
-                $assigned++;
-
-                if ($assigned === $group->quantity) {
-                    break;
-                }
-            }
-
-            if ($assigned !== $group->quantity) {
-                throw new InvalidArgumentException('The requested facility quantity is no longer available. Please refresh the plan and try again.');
             }
         }
 
         return $assignments;
     }
 
-    /** @return array<int, int> */
+    /** @param array<int, int> $facilityIds */
+    private function occupiedKeys(array $facilityIds): \Illuminate\Support\Collection
+    {
+        return FacilityScheduleBlock::query()
+            ->whereIn('facility_id', $facilityIds)
+            ->lockForUpdate()
+            ->get()
+            ->mapWithKeys(fn (FacilityScheduleBlock $block): array => [
+                $this->blockKey(
+                    (int) $block->facility_id,
+                    $block->service_date->toDateString(),
+                    $block->slot->value,
+                ) => true,
+            ]);
+    }
+
+    /** Schedule block keys a facility would occupy for a requirement group. */
+    private function keysFor(Facility $facility, FacilityRequirementGroup $group): \Illuminate\Support\Collection
+    {
+        return collect($this->scheduleBlocks->requiredBlocks(
+            (int) $facility->facility_id,
+            $group->facilityProduct->schedule_policy,
+            $group->rate_code,
+            $group->check_in_date,
+            $group->check_out_date,
+        ))->map(fn (array $block): string => $this->blockKey(
+            $block['facility_id'],
+            $block['service_date'],
+            $block['slot']->value,
+        ));
+    }
+
+    /** @param array<string, bool> $plannedKeys */
+    private function conflicts(\Illuminate\Support\Collection $keys, \Illuminate\Support\Collection $occupiedKeys, array $plannedKeys): bool
+    {
+        return $keys->contains(
+            fn (string $key): bool => $occupiedKeys->has($key) || isset($plannedKeys[$key]),
+        );
+    }
+
     private function distributedGuestCounts(FacilityRequirementGroup $group): array
     {
         $minimum = intdiv($group->estimated_users, $group->quantity);

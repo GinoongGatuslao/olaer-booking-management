@@ -523,7 +523,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
             </h1>
 
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Create and update discounts for entrance fees and facility bookings.
+                Manage discounts for entrance fees and facility bookings.
             </p>
         </div>
         <div class="flex gap-2">

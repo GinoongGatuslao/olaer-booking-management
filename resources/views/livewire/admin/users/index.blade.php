@@ -364,7 +364,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
             if ((int) $validated['roleId'] !== (int) $currentUser->role_id) {
                 $this->addError(
                     'roleId',
-                    'You cannot change your own role while logged in. Ask another administrator.',
+                    'You cannot change your own role while logged in. ',
                 );
 
                 return;

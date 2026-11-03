@@ -698,7 +698,7 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
             </h1>
 
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Paginated amenity-damage and situational fine master data.
+                Manage fine categories and charge amounts.
             </p>
         </div>
 

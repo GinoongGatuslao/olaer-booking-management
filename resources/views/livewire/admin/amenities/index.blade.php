@@ -425,7 +425,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             </h1>
 
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Paginated rentable and inclusive amenity master data.
+                Manage rentable and inclusive amenities, including pricing and availability.
             </p>
         </div>
         <div class="flex gap-2">

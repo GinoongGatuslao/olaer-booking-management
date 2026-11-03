@@ -113,15 +113,21 @@ class ReservationFacilityOperationService
         );
     }
 
+    /**
+     * Transfer a reservation facility to another product. When $facilityId is given the
+     * cashier chose that exact facility; otherwise the first available one is assigned.
+     */
     public function transferDetailToProduct(
         int $reservationDetailId,
         int $facilityProductId,
         int $userId,
+        ?int $facilityId = null,
     ): ReservationDetail {
         return DB::transaction(function () use (
             $reservationDetailId,
             $facilityProductId,
             $userId,
+            $facilityId,
         ): ReservationDetail {
             $detail = ReservationDetail::query()
                 ->with(['reservation.booking', 'facility.facilityProduct', 'discount'])
@@ -160,11 +166,15 @@ class ReservationFacilityOperationService
                 $detail->check_out_date->toDateString(),
             );
 
-            $newFacilityId = $candidateIds->first();
+            $newFacilityId = $facilityId !== null
+                ? ($candidateIds->contains($facilityId) ? $facilityId : null)
+                : $candidateIds->first();
 
             if ($newFacilityId === null) {
                 throw new InvalidArgumentException(
-                    'No physical facility is available for that product and schedule.',
+                    $facilityId !== null
+                        ? 'The selected facility is not available for that product and schedule.'
+                        : 'No physical facility is available for that product and schedule.',
                 );
             }
 
@@ -177,7 +187,7 @@ class ReservationFacilityOperationService
             $newFacility = $facilities->get((int) $newFacilityId);
 
             if ($newFacility === null || $newFacility->facility_status !== 'Available') {
-                throw new InvalidArgumentException('The automatically selected facility is no longer available.');
+                throw new InvalidArgumentException('The selected facility is no longer available.');
             }
 
             $destinationQuote = $this->quotes->quote(

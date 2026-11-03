@@ -13,8 +13,8 @@ new class extends Component {
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
-    #[Url(as: 'list', except: 'all')]
-    public string $statusFilter = 'all';
+    #[Url(as: 'list', except: 'eligible')]
+    public string $statusFilter = 'eligible';
 
     #[Url(as: 'arrival', except: 'all')]
     public string $dateFilter = 'all';

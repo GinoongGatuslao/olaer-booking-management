@@ -1,14 +1,17 @@
 <?php
 
+use App\Models\Facility;
 use App\Models\Guest;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\FacilityProduct;
 use App\Services\DecimalMoneyService;
+use App\Services\FacilityAvailabilityService;
 use App\Services\StaffReservationCancellationService;
 use App\Services\ReservationFacilityOperationService;
 use App\Services\RoomOccupantService;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -72,6 +75,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public string $detailCheckOutDate = '';
     public string $detailOriginalDays = ''; // display only; the real length is re-read on save
     public string $detailFacilityProductId = '';
+    public string $detailFacilityId = '';
     public string $detailCancellationReason = '';
     public array $detailOccupants = [];
 
@@ -286,6 +290,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ? (string) app(ReservationFacilityOperationService::class)->stayDays($detail->check_in_date, $detail->check_out_date)
             : '';
         $this->detailFacilityProductId = (string) ($detail->facility_product_id ?? '');
+        $this->detailFacilityId = '';
         $this->detailCancellationReason = '';
         $this->detailOccupants = $detail->roomOccupants
             ->map(fn ($occupant): array => [
@@ -305,9 +310,55 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->detailCheckOutDate = '';
         $this->detailOriginalDays = '';
         $this->detailFacilityProductId = '';
+        $this->detailFacilityId = '';
         $this->detailCancellationReason = '';
         $this->detailOccupants = [];
         $this->resetValidation();
+    }
+
+    public function updatedDetailFacilityProductId(): void
+    {
+        // A different destination product means the facility must be chosen again.
+        $this->detailFacilityId = '';
+    }
+
+    /** Facilities of the chosen product that are free for this reservation facility's schedule. */
+    public function detailTransferFacilities(): Collection
+    {
+        $productId = (int) $this->detailFacilityProductId;
+
+        if ($this->detailActionId === null || $productId < 1) {
+            return collect();
+        }
+
+        $detail = ReservationDetail::query()->find($this->detailActionId);
+
+        if ($detail === null || ! $detail->check_in_date || ! $detail->check_out_date) {
+            return collect();
+        }
+
+        $rateCode = $detail->getRawOriginal('rate_code');
+
+        if (! is_string($rateCode) || $rateCode === '') {
+            return collect();
+        }
+
+        try {
+            $facilityIds = app(FacilityAvailabilityService::class)->availableFacilityIds(
+                $productId,
+                $rateCode,
+                Carbon::parse($detail->check_in_date)->toDateString(),
+                Carbon::parse($detail->check_out_date)->toDateString(),
+            );
+        } catch (\Throwable) {
+            return collect();
+        }
+
+        return Facility::query()
+            ->whereIn('facility_id', $facilityIds->all())
+            ->get(['facility_id', 'facility_name'])
+            ->sortBy('facility_name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
     }
 
     public function detailTransferProducts(): Collection
@@ -359,6 +410,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'detailFacilityProductId.required' => 'Choose the facility to transfer to.',
             'detailFacilityProductId.integer' => 'Choose a facility from the list.',
             'detailFacilityProductId.exists' => 'That facility is not available. Choose another one.',
+            'detailFacilityId.required' => 'Choose the facility to assign.',
+            'detailFacilityId.integer' => 'Choose a facility from the list.',
+            'detailFacilityId.exists' => 'That facility is not available. Choose another one.',
 
             'detailCancellationReason.required' => 'Enter a reason for cancelling this facility.',
             'detailCancellationReason.max' => 'The cancellation reason cannot be longer than :max characters.',
@@ -381,7 +435,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'cancellationReason' => 'cancellation reason',
             'detailCheckInDate' => 'new check-in date',
             'detailCheckOutDate' => 'new check-out date',
-            'detailFacilityProductId' => 'facility',
+            'detailFacilityProductId' => 'facility product',
+            'detailFacilityId' => 'facility',
             'detailCancellationReason' => 'cancellation reason',
             'detailOccupants.*.first_name' => 'occupant first name',
             'detailOccupants.*.middle_name' => 'occupant middle name',
@@ -428,6 +483,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ];
         } elseif ($this->detailAction === 'transfer') {
             $rules['detailFacilityProductId'] = ['required', 'integer', Rule::exists('tbl_facility_product', 'facility_product_id')->where('is_active', true)];
+            $rules['detailFacilityId'] = ['required', 'integer', 'exists:tbl_facility,facility_id'];
         } elseif ($this->detailAction === 'cancel') {
             $rules['detailCancellationReason'] = ['required', 'string', 'max:500'];
         } elseif ($this->detailAction === 'occupants') {
@@ -452,6 +508,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     $this->detailActionId,
                     (int) $this->detailFacilityProductId,
                     (int) Auth::id(),
+                    (int) $this->detailFacilityId,
                 ),
                 'cancel' => $operations->cancelDetail(
                     $this->detailActionId,
@@ -468,7 +525,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
             session()->flash('success', match ($this->detailAction) {
                 'reschedule' => 'Facility schedule updated without changing the other reservation facilities.',
-                'transfer' => 'Facility upgraded/transferred and automatically reassigned.',
+                'transfer' => 'Facility upgraded/transferred to the selected facility.',
                 'cancel' => 'Facility cancelled. Any paid value was retained as same-transaction credit.',
                 'occupants' => 'Room occupant names updated and audited.',
                 default => 'Reservation facility updated.',
@@ -580,13 +637,22 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         </p>
                     @endif
                 @elseif ($detailAction === 'transfer')
-                    <flux:select wire:model="detailFacilityProductId" label="Destination facility product *">
+                    <flux:select wire:model.live="detailFacilityProductId" label="Destination facility product *">
                         <option value="">Choose an upgrade product</option>
                         @foreach ($this->detailTransferProducts() as $product)
                             <option value="{{ $product->facility_product_id }}">{{ $product->display_name }}</option>
                         @endforeach
                     </flux:select>
-                    <p class="text-xs text-zinc-500">The exact physical unit is assigned automatically. Cheaper/downgrade transfers are rejected by the service.</p>
+                    <flux:select wire:model="detailFacilityId" label="Facility *">
+                        <option value="">Choose a facility</option>
+                        @foreach ($this->detailTransferFacilities() as $transferFacility)
+                            <option value="{{ $transferFacility->facility_id }}">{{ $transferFacility->facility_name }}</option>
+                        @endforeach
+                    </flux:select>
+                    @if ($detailFacilityProductId !== '' && $this->detailTransferFacilities()->isEmpty())
+                        <p class="text-xs text-amber-700 dark:text-amber-300">No facility of this product is free for this reservation's schedule.</p>
+                    @endif
+                    <p class="text-xs text-zinc-500">Choose the exact facility to assign. Cheaper/downgrade transfers are rejected by the service.</p>
                 @elseif ($detailAction === 'cancel')
                     <flux:textarea wire:model="detailCancellationReason" label="Cancellation reason *" rows="3" />
                     <p class="text-xs text-zinc-500">Paid value remains as same-transaction credit and is not refunded or moved to another booking.</p>

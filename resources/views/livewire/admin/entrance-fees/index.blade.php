@@ -86,7 +86,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
     <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Entrance Fee Management</h1>
-            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Maintain the entrance fee category and rate used for future entrance slips.</p>
+            <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Manage entrance fee categories and rates.</p>
         </div>
         <flux:button href="{{ route('admin.dashboard') }}" wire:navigate variant="ghost">Back to Dashboard</flux:button>
     </div>
