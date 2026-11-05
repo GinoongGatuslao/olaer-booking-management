@@ -189,9 +189,7 @@ class GuestTransactionHistoryService
             ->get();
 
         $facilityLines = $reservation->details->map(fn ($detail): array => [
-            'facility' => $detail->facility?->facility_number
-                ? $detail->facility->facility_number.' — '.$detail->facility->facility_name
-                : ($detail->facility?->facility_name ?? 'Facility'),
+            'facility' => $detail->facility?->facility_name ?? 'Facility',
             'facility_type' => $detail->facility?->facilityType?->facility_type ?? 'Facility',
             'rate_type' => $detail->rate_type,
             'check_in_date' => $detail->check_in_date?->toDateString(),

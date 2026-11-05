@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -23,6 +24,7 @@ class Payment extends Model
         'reference_number',
         'proof_of_payment_path',
         'amount_paid',
+        'cash_paid',
         'date_paid',
         'user_id',
         'payment_status',
@@ -35,9 +37,25 @@ class Payment extends Model
     {
         return [
             'amount_paid' => 'decimal:2',
+            'cash_paid' => 'decimal:2',
             'date_paid' => 'date',
             'verified_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Change handed back for a cash payment (cash paid minus amount paid).
+     * Calculated, not stored; null for payments that were not made in cash.
+     */
+    protected function changeAmount(): Attribute
+    {
+        return Attribute::get(function (): ?string {
+            if ($this->cash_paid === null) {
+                return null;
+            }
+
+            return bcsub((string) $this->cash_paid, (string) $this->amount_paid, 2);
+        });
     }
 
     public function booking(): BelongsTo

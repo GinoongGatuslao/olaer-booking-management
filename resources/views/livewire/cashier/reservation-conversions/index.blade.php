@@ -35,6 +35,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public string $paymentAmount = '';
     public ?int $modeOfPaymentId = null;
     public string $referenceNumber = '';
+    public string $cashPaid = '';
     public ?string $successMessage = null;
     public ?string $errorMessage = null;
     public ?int $convertedBookingId = null;
@@ -87,6 +88,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
         $this->paymentAmount = '';
         $this->modeOfPaymentId = null;
         $this->referenceNumber = '';
+        $this->cashPaid = '';
 
         $reservation = Reservation::query()->find($reservationId);
 
@@ -98,6 +100,19 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 
         $this->selectedReservationId = (int) $reservation->reservation_id;
         $this->paymentAmount = (string) $reservation->amount_due;
+    }
+
+    public function isCashMode(): bool
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->modeOfPaymentId)
+            ->value('mode_of_payment'))) === 'cash';
+    }
+
+    public function updatedModeOfPaymentId(): void
+    {
+        // Cash received only belongs to a cash payment.
+        $this->cashPaid = '';
     }
 
     public function convert(ReservationToBookingWorkflowService $service): void
@@ -117,6 +132,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             'selectedReservationId' => ['required', 'integer', 'exists:tbl_reservation,reservation_id'],
             'paymentAmount' => ['required', 'numeric', 'min:0'],
             'referenceNumber' => ['nullable', 'string', 'max:50'],
+            'cashPaid' => [$hasAmountDue && $this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gte:paymentAmount'],
         ];
 
         if ($hasAmountDue) {
@@ -125,13 +141,18 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             $rules['modeOfPaymentId'] = ['nullable', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'];
         }
 
-        $this->validate($rules);
+        $this->validate($rules, [
+            'cashPaid.required' => 'Enter the cash received.',
+            'cashPaid.numeric' => 'Cash paid must be a number.',
+            'cashPaid.gte' => 'Cash paid must be at least the amount being paid.',
+        ]);
 
         try {
             $booking = $service->convert((int) $this->selectedReservationId, [
                 'payment_amount' => $this->paymentAmount,
                 'mode_of_payment_id' => $this->modeOfPaymentId,
                 'reference_number' => $this->referenceNumber,
+                'cash_paid' => $hasAmountDue && $this->isCashMode() ? $this->cashPaid : null,
                 'user_id' => Auth::id(),
             ]);
 
@@ -141,6 +162,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             $this->paymentAmount = '';
             $this->modeOfPaymentId = null;
             $this->referenceNumber = '';
+            $this->cashPaid = '';
         } catch (\InvalidArgumentException $exception) {
             $this->errorMessage = $exception->getMessage();
         } catch (\Throwable $exception) {
@@ -302,6 +324,19 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                             <flux:input label="Reference Number" wire:model.live="referenceNumber" placeholder="Required for GCash" />
                             @endif
                             @error('referenceNumber') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
+                            @if ($this->isCashMode())
+                                <flux:field class="relative">
+                                    <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                                    <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
+                                    @if ($msg = $this->visibleError('cashPaid'))
+                                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                    @endif
+                                </flux:field>
+                                <div class="flex items-center justify-between rounded-lg bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900">
+                                    <span>Change</span>
+                                    <span>₱{{ number_format(is_numeric($cashPaid) && is_numeric($paymentAmount) ? max(0, (float) $cashPaid - (float) $paymentAmount) : 0, 2) }}</span>
+                                </div>
+                            @endif
                         @else
                             <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
                                 This reservation is already fully paid. No new payment is required.

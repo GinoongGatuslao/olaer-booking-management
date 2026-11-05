@@ -31,8 +31,14 @@
         </div>
     </div>
 
-    <div class="ml-auto w-full max-w-sm rounded-xl border border-zinc-200 p-4 text-sm">
+    <div class="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-zinc-200 p-4 text-sm">
         <div class="flex justify-between text-lg"><span>Amount Paid</span><strong>₱{{ number_format((float) $payment->amount_paid, 2) }}</strong></div>
+
+        {{-- Only cash payments store the cash received and the change returned. --}}
+        @if (! is_null($payment->cash_paid))
+            <div class="flex justify-between"><span>Cash Paid</span><strong>₱{{ number_format((float) $payment->cash_paid, 2) }}</strong></div>
+            <div class="flex justify-between"><span>Change</span><strong>₱{{ number_format((float) $payment->change_amount, 2) }}</strong></div>
+        @endif
     </div>
 
     <div class="mt-10 grid grid-cols-2 gap-8 text-sm">

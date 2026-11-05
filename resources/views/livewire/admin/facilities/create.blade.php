@@ -11,7 +11,6 @@ use Livewire\Volt\Component;
 new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] class extends Component
 {
     public string $sourceFacilityId = '';
-    public string $facilityNumber = '';
     public string $facilityName = '';
     public string $status = 'Available';
 
@@ -21,7 +20,7 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
         return Facility::query()
             ->with(['facilityType', 'facilityProduct'])
             ->orderBy('facility_type_id')
-            ->orderBy('facility_number')
+            ->orderBy('facility_name')
             ->get();
     }
 
@@ -33,19 +32,12 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
             ->find((int) $this->sourceFacilityId);
 
         if ($source === null) {
-            $this->facilityNumber = '';
             $this->facilityName = '';
 
             return;
         }
 
-        try {
-            $this->facilityNumber = $facilities->suggestedCloneNumber($source);
-        } catch (\Throwable) {
-            $this->facilityNumber = '';
-        }
-
-        $this->facilityName = $source->facility_name.' Copy';
+        $this->facilityName = $facilities->suggestedCloneName($source);
     }
 
     public function save(FacilityManagementService $facilities): void
@@ -56,27 +48,25 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
                 'integer',
                 'exists:tbl_facility,facility_id',
             ],
-            'facilityNumber' => [
+            'facilityName' => [
                 'required',
                 'string',
-                'max:50',
-                'unique:tbl_facility,facility_number',
+                'max:100',
+                'unique:tbl_facility,facility_name',
             ],
-            'facilityName' => ['required', 'string', 'max:100'],
             'status' => ['required', 'in:Available,Unavailable'],
         ]);
 
         try {
             $clone = $facilities->cloneFacility(
                 (int) $validated['sourceFacilityId'],
-                $validated['facilityNumber'],
                 $validated['facilityName'],
                 $validated['status'],
             );
 
             session()->flash(
                 'success',
-                "Facility {$clone->facility_number} cloned successfully.",
+                "Facility {$clone->facility_name} cloned successfully.",
             );
             $this->redirect(
                 route('admin.facilities.index'),
@@ -95,7 +85,7 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
         <p class="text-sm text-zinc-500">Facility Management</p>
         <h1 class="text-2xl font-bold tracking-tight">Clone facility</h1>
         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Copy a physical facility's product, capacity, rates, and inclusive amenities. The source facility number is never copied; review the new number and name before saving.
+            Copy a physical facility's product, capacity, rates, and inclusive amenities. The source facility name is never copied; review the suggested name before saving.
         </p>
     </div>
 
@@ -105,26 +95,18 @@ new #[Layout('layouts.app')] #[Title('Clone Facility - Olaer Spring Resort')] cl
                 <option value="">Choose facility to clone</option>
                 @foreach ($this->facilities as $facility)
                     <option value="{{ $facility->facility_id }}">
-                        {{ $facility->facility_number }} — {{ $facility->facility_name }}
+                        {{ $facility->facility_name }}
                         ({{ $facility->facilityProduct?->display_name ?? $facility->facilityType?->facility_type }})
                     </option>
                 @endforeach
             </x-required-select>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <x-required-input
-                    wire:model="facilityNumber"
-                    name="facilityNumber"
-                    label="New facility number"
-                    placeholder="Example: COT-SMA-056"
-                />
-                <x-required-input
-                    wire:model="facilityName"
-                    name="facilityName"
-                    label="New facility name"
-                    placeholder="Example: Poolside Cottage 56"
-                />
-            </div>
+            <x-required-input
+                wire:model="facilityName"
+                name="facilityName"
+                label="New facility name"
+                placeholder="Example: C900-006"
+            />
 
             <x-required-select wire:model="status" name="status" label="Initial status">
                 <option>Available</option>

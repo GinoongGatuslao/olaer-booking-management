@@ -8,6 +8,7 @@ use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\User;
+use App\Support\CashTender;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +80,9 @@ class PaymentWorkflowService
             );
         }
 
+        // Cash payments need the cash received; the change is worked out here.
+        $cashPaid = CashTender::resolve($mode, $amountPaid, $data['cash_paid'] ?? null);
+
         DB::beginTransaction();
 
         try {
@@ -133,6 +137,7 @@ class PaymentWorkflowService
                         : null,
                 'proof_of_payment_path' => null,
                 'amount_paid' => $amountPaid,
+                'cash_paid' => $cashPaid,
                 'date_paid' => Carbon::today()->toDateString(),
                 'user_id' => $cashierUserId,
                 'payment_status' => 'Verified',

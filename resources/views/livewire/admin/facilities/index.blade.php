@@ -49,8 +49,8 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     public string $typeFilter = '';
     #[Url(as: 'status', except: '')]
     public string $statusFilter = '';
-    #[Url(as: 'sort', except: 'facility_number')]
-    public string $sortField = 'facility_number';
+    #[Url(as: 'sort', except: 'facility_name')]
+    public string $sortField = 'facility_name';
     #[Url(as: 'direction', except: 'asc')]
     public string $sortDirection = 'asc';
     #[Url(as: 'per_page', except: 10)]
@@ -82,9 +82,9 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
     #[Computed]
     public function facilities(): LengthAwarePaginator
     {
-        $sort = in_array($this->sortField, ['facility_number', 'facility_name', 'facility_type', 'facility_size', 'facility_status'], true)
+        $sort = in_array($this->sortField, ['facility_name', 'facility_type', 'facility_size', 'facility_status'], true)
             ? $this->sortField
-            : 'facility_number';
+            : 'facility_name';
         $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
         $perPage = in_array($this->perPage, [10, 25, 50, 100], true) ? $this->perPage : 10;
 
@@ -93,8 +93,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             ->when(trim($this->search) !== '', function (Builder $query): void {
                 $like = '%'.trim($this->search).'%';
                 $query->where(function (Builder $query) use ($like): void {
-                    $query->where('facility_number', 'like', $like)
-                        ->orWhere('facility_name', 'like', $like)
+                    $query->where('facility_name', 'like', $like)
                         ->orWhere('min_capacity', 'like', $like)
                         ->orWhere('max_capacity', 'like', $like)
                         ->orWhereIn(
@@ -590,7 +589,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
 
     public function sortBy(string $field): void
     {
-        if (! in_array($field, ['facility_number', 'facility_name', 'facility_type', 'facility_size', 'facility_status'], true)) {
+        if (! in_array($field, ['facility_name', 'facility_type', 'facility_size', 'facility_status'], true)) {
             return;
         }
 
@@ -669,9 +668,9 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
             <table class="w-full min-w-[62rem] text-left text-sm">
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <tr>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_number')" class="font-semibold">NUMBER {{ $this->sortIcon('facility_number') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_type')" class="font-semibold">TYPE {{ $this->sortIcon('facility_type') }}</button></th>
                         <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold">FACILITY NAME {{ $this->sortIcon('facility_name') }}</button></th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_type')" class="font-semibold">TYPE {{ $this->sortIcon('facility_type') }}</button></th>
+                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_size')" class="font-semibold">PRODUCT {{ $this->sortIcon('facility_size') }}</button></th>
                         <th class="px-5 py-3 font-semibold">Capacity</th>
                         <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_status')" class="font-semibold">STATUS {{ $this->sortIcon('facility_status') }}</button></th>
                         <th class="px-5 py-3 text-right font-semibold">Action</th>

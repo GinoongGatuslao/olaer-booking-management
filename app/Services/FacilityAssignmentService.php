@@ -17,6 +17,7 @@ use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\TransactionAdjustment;
+use App\Support\CashTender;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -653,6 +654,9 @@ class FacilityAssignmentService
                 ]);
             }
 
+            // Cash payments record the cash received and the change returned.
+            $cashPaid = CashTender::resolve($mode, (string) $paymentAmount, $guestData['cash_paid'] ?? null);
+
             Payment::query()->create([
                 'p_ref_no' => $this->newPaymentReference(),
                 'booking_id' => $booking->booking_id,
@@ -662,6 +666,7 @@ class FacilityAssignmentService
                 'reference_number' => $referenceNumber,
                 'proof_of_payment_path' => null,
                 'amount_paid' => $paymentAmount,
+                'cash_paid' => $cashPaid,
                 'date_paid' => today()->toDateString(),
                 'user_id' => $userId,
                 'payment_status' => 'Verified',

@@ -23,7 +23,6 @@ class FacilityCreationWithProductTest extends TestCase
         $facility = app(FacilityManagementService::class)->saveFacility(null, $this->payload($type, [
             'facility_name' => 'C1200-001',
             'facility_size' => 'Jumbo Cottage',
-            'product_code' => 'COTTAGE_JUMBO',
             'min_capacity' => 30,
             'max_capacity' => 40,
             'prices' => ['Day Rate' => 1200, 'Night Rate' => 1300, 'Both' => 1300],
@@ -34,7 +33,7 @@ class FacilityCreationWithProductTest extends TestCase
         $this->assertSame('COTTAGE_JUMBO', $product->product_code);
         $this->assertSame(FacilitySchedulePolicy::DatedSlots, $product->schedule_policy);
         $this->assertSame(40, $product->suggested_maximum);
-        $this->assertSame('C1200-001', $facility->facility_number);
+        $this->assertSame('C1200-001', $facility->facility_name);
         $this->assertEqualsCanonicalizing(
             ['DAY', 'NIGHT', 'BOTH'],
             $product->productRates->map(fn ($rate) => $rate->rate_code->value)->all(),
@@ -60,7 +59,7 @@ class FacilityCreationWithProductTest extends TestCase
 
         $product = $facility->facilityProduct;
 
-        $this->assertSame('FUNCTION_HALL_FUNCTION_HALL_3', $product->product_code);
+        $this->assertSame('FUNCTION_HALL_3', $product->product_code);
         $this->assertSame(FacilitySchedulePolicy::DatedSlots, $product->schedule_policy);
         $this->assertSame('4000.00', $product->productRates->firstWhere('rate_code', FacilityRateCode::Both)->amount);
     }
@@ -112,19 +111,18 @@ class FacilityCreationWithProductTest extends TestCase
         );
     }
 
-    public function test_product_codes_must_be_unique(): void
+    public function test_system_generates_unique_product_codes(): void
     {
         $type = FacilityType::query()->create(['facility_type' => 'Cottage']);
         $service = app(FacilityManagementService::class);
-        $service->saveFacility(null, $this->payload($type, ['product_code' => 'COTTAGE_A']));
 
-        $this->expectException(InvalidArgumentException::class);
+        $service->saveFacility(null, $this->payload($type, ['facility_size' => 'Jumbo Cottage']));
+        $service->saveFacility(null, $this->payload($type, ['facility_name' => 'C-009', 'facility_size' => 'Jumbo  cottage!']));
 
-        $service->saveFacility(null, $this->payload($type, [
-            'facility_name' => 'C-009',
-            'facility_size' => 'Another Size',
-            'product_code' => 'COTTAGE_A',
-        ]));
+        $this->assertEqualsCanonicalizing(
+            ['COTTAGE_JUMBO', 'COTTAGE_JUMBO_2'],
+            FacilityProduct::query()->pluck('product_code')->all(),
+        );
     }
 
     /** @param array<string, mixed> $overrides */

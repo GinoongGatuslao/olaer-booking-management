@@ -40,6 +40,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
             'groups.*.rate_code',
             'lastName',
             'modeOfPaymentId',
+            'cashPaid',
             'partyCount',
             'province',
             'roomOccupants.*.*.first_name',
@@ -104,6 +105,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
     public string $paymentAmount = '';
     public string $modeOfPaymentId = '';
     public string $referenceNumber = '';
+    public string $cashPaid = '';
     public bool $walkIn = false;
     public array $amenities = [];
     public int $adultCount = 1;
@@ -382,8 +384,22 @@ protected function validationAttributes(): array
         'groups.*.check_out_date'     => 'check-out date',
         'contactNo'                   => 'contact number',
         'referenceNumber'             => 'GCash reference number',
+        'cashPaid'                    => 'cash paid',
     ];
 }
+    public function isCashMode(): bool
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->modeOfPaymentId)
+            ->value('mode_of_payment'))) === 'cash';
+    }
+
+    public function updatedModeOfPaymentId(): void
+    {
+        // Cash received only belongs to a cash payment.
+        $this->cashPaid = '';
+    }
+
     private function clearFacilityPlan(): void
     {
         $this->facilityPlan = [];
@@ -458,6 +474,7 @@ protected function validationAttributes(): array
                 'payment_amount' => $this->paymentAmount,
                 'mode_of_payment_id' => (int) $this->modeOfPaymentId,
                 'reference_number' => $this->referenceNumber,
+                'cash_paid' => $this->isCashMode() ? $this->cashPaid : null,
                 'walk_in' => $this->walkIn,
                 'entrance' => $this->entrancePayload(),
                 'amenities' => $this->amenities,
@@ -511,6 +528,7 @@ protected function validationAttributes(): array
             'roomOccupants.*.*.last_name' => ['required', 'string', 'max:50'],
             'modeOfPaymentId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
             'referenceNumber' => ['nullable', 'string', 'max:100'],
+            'cashPaid' => [$this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gte:paymentAmount'],
             'walkIn' => ['boolean'],
             'adultCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
             'childrenCount' => [$this->walkIn ? 'required' : 'nullable', 'integer', 'min:0', 'max:5000'],
@@ -871,6 +889,19 @@ protected function validationAttributes(): array
                     />
                 @endif
                 <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
+                @if ($this->isCashMode())
+                    <flux:field class="relative">
+                        <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
+                        @if ($msg = $this->visibleError('cashPaid'))
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                        @endif
+                    </flux:field>
+                    <div class="flex items-center justify-between rounded-xl bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900 md:col-span-3">
+                        <span>Change</span>
+                        <span>₱{{ number_format(is_numeric($cashPaid) && is_numeric($paymentAmount) ? max(0, (float) $cashPaid - (float) $paymentAmount) : 0, 2) }}</span>
+                    </div>
+                @endif
             </div>
 
         </flux:card>

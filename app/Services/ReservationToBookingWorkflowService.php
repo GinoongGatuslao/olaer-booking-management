@@ -12,6 +12,7 @@ use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\ReservationExtraGuest;
 use App\Models\User;
+use App\Support\CashTender;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -99,6 +100,7 @@ class ReservationToBookingWorkflowService
             }
 
             $mode = null;
+            $cashPaid = null;
 
             if (bccomp($paymentAmount, '0.00', 2) === 1) {
                 if (! $modeOfPaymentId) {
@@ -117,6 +119,9 @@ class ReservationToBookingWorkflowService
                     $referenceNumber = $this->gcashReferences
                         ->assertAvailable($referenceNumber);
                 }
+
+                // Cash payments record the cash received and the change returned.
+                $cashPaid = CashTender::resolve($mode, $paymentAmount, $data['cash_paid'] ?? null);
             }
 
             $firstDetail = $reservationDetails->first();
@@ -236,6 +241,7 @@ class ReservationToBookingWorkflowService
                             : null,
                     'proof_of_payment_path' => null,
                     'amount_paid' => $paymentAmount,
+                    'cash_paid' => $cashPaid,
                     'date_paid' => Carbon::today()->toDateString(),
                     'user_id' => $userId,
                     'payment_status' => 'Verified',

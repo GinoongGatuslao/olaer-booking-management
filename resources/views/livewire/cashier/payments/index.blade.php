@@ -83,6 +83,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     public string $amountPaid = '';
     public string $modeOfPaymentId = '';
     public string $referenceNumber = '';
+    public string $cashPaid = '';
 
     public ?int $selectedPaymentId = null;
 
@@ -223,6 +224,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->selectedTargetLabel = $this->payableLabel($type, $record);
         $this->amountPaid = $this->selectedAmountDue;
         $this->referenceNumber = '';
+        $this->cashPaid = '';
 
         $this->resetValidation();
         $this->showPaymentModal = true;
@@ -236,8 +238,22 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->selectedAmountDue = '0.00';
         $this->amountPaid = '';
         $this->referenceNumber = '';
+        $this->cashPaid = '';
 
         $this->resetValidation();
+    }
+
+    public function isCashMode(): bool
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->modeOfPaymentId)
+            ->value('mode_of_payment'))) === 'cash';
+    }
+
+    public function updatedModeOfPaymentId(): void
+    {
+        // Cash received only belongs to a cash payment.
+        $this->cashPaid = '';
     }
 
     public function recordPayment(PaymentWorkflowService $paymentWorkflow): void
@@ -255,6 +271,11 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 'exists:tbl_mode_of_payment,mode_of_payment_id',
             ],
             'referenceNumber' => ['nullable', 'string', 'max:50'],
+            'cashPaid' => [$this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gte:amountPaid'],
+        ], [
+            'cashPaid.required' => 'Enter the cash received.',
+            'cashPaid.numeric' => 'Cash paid must be a number.',
+            'cashPaid.gte' => 'Cash paid must be at least the amount paid.',
         ]);
 
         try {
@@ -264,6 +285,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 'amount_paid' => $validated['amountPaid'],
                 'mode_of_payment_id' => (int) $validated['modeOfPaymentId'],
                 'reference_number' => $validated['referenceNumber'] ?? null,
+                'cash_paid' => $this->isCashMode() ? ($validated['cashPaid'] ?? null) : null,
                 'user_id' => (int) Auth::id(),
             ]);
 
@@ -1327,6 +1349,20 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             @error('referenceNumber')
                 <p class="text-sm text-red-600">{{ $message }}</p>
             @enderror
+
+            @if ($this->isCashMode())
+                <flux:field class="relative">
+                    <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
+                    @if ($msg = $this->visibleError('cashPaid'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+                <div class="flex justify-between rounded-xl bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900">
+                    <span>Change</span>
+                    <span>₱{{ number_format(is_numeric($cashPaid) && is_numeric($amountPaid) ? max(0, (float) $cashPaid - (float) $amountPaid) : 0, 2) }}</span>
+                </div>
+            @endif
 
             <div class="flex justify-end gap-3">
                 <flux:button type="button" variant="ghost" wire:click="clearSelection">Cancel</flux:button>

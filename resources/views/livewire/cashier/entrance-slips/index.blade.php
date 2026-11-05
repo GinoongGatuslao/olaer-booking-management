@@ -65,6 +65,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
     public ?int $selectedSlipId = null;
     public string $modeOfPaymentId = '';
     public string $referenceNumber = '';
+    public string $cashPaid = '';
     public ?int $selectedPaymentId = null;
 
     public function mount(): void
@@ -337,6 +338,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
         $this->selectedSlipId = (int) $slip->entrance_slip_id;
         $this->selectedPaymentId = null;
         $this->referenceNumber = '';
+        $this->cashPaid = '';
 
         $cashModeId = ModeOfPayment::query()
             ->where('mode_of_payment', 'Cash')
@@ -355,9 +357,23 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
         $this->selectedSlipId = null;
         $this->selectedPaymentId = null;
         $this->referenceNumber = '';
+        $this->cashPaid = '';
 
         unset($this->selectedSlip, $this->selectedPayment);
         $this->resetValidation();
+    }
+
+    public function isCashMode(): bool
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->modeOfPaymentId)
+            ->value('mode_of_payment'))) === 'cash';
+    }
+
+    public function updatedModeOfPaymentId(): void
+    {
+        // Cash received only belongs to a cash payment.
+        $this->cashPaid = '';
     }
 
     public function recordPayment(
@@ -375,9 +391,17 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                 'exists:tbl_mode_of_payment,mode_of_payment_id',
             ],
             'referenceNumber' => ['nullable', 'string', 'max:50'],
+            'cashPaid' => [
+                $this->isCashMode() ? 'required' : 'nullable',
+                'numeric',
+                'min:'.(float) ($this->selectedSlip?->amount_due ?? 0),
+            ],
         ], [
             'selectedSlipId.required' => 'Select an entrance slip first.',
             'modeOfPaymentId.required' => 'Mode of payment is required.',
+            'cashPaid.required' => 'Enter the cash received.',
+            'cashPaid.numeric' => 'Cash paid must be a number.',
+            'cashPaid.min' => 'Cash paid must be at least the amount due.',
         ]);
 
         $slip = EntranceSlip::query()
@@ -392,11 +416,13 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                 'reference_number' => trim(
                     (string) ($validated['referenceNumber'] ?? ''),
                 ),
+                'cash_paid' => $this->isCashMode() ? ($validated['cashPaid'] ?? null) : null,
                 'user_id' => (int) Auth::id(),
             ]);
 
             $this->selectedPaymentId = (int) $payment->payment_id;
             $this->referenceNumber = '';
+            $this->cashPaid = '';
 
             unset($this->selectedSlip, $this->selectedPayment, $this->slips);
 
@@ -929,6 +955,20 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                         label="GCash reference number"
                                         placeholder="Required for GCash" 
                                     />
+                                @endif
+
+                                @if ($this->isCashMode())
+                                    <flux:field class="relative">
+                                        <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                                        <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
+                                        @if ($msg = $this->visibleError('cashPaid'))
+                                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                        @endif
+                                    </flux:field>
+                                    <div class="flex justify-between rounded-xl bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900">
+                                        <span>Change</span>
+                                        <span>₱{{ number_format(is_numeric($cashPaid) && is_numeric($this->selectedSlip->amount_due) ? max(0, (float) $cashPaid - (float) $this->selectedSlip->amount_due) : 0, 2) }}</span>
+                                    </div>
                                 @endif
 
                                 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">

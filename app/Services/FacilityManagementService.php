@@ -24,16 +24,14 @@ class FacilityManagementService
 
     public function cloneFacility(
         int $sourceFacilityId,
-        string $facilityNumber,
         string $facilityName,
         string $status = 'Available',
     ): Facility {
-        $facilityNumber = Str::upper(Str::squish($facilityNumber));
         $facilityName = Str::squish($facilityName);
 
-        if ($facilityNumber === '' || $facilityName === '') {
+        if ($facilityName === '') {
             throw new InvalidArgumentException(
-                'Facility number and name are required for the clone.',
+                'A facility name is required for the clone.',
             );
         }
 
@@ -45,7 +43,6 @@ class FacilityManagementService
 
         return DB::transaction(function () use (
             $sourceFacilityId,
-            $facilityNumber,
             $facilityName,
             $status,
         ): Facility {
@@ -61,16 +58,15 @@ class FacilityManagementService
                 ->firstOrFail();
 
             if (Facility::query()
-                ->where('facility_number', $facilityNumber)
+                ->where('facility_name', $facilityName)
                 ->exists()) {
                 throw new InvalidArgumentException(
-                    'This facility number is already in use.',
+                    'This facility name is already in use.',
                 );
             }
 
             $clone = Facility::query()->create([
-                // Deliberately supplied by the operator; source number is never copied.
-                'facility_number' => $facilityNumber,
+                // Deliberately supplied by the operator; the source name is never copied.
                 'facility_name' => $facilityName,
                 'facility_type_id' => $source->facility_type_id,
                 'facility_product_id' => $source->facility_product_id,
@@ -105,24 +101,28 @@ class FacilityManagementService
         }, attempts: 3);
     }
 
-    public function suggestedCloneNumber(Facility $source): string
+    /**
+     * Next free name in the same series as the source, e.g. C900-004 -> C900-005.
+     * Falls back to "<name> Copy" when the name does not end in a number.
+     */
+    public function suggestedCloneName(Facility $source): string
     {
-        $product = $source->facilityProduct;
+        $name = (string) $source->facility_name;
 
-        if ($product === null) {
-            throw new InvalidArgumentException(
-                'The source facility has no normalized product configuration.',
-            );
+        if (! preg_match('/^(.*?)(\d+)$/', $name, $parts)) {
+            return $name.' Copy';
         }
 
-        $prefix = $this->numberPrefix($product);
+        [, $prefix, $digits] = $parts;
+        $pattern = '/^'.preg_quote($prefix, '/').'(\d+)$/';
 
-        return $prefix.'-'.str_pad(
-            (string) $this->nextSequence($prefix),
-            3,
-            '0',
-            STR_PAD_LEFT,
-        );
+        $highest = Facility::query()
+            ->where('facility_name', 'like', $prefix.'%')
+            ->pluck('facility_name')
+            ->map(fn (string $existing): int => preg_match($pattern, $existing, $match) ? (int) $match[1] : 0)
+            ->max();
+
+        return $prefix.str_pad((string) ((int) $highest + 1), strlen($digits), '0', STR_PAD_LEFT);
     }
 
     /**
@@ -214,7 +214,7 @@ class FacilityManagementService
         $applyToSize = (bool) ($data['apply_to_size'] ?? false);
 
         if ($name === '' || $size === '') {
-            throw new InvalidArgumentException('Facility number and facility name are required.');
+            throw new InvalidArgumentException('Facility name and facility size are required.');
         }
 
         if ($min < 1 || $max < $min) {
@@ -226,15 +226,13 @@ class FacilityManagementService
             $isRoom = $type->facility_type === 'Room';
             $prices = $this->normalizePrices($data['prices'], $this->rateTypesFor($type->facility_type));
 
-            $facilityNumber = Str::upper($name);
-
-            $numberTaken = Facility::query()
-                ->where('facility_number', $facilityNumber)
+            $nameTaken = Facility::query()
+                ->where('facility_name', $name)
                 ->when($facility, fn ($query) => $query->where($facility->getKeyName(), '!=', $facility->getKey()))
                 ->exists();
 
-            if ($numberTaken) {
-                throw new InvalidArgumentException('This facility number is already in use.');
+            if ($nameTaken) {
+                throw new InvalidArgumentException('This facility name is already in use.');
             }
 
             // Another facility already defines this size: share its product and prices.
@@ -338,13 +336,8 @@ class FacilityManagementService
             ];
 
             if ($facility === null) {
-                $payload['facility_number'] = $facilityNumber;
                 $facility = Facility::query()->create($payload);
             } else {
-                if (blank($facility->facility_number)) {
-                    $payload['facility_number'] = $facilityNumber;
-                }
-
                 $facility->update($payload);
             }
 
@@ -468,15 +461,13 @@ class FacilityManagementService
 
     public function updateIdentity(
         Facility $facility,
-        string $facilityNumber,
         string $facilityName,
         string $status,
     ): Facility {
-        $facilityNumber = Str::upper(Str::squish($facilityNumber));
         $facilityName = Str::squish($facilityName);
 
-        if ($facilityNumber === '' || $facilityName === '') {
-            throw new InvalidArgumentException('Facility number and name are required.');
+        if ($facilityName === '') {
+            throw new InvalidArgumentException('Facility name is required.');
         }
 
         if (! in_array($status, ['Available', 'Unavailable', 'Booked', 'Occupied'], true)) {
@@ -491,41 +482,20 @@ class FacilityManagementService
         }
 
         $duplicate = Facility::query()
-            ->where('facility_number', $facilityNumber)
+            ->where('facility_name', $facilityName)
             ->where($facility->getKeyName(), '!=', $facility->getKey())
             ->exists();
 
         if ($duplicate) {
-            throw new InvalidArgumentException('This facility number is already in use.');
+            throw new InvalidArgumentException('This facility name is already in use.');
         }
 
         $facility->update([
-            'facility_number' => $facilityNumber,
             'facility_name' => $facilityName,
             'facility_status' => $status,
         ]);
 
         return $facility->fresh(['facilityType', 'facilityProduct']);
-    }
-
-    private function numberPrefix(FacilityProduct $product): string
-    {
-        return collect(explode('_', $product->product_code))
-            ->map(fn (string $part): string => Str::upper(Str::substr($part, 0, 3)))
-            ->implode('-');
-    }
-
-    private function nextSequence(string $prefix): int
-    {
-        $numbers = Facility::query()
-            ->where('facility_number', 'like', $prefix.'-%')
-            ->pluck('facility_number');
-
-        $maximum = $numbers
-            ->map(fn (string $number): int => (int) Str::afterLast($number, '-'))
-            ->max();
-
-        return (int) ($maximum ?? 0) + 1;
     }
 
     private function capacityLabel(FacilityProduct $product): string
