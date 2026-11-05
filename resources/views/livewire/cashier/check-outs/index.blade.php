@@ -588,11 +588,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         description="Verify maintenance inspection and payment status before releasing the facility."
     />
 
-    @if (session('success'))
-        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-            {{ session('success') }}
-        </div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     @if (! $showCheckOutPanel)
     @error('checkOut')

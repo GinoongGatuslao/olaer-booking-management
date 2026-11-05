@@ -540,11 +540,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         </div>
     </div>
 
-    @if (session('success'))
-        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200">
-            {{ session('success') }}
-        </div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
         Existing transaction records retain their saved discount snapshots.

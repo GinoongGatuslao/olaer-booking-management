@@ -232,11 +232,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
             </div>
     </div>
 
-    @if (session('success'))
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-            {{ session('success') }}
-        </div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     @if (session('error'))
         <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">

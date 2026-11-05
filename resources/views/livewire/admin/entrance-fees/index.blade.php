@@ -91,9 +91,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
         <flux:button href="{{ route('admin.dashboard') }}" wire:navigate variant="ghost">Back to Dashboard</flux:button>
     </div>
 
-    @if (session('success'))
-        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-100">{{ session('success') }}</div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Category names remain read-only because the entrance-slip calculator uses these canonical categories. Historical slip totals do not change.</div>
 

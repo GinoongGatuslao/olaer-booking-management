@@ -635,9 +635,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
         </div>
     </div>
 
-    @if (session('success'))
-        <div class="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-100">{{ session('success') }}</div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     <flux:card class="overflow-hidden p-0">
         <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-4 dark:border-zinc-800">

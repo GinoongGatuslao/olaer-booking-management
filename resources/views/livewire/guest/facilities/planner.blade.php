@@ -485,9 +485,7 @@ protected function validationAttributes(): array
         <p class="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Choose facility products, schedules, and quantities. The system assigns exact physical units only when the transaction is submitted.</p>
     </div>
 
-    @if (session('success'))
-        <div class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">{{ session('success') }}</div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     @error('plan')
         <div class="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">{{ $message }}</div>

@@ -762,11 +762,7 @@ new class extends Component {
         </x-slot:actions>
     </x-staff-page-header>
 
-    @if (session('success'))
-        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-            {{ session('success') }}
-        </div>
-    @endif
+    <x-toast :message="session('success')" fresh />
 
     {{-- One banner for page-level problems (service errors and stale-row errors), instead of four stacked ones. --}}
     @php

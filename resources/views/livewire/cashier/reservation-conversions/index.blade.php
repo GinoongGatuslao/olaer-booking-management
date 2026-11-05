@@ -195,11 +195,8 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
         </a>
     </div>
 
-    @if ($successMessage)
-        <div class="flex flex-col gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-200 sm:flex-row sm:items-center sm:justify-between">
-            <span>{{ $successMessage }}</span>
-
-            @if ($convertedBookingId && Route::has('cashier.bookings.show'))
+    <x-toast :message="$successMessage" :seconds="15">
+        @if ($convertedBookingId && Route::has('cashier.bookings.show'))
                 <flux:button
                     href="{{ route('cashier.bookings.show', $convertedBookingId) }}"
                     wire:navigate
@@ -209,8 +206,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     View Booking
                 </flux:button>
             @endif
-        </div>
-    @endif
+    </x-toast>
 
     @if ($errorMessage)
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
