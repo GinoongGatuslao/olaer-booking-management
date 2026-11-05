@@ -8,6 +8,7 @@ title('Dashboard - Olaer Spring Resort');
 ?>
 
 <div class="space-y-6">
+    <x-toast :message="session('welcome')" :seconds="4" fresh />
     <div>
         <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">

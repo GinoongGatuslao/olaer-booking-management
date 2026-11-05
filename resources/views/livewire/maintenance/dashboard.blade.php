@@ -60,6 +60,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Dashboard - Olaer Spring Resor
 ?>
 
 <div wire:poll.15s.visible class="space-y-6">
+    <x-toast :message="session('welcome')" :seconds="4" fresh />
     <x-staff-page-header
         eyebrow="Maintenance operations"
         title="Service and inspection queue"

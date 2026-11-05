@@ -60,6 +60,9 @@ $login = function () {
         ]);
     }
 
+    // Shown as a toast on the page the user lands on.
+    session()->flash('welcome', 'Welcome, '.trim((string) ($user->first_name ?: $user->username)));
+
     if ($this->remember) {
         // Remember the username (never the password) on this browser for 30 days.
         Cookie::queue('remembered_username', $this->username, 60 * 24 * 30);

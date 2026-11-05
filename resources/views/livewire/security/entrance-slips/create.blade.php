@@ -314,6 +314,7 @@ class extends Component
 ?>
 
 <div class="space-y-6">
+    <x-toast :message="session('welcome')" :seconds="4" fresh />
 
     <style>
         @media print {

@@ -52,6 +52,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Dashboard - Olaer Spring Resort')]
 ?>
 
 <div wire:poll.15s.visible class="space-y-6">
+    <x-toast :message="session('welcome')" :seconds="4" fresh />
     <x-staff-page-header
         eyebrow="Front desk operations"
         title="Cashier work queue"
