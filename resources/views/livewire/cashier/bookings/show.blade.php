@@ -45,6 +45,12 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
             ->actions($this->booking);
     }
 
+    /** Only cashiers work the booking (payments, check-in, check-out); admins just view it. */
+    public function isCashier(): bool
+    {
+        return auth()->user()?->role?->role_name === 'Cashier';
+    }
+
     public function bookingStatusColor(string $status): string
     {
         return app(BookingWorkspaceService::class)->bookingStatusColor($status);
@@ -109,13 +115,21 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
         </div>
 
         <div class="flex flex-wrap gap-2">
-            @if (Route::has('cashier.bookings.index'))
+            @if ($this->isCashier() && Route::has('cashier.bookings.index'))
                 <flux:button
                     href="{{ route('cashier.bookings.index') }}"
                     wire:navigate
                     variant="ghost"
                 >
                     Back to Bookings
+                </flux:button>
+            @elseif (! $this->isCashier() && Route::has('admin.reports.index'))
+                <flux:button
+                    href="{{ route('admin.reports.index') }}"
+                    wire:navigate
+                    variant="ghost"
+                >
+                    Back to Reports
                 </flux:button>
             @endif
 
@@ -170,70 +184,72 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
         </flux:card>
     </div>
 
-    <flux:card>
-        <div class="mb-4">
-            <h2 class="text-lg font-semibold">Available actions</h2>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">
-                Actions appear only when the booking's current status and balance allow them.
+    @if ($this->isCashier())
+        <flux:card>
+            <div class="mb-4">
+                <h2 class="text-lg font-semibold">Available actions</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                    Actions appear only when the booking's current status and balance allow them.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                @if ($this->actions['can_record_payment'] && Route::has('cashier.payments.index'))
+                    <flux:button
+                        href="{{ route('cashier.payments.index', ['booking' => $this->bookingId]) }}"
+                        wire:navigate
+                        variant="primary"
+                    >
+                        Record Payment
+                    </flux:button>
+                @endif
+
+                @if (Route::has('cashier.billings.index'))
+                    <flux:button
+                        href="{{ route('cashier.billings.index', ['booking' => $this->bookingId]) }}"
+                        wire:navigate
+                        variant="ghost"
+                    >
+                        View Billing Module
+                    </flux:button>
+                @endif
+
+                @if ($this->actions['can_check_in'] && Route::has('cashier.check-ins.index'))
+                    <flux:button
+                        href="{{ route('cashier.check-ins.index', ['booking' => $this->bookingId]) }}"
+                        wire:navigate
+                        variant="ghost"
+                    >
+                        Go to Check-in
+                    </flux:button>
+                @endif
+
+                @if ($this->actions['can_request_amenity'] && Route::has('cashier.amenity-requests.index'))
+                    <flux:button
+                        href="{{ route('cashier.amenity-requests.index', ['booking' => $this->bookingId]) }}"
+                        wire:navigate
+                        variant="ghost"
+                    >
+                        Request Amenity
+                    </flux:button>
+                @endif
+
+                @if ($this->actions['can_check_out'] && Route::has('cashier.check-outs.index'))
+                    <flux:button
+                        href="{{ route('cashier.check-outs.index', ['booking' => $this->bookingId]) }}"
+                        wire:navigate
+                        variant="ghost"
+                    >
+                        Go to Check-out
+                    </flux:button>
+                @endif
+            </div>
+
+            <p class="mt-3 text-xs text-zinc-500">
+                The booking ID is passed to the destination page in the URL. Each target module can progressively add automatic preselection without changing this workspace.
             </p>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-            @if ($this->actions['can_record_payment'] && Route::has('cashier.payments.index'))
-                <flux:button
-                    href="{{ route('cashier.payments.index', ['booking' => $this->bookingId]) }}"
-                    wire:navigate
-                    variant="primary"
-                >
-                    Record Payment
-                </flux:button>
-            @endif
-
-            @if (Route::has('cashier.billings.index'))
-                <flux:button
-                    href="{{ route('cashier.billings.index', ['booking' => $this->bookingId]) }}"
-                    wire:navigate
-                    variant="ghost"
-                >
-                    View Billing Module
-                </flux:button>
-            @endif
-
-            @if ($this->actions['can_check_in'] && Route::has('cashier.check-ins.index'))
-                <flux:button
-                    href="{{ route('cashier.check-ins.index', ['booking' => $this->bookingId]) }}"
-                    wire:navigate
-                    variant="ghost"
-                >
-                    Go to Check-in
-                </flux:button>
-            @endif
-
-            @if ($this->actions['can_request_amenity'] && Route::has('cashier.amenity-requests.index'))
-                <flux:button
-                    href="{{ route('cashier.amenity-requests.index', ['booking' => $this->bookingId]) }}"
-                    wire:navigate
-                    variant="ghost"
-                >
-                    Request Amenity
-                </flux:button>
-            @endif
-
-            @if ($this->actions['can_check_out'] && Route::has('cashier.check-outs.index'))
-                <flux:button
-                    href="{{ route('cashier.check-outs.index', ['booking' => $this->bookingId]) }}"
-                    wire:navigate
-                    variant="ghost"
-                >
-                    Go to Check-out
-                </flux:button>
-            @endif
-        </div>
-
-        <p class="mt-3 text-xs text-zinc-500">
-            The booking ID is passed to the destination page in the URL. Each target module can progressively add automatic preselection without changing this workspace.
-        </p>
-    </flux:card>
+        </flux:card>
+    @endif
 
     <div class="grid gap-6 xl:grid-cols-3">
         <flux:card class="xl:col-span-2">
