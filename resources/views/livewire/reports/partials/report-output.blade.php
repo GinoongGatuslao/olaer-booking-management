@@ -37,7 +37,7 @@
             $showOutstandingMetrics = (bool) ($report['show_outstanding_metrics'] ?? false);
         @endphp
 
-        <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5 print:grid-cols-5">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Verified Revenue</p>
                 <p class="text-xl font-bold">
@@ -74,7 +74,7 @@
             </div>
         </div>
 
-        <div class="mb-4 grid gap-3 md:grid-cols-3">
+        <div class="mb-4 grid gap-3 md:grid-cols-3 print:grid-cols-3">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Cash</p>
                 <p class="text-lg font-semibold">
@@ -98,7 +98,7 @@
         </div>
 
         @if ($showOutstandingMetrics)
-            <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
                 <div
                     class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
                     <p class="text-xs text-amber-700 dark:text-amber-300">
@@ -149,8 +149,8 @@
             </p>
         @endif
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
@@ -190,7 +190,7 @@
     @endif
 
     @if ($reportType === 'booking_summary')
-        <div class="mb-4 grid gap-3 md:grid-cols-3">
+        <div class="mb-4 grid gap-3 md:grid-cols-3 print:grid-cols-3">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Bookings</p>
                 <p class="text-xl font-bold">{{ $report['count'] }}</p>
@@ -207,8 +207,8 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
@@ -269,8 +269,8 @@
             <p class="text-xl font-bold">{{ $report['count'] }}</p>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Cancelled</th>
@@ -309,7 +309,7 @@
     @endif
 
     @if ($reportType === 'damaged_amenities')
-        <div class="mb-4 grid gap-3 md:grid-cols-2">
+        <div class="mb-4 grid gap-3 md:grid-cols-2 print:grid-cols-2">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Damage/Fine Records</p>
                 <p class="text-xl font-bold">{{ $report['count'] }}</p>
@@ -321,8 +321,8 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
@@ -365,7 +365,7 @@
     @endif
 
     @if ($reportType === 'available_facilities')
-        <div class="mb-4 grid gap-3 md:grid-cols-2">
+        <div class="mb-4 grid gap-3 md:grid-cols-2 print:grid-cols-2">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Available Facilities</p>
                 <p class="text-xl font-bold">{{ $report['count'] }}</p>
@@ -385,8 +385,8 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Facility</th>
@@ -434,8 +434,8 @@
 
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Facility</th>
@@ -470,7 +470,7 @@
     @endif
 
     @if ($reportType === 'tourism')
-        <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5 print:grid-cols-5">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Paid Entrance Slips</p>
                 <p class="text-xl font-bold">{{ $report['count'] }}</p>
@@ -492,8 +492,8 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-left text-sm">
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>

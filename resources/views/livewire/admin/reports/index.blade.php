@@ -417,7 +417,9 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
     <style>
         @page { margin: 0; }
         @media print {
-            body { background: white !important;  padding: 12mm; }
+            body { background: white !important; padding: 12mm; }
+            tr, .rounded-lg { break-inside: avoid; }
+            thead { display: table-header-group; }
             header {
                 display: none !important;
             }
