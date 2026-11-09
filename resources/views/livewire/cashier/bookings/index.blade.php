@@ -581,14 +581,87 @@ new class extends Component {
         }
     }
 
-    private function bookings()
+    /** Joins and filters shared by the paged booking list and the detail-row lookup. */
+    private function bookingScope($query)
     {
-        $query = DB::table('tbl_booking')
+        $query
             ->join('tbl_guest', 'tbl_guest.guest_id', '=', 'tbl_booking.guest_id')
             ->leftJoin('tbl_booking_details', 'tbl_booking_details.booking_id', '=', 'tbl_booking.booking_id')
             ->leftJoin('tbl_facility', 'tbl_facility.facility_id', '=', 'tbl_booking_details.facility_id')
-            ->leftJoin('tbl_facility_type', 'tbl_facility_type.facility_type_id', '=', 'tbl_facility.facility_type_id')
-            ->select([
+            ->leftJoin('tbl_facility_type', 'tbl_facility_type.facility_type_id', '=', 'tbl_facility.facility_type_id');
+
+        if ($this->search !== '') {
+            $search = '%' . $this->search . '%';
+            $query->where(function ($subQuery) use ($search): void {
+                $subQuery->where('tbl_booking.b_ref_no', 'like', $search)
+                    ->orWhere('tbl_guest.first_name', 'like', $search)
+                    ->orWhere('tbl_guest.last_name', 'like', $search)
+                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($search))
+                    ->orWhere('tbl_guest.contact_no', 'like', $search)
+                    ->orWhere('tbl_guest.email', 'like', $search)
+                    ->orWhere('tbl_facility.facility_name', 'like', $search);
+            });
+        }
+
+        if ($this->bookingStatusFilter !== '') {
+            $query->where('tbl_booking.status', $this->bookingStatusFilter);
+        }
+
+        if ($this->detailStatusFilter !== '') {
+            $query->where('tbl_booking_details.status', $this->detailStatusFilter);
+        }
+
+        if ($this->dateFrom !== '') {
+            $query->where('tbl_booking_details.check_in_date', $this->dateFrom);
+        }
+
+        if ($this->dateTo !== '') {
+            $query->where('tbl_booking_details.check_out_date', $this->dateTo);
+        }
+
+        return $query;
+    }
+
+    /**
+     * One entry per booking (reference number). Each entry is the collection of
+     * that booking's facility rows, so a booking with several facilities is a
+     * single, collapsible line in the table.
+     */
+    private function bookings()
+    {
+        // Booking-level sort expressions; facility-level fields use MIN() so a
+        // booking with several facilities still sorts as one row.
+        $sortMap = [
+            'booking_id' => 'tbl_booking.booking_id',
+            'b_ref_no' => 'MIN(tbl_booking.b_ref_no)',
+            'booking_date' => 'MIN(tbl_booking.booking_date)',
+            'guest_name' => "MIN(CONCAT(tbl_guest.first_name, ' ', COALESCE(tbl_guest.middle_name, ''), ' ', tbl_guest.last_name))",
+            'facility_name' => 'MIN(tbl_facility.facility_name)',
+            'total_price' => 'MIN(tbl_booking.total_price)',
+            'amount_due' => 'MIN(tbl_booking.amount_due)',
+            'booking_status' => 'MIN(tbl_booking.status)',
+            'status' => 'MIN(tbl_booking_details.status)',
+        ];
+
+        $direction = $this->sortDirection === 'asc' ? 'asc' : 'desc';
+
+        $perPage = in_array($this->perPage, [10, 25, 50, 100], true)
+            ? $this->perPage
+            : 10;
+
+        $pageQuery = $this->bookingScope(DB::table('tbl_booking'))
+            ->select('tbl_booking.booking_id')
+            ->groupBy('tbl_booking.booking_id')
+            ->orderByRaw(($sortMap[$this->sortField] ?? 'tbl_booking.booking_id') . ' ' . $direction)
+            ->orderBy('tbl_booking.booking_id', 'desc');
+
+        $paginator = $pageQuery->paginate($perPage);
+        $bookingIds = $paginator->getCollection()->pluck('booking_id')->all();
+
+        $rows = $bookingIds === []
+            ? collect()
+            : $this->bookingScope(DB::table('tbl_booking'))
+                ->select([
                 'tbl_booking.booking_id',
                 'tbl_booking.b_ref_no',
                 'tbl_booking.booking_date',
@@ -620,59 +693,20 @@ new class extends Component {
                     )
                 ) as can_extend"),
                 DB::raw("CONCAT(tbl_guest.first_name, ' ', COALESCE(tbl_guest.middle_name, ''), ' ', tbl_guest.last_name) as guest_name"),
-            ]);
+            ])
+                ->whereIn('tbl_booking.booking_id', $bookingIds)
+                ->orderBy('tbl_booking_details.booking_details_id')
+                ->get()
+                ->groupBy('booking_id');
 
-        if ($this->search !== '') {
-            $search = '%' . $this->search . '%';
-            $query->where(function ($subQuery) use ($search): void {
-                $subQuery->where('tbl_booking.b_ref_no', 'like', $search)
-                    ->orWhere('tbl_guest.first_name', 'like', $search)
-                    ->orWhere('tbl_guest.last_name', 'like', $search)
-                    ->orWhereRaw(\App\Support\NameSearch::sql('tbl_guest.first_name', 'tbl_guest.middle_name', 'tbl_guest.last_name'), \App\Support\NameSearch::bindings($search))
-                    ->orWhere('tbl_guest.contact_no', 'like', $search)
-                    ->orWhere('tbl_guest.email', 'like', $search)
-                    ->orWhere('tbl_facility.facility_name', 'like', $search);
-            });
-        }
-
-        if ($this->bookingStatusFilter !== '') {
-            $query->where('tbl_booking.status', $this->bookingStatusFilter);
-        }
-
-        if ($this->detailStatusFilter !== '') {
-            $query->where('tbl_booking_details.status', $this->detailStatusFilter);
-        }
-
-        if($this->dateFrom !== ''){
-            $query->where('tbl_booking_details.check_in_date', $this->dateFrom);
-        }
-        if($this->dateTo !== ''){
-            $query->where('tbl_booking_details.check_out_date', $this->dateTo);
-        }
-
-
-        $sortMap = [
-            'booking_id' => 'tbl_booking.booking_id',
-            'b_ref_no' => 'tbl_booking.b_ref_no',
-            'booking_date' => 'tbl_booking.booking_date',
-            'guest_name' => 'guest_name',
-            'facility_name' => 'tbl_facility.facility_name',
-            'total_price' => 'tbl_booking.total_price',
-            'amount_due' => 'tbl_booking.amount_due',
-            'booking_status' => 'tbl_booking.status',
-            'status' => 'tbl_booking_details.status',
-        ];
-
-        $query->orderBy(
-            $sortMap[$this->sortField] ?? 'tbl_booking.booking_id',
-            $this->sortDirection === 'asc' ? 'asc' : 'desc',
+        $paginator->setCollection(
+            $paginator->getCollection()
+                ->map(fn ($row) => $rows->get($row->booking_id))
+                ->filter()
+                ->values(),
         );
 
-        $perPage = in_array($this->perPage, [10, 25, 50, 100], true)
-            ? $this->perPage
-            : 10;
-
-        return $query->paginate($perPage);
+        return $paginator;
     }
 
     private function bookingStatuses()
@@ -847,10 +881,17 @@ new class extends Component {
                         'OVERNIGHT' => ['2:00 PM', '12:00 PM'],
                     ];
                 @endphp
-                @forelse ($bookings as $booking)
-                    @php $times = $rateTimes[strtoupper((string) $booking->rate_code)] ?? null; @endphp
+                @forelse ($bookings as $rows)
+                    @php
+                        $booking = $rows->first();
+                        $withFacility = $rows->filter(fn ($row) => $row->booking_details_id);
+                        $firstRow = $withFacility->first();
+                        $extraFacilities = max($withFacility->count() - 1, 0);
+                        $rangeStart = $withFacility->min('check_in_date');
+                        $rangeEnd = $withFacility->max('check_out_date');
+                    @endphp
                     <tbody
-                        wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}"
+                        wire:key="booking-row-{{ $booking->booking_id }}"
                         x-data="{ open: false }"
                         class="border-b border-zinc-100 text-brand-text dark:border-zinc-800 dark:text-zinc-200"
                     >
@@ -863,8 +904,21 @@ new class extends Component {
                             </td>
                             <td class="px-4 py-3 font-semibold">{{ $booking->b_ref_no }}</td>
                             <td class="px-4 py-3 font-medium">{{ trim(preg_replace('/\s+/', ' ', $booking->guest_name)) }}</td>
-                            <td class="px-4 py-3">{{ $booking->facility_name ?? 'No facility' }}</td>
-                            <td class="whitespace-nowrap px-4 py-3">{{ \Carbon\Carbon::parse($booking->check_in_date)->format('M d, Y') }} → {{ \Carbon\Carbon::parse($booking->check_out_date)->format('M d, Y') }}</td>
+                            <td class="px-4 py-3">
+                                @if ($firstRow)
+                                    {{ $firstRow->facility_name ?? 'No facility' }}
+                                    @if ($extraFacilities > 0)
+                                        <span class="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-brand-text-muted dark:bg-zinc-800 dark:text-zinc-300">+{{ $extraFacilities }} more</span>
+                                    @endif
+                                @else
+                                    <span class="text-brand-text-muted dark:text-zinc-400">No facility</span>
+                                @endif
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                @if ($rangeStart)
+                                    {{ \Carbon\Carbon::parse($rangeStart)->format('M d, Y') }} → {{ \Carbon\Carbon::parse($rangeEnd)->format('M d, Y') }}
+                                @endif
+                            </td>
                             <td class="px-4 py-3">₱{{ number_format((float) $booking->total_price, 2) }}</td>
                             <td class="px-4 py-3">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
                             <td class="px-4 py-3">
@@ -872,8 +926,8 @@ new class extends Component {
                             </td>
                             <td class="px-4 py-3" @click.stop>
                                 <div class="flex justify-end">
-                                    <x-table-actions label="Actions for booking {{ $booking->b_ref_no }}">
-                                        @if (Route::has('cashier.bookings.show'))
+                                    @if (Route::has('cashier.bookings.show'))
+                                        <x-table-actions label="Actions for booking {{ $booking->b_ref_no }}">
                                             <flux:menu.item
                                                 icon="eye"
                                                 href="{{ route('cashier.bookings.show', $booking->booking_id) }}"
@@ -881,41 +935,17 @@ new class extends Component {
                                             >
                                                 View booking
                                             </flux:menu.item>
-                                        @endif
-
-                                        @if ($booking->booking_details_id)
-                                            <flux:menu.separator />
-                                            <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $booking->booking_details_id }})">Reschedule</flux:menu.item>
-                                            <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $booking->booking_details_id }})">Transfer</flux:menu.item>
-                                            <flux:menu.item icon="clock" wire:click="openExtend({{ $booking->booking_details_id }})">Extend</flux:menu.item>
-                                            <flux:menu.item icon="user-group" wire:click="openOccupants({{ $booking->booking_details_id }})">Occupants</flux:menu.item>
-                                            <flux:menu.separator />
-                                        @endif
-                                    </x-table-actions>
+                                        </x-table-actions>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
                         <tr x-show="open" x-transition.opacity style="display: none" class="bg-zinc-50/60 dark:bg-zinc-950/40">
                             <td colspan="9" class="px-6 py-4">
-                                <div class="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                <div class="mb-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                                     <div>
                                         <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Booked on</div>
                                         <div>{{ \Carbon\Carbon::parse($booking->booking_date)->format('M d, Y') }}</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Facility</div>
-                                        <div>{{ $booking->facility_name ?? 'No facility' }}@if ($booking->facility_type) <span class="text-xs text-brand-text-muted dark:text-zinc-400">· {{ $booking->facility_type }}</span>@endif</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Rate</div>
-                                        <div>{{ $booking->rate_type ?: '—' }}</div>
-                                        @if ($times)
-                                            <div class="text-xs text-brand-text-muted dark:text-zinc-400">Check-in {{ $times[0] }} · Check-out {{ $times[1] }}</div>
-                                        @endif
-                                    </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Facility status</div>
-                                        <x-status-badge :status="(string) $booking->status" />
                                     </div>
                                     <div>
                                         <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Contact</div>
@@ -929,10 +959,35 @@ new class extends Component {
                                         <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Extra guests</div>
                                         <div>{{ (int) $booking->no_of_extra_guests }}</div>
                                     </div>
-                                    <div>
-                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Booking status</div>
-                                        <x-status-badge :status="(string) $booking->booking_status" />
-                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    @foreach ($withFacility as $row)
+                                        @php $times = $rateTimes[strtoupper((string) $row->rate_code)] ?? null; @endphp
+                                        <div wire:key="booking-detail-{{ $row->booking_details_id }}" class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                                            <div class="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                                                <div>
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <span class="font-medium">{{ $row->facility_name ?? 'No facility' }}</span>
+                                                        <x-status-badge :status="(string) $row->status" />
+                                                    </div>
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                                        {{ $row->facility_type }}
+                                                        · {{ $row->rate_type }}@if ($times) ({{ $times[0] }} – {{ $times[1] }})@endif
+                                                        · {{ \Carbon\Carbon::parse($row->check_in_date)->format('M d, Y') }} → {{ \Carbon\Carbon::parse($row->check_out_date)->format('M d, Y') }}
+                                                    </div>
+                                                </div>
+                                                <div @click.stop>
+                                                    <x-table-actions label="Actions for {{ $booking->b_ref_no }} facility {{ $row->booking_details_id }}">
+                                                        <flux:menu.item icon="calendar-days" wire:click="openReschedule({{ $row->booking_details_id }})">Reschedule</flux:menu.item>
+                                                        <flux:menu.item icon="arrows-right-left" wire:click="openTransfer({{ $row->booking_details_id }})">Transfer</flux:menu.item>
+                                                        <flux:menu.item icon="clock" wire:click="openExtend({{ $row->booking_details_id }})">Extend</flux:menu.item>
+                                                        <flux:menu.item icon="user-group" wire:click="openOccupants({{ $row->booking_details_id }})">Occupants</flux:menu.item>
+                                                    </x-table-actions>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
                                 </div>
                             </td>
                         </tr>
