@@ -445,11 +445,6 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
     <x-toast :message="session('success')" fresh />
 
-    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-        Inclusive amenities are included with facilities and are saved at ₱0.00.
-        Rentable amenities require a positive price because amenity requests add
-        that price to the guest's bill.
-    </div>
 
     <div>
         <section class="min-w-0">

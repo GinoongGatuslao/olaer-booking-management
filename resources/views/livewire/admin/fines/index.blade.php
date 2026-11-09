@@ -720,11 +720,6 @@ new #[Layout('layouts.app')] #[Title('Fines Management - Olaer Spring Resort')] 
 
     <x-toast :message="session('success')" fresh />
 
-    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-        This module defines charge amounts only. It does not track amenity stock.
-        Existing fine records are retained because inspections and billing may
-        reference them historically.
-    </div>
 
     <div>
         <section class="min-w-0">

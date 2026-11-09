@@ -93,7 +93,6 @@ new #[Layout('layouts.app')] #[Title('Entrance Fee Management - Olaer Spring Res
 
     <x-toast :message="session('success')" fresh />
 
-    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">Category names remain read-only because the entrance-slip calculator uses these canonical categories. Historical slip totals do not change.</div>
 
     <flux:card class="overflow-hidden p-0">
         <table class="w-full text-left text-sm">
