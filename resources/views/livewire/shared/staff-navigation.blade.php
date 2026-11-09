@@ -112,7 +112,7 @@ new class extends Component
                 <flux:sidebar.item :href="route('cashier.bookings.index')" :current="request()->routeIs('cashier.bookings.*')" :badge="$this->badge('bookings_arriving')" wire:navigate>Booking Management</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.check-ins.index')" :current="request()->routeIs('cashier.check-ins.*')" wire:navigate>Check-in</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.amenity-requests.index')" :current="request()->routeIs('cashier.amenity-requests.*')" wire:navigate>Amenity Requests</flux:sidebar.item>
-                <flux:sidebar.item :href="route('cashier.check-outs.index')" :current="request()->routeIs('cashier.check-outs.*')" :badge="$this->badge('pending_checkouts')" wire:navigate>Check-out</flux:sidebar.item>
+                <flux:sidebar.item :href="route('cashier.check-outs.index')" :current="request()->routeIs('cashier.check-outs.*')" :badge="$this->badge('checkouts_due')" wire:navigate>Check-out</flux:sidebar.item>
             </flux:sidebar.group>
 
             <flux:sidebar.group expandable heading="Payment" :expanded="request()->routeIs('cashier.payments.*', 'cashier.gcash-verifications.*')" class="grid">

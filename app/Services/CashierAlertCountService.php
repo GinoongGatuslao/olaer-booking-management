@@ -12,8 +12,9 @@ use Illuminate\Support\Carbon;
  * - Reservations: today's active reservations, counted from the time their rate starts.
  * - Bookings: bookings whose check-in time is within the next 30 minutes, plus overnight
  *   room bookings that have no check-in time (counted from 1:30 PM on their check-in date).
+ * - Check-outs: checked-in bookings that are about to be, or already are, due to check out.
  *
- * Nothing is counted once the check-in date is no longer today.
+ * Reservations and bookings are only counted on their check-in date.
  */
 class CashierAlertCountService
 {
@@ -35,7 +36,19 @@ class CashierAlertCountService
     private const BOOKING_MINUTES_BEFORE = 30;
 
     /**
-     * @return array{reservations_today: int, bookings_arriving: int}
+     * Time of day, on the check-out date, from which a checked-in booking counts as due
+     * to check out. Check-out times are Day 6 PM, Night/Both 10 PM and overnight rooms
+     * 1 PM; they count 30 minutes earlier (overnight rooms from midnight).
+     */
+    private const CHECKOUT_COUNT_FROM = [
+        'DAY' => '17:30:00',
+        'NIGHT' => '21:30:00',
+        'BOTH' => '21:30:00',
+        'OVERNIGHT' => '00:00:00',
+    ];
+
+    /**
+     * @return array{reservations_today: int, bookings_arriving: int, checkouts_due: int}
      */
     public function counts(?Carbon $now = null): array
     {
@@ -44,6 +57,7 @@ class CashierAlertCountService
         return [
             'reservations_today' => $this->reservationsDueToday($now),
             'bookings_arriving' => $this->bookingsArrivingSoon($now),
+            'checkouts_due' => $this->checkoutsDue($now),
         ];
     }
 
@@ -123,5 +137,34 @@ class CashierAlertCountService
 
         // A booking with several facilities is counted once.
         return $withTime->merge($overnightWithoutTime)->unique()->count();
+    }
+
+    /**
+     * Checked-in bookings that should be checked out. A booking starts counting shortly
+     * before its check-out time (see CHECKOUT_COUNT_FROM) and stays counted, even after
+     * that time has passed, until it is checked out.
+     */
+    public function checkoutsDue(Carbon $now): int
+    {
+        return BookingDetail::query()
+            ->whereIn('status', ['Checked-in', 'Checked In'])
+            ->whereHas('booking', function ($booking): void {
+                $booking->whereNotIn('status', ['Cancelled', 'Checked-out']);
+            })
+            ->where(function ($rate) use ($now): void {
+                $rate->whereRaw('1 = 0');
+
+                foreach (self::CHECKOUT_COUNT_FROM as $code => $time) {
+                    $rate->orWhere(function ($due) use ($code, $time, $now): void {
+                        $due->where('rate_code', $code)
+                            ->whereRaw('TIMESTAMP(check_out_date, ?) <= ?', [
+                                $time,
+                                $now->toDateTimeString(),
+                            ]);
+                    });
+                }
+            })
+            ->distinct()
+            ->count('booking_id');
     }
 }
