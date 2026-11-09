@@ -583,7 +583,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
 
 <div class="space-y-6" wire:poll.10s.visible="refreshSelectedState">
     <x-staff-page-header
-        
+        eyebrow="Cashier operations"
         title="Cashier Check-out"
         description="Verify maintenance inspection and payment status before releasing the facility."
     />

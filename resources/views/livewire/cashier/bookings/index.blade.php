@@ -751,7 +751,7 @@ new class extends Component {
 
 <div class="space-y-6">
     <x-staff-page-header
-        
+        eyebrow="Cashier operations"
         title="Booking Management"
         description="Create paid facility bookings, reschedule stays, transfer facilities, and extend eligible cottage bookings."
     >

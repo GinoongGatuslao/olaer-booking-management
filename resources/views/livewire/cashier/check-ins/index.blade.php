@@ -286,7 +286,7 @@ new class extends Component {
 
 <div class="space-y-6">
     <x-staff-page-header
-        
+        eyebrow="Cashier operations"
         title="Cashier Check-in"
         description="Review fully paid booking candidates and confirm eligible arrivals before marking facilities as occupied."
     />

@@ -588,7 +588,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
 <div class="space-y-6">
     <x-staff-page-header
-        
+        eyebrow="Cashier operations"
         title="Reservation Management"
         description="Create temporary facility holds, review guest schedules, and manage active reservations before booking conversion."
     >
