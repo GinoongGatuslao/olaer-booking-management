@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\CashierAlertCountService;
 use App\Services\RealtimeDashboardService;
 use App\Services\SecurityDashboardService;
 use Livewire\Volt\Component;
@@ -16,6 +17,7 @@ new class extends Component
     public function mount(
         RealtimeDashboardService $realtimeDashboard,
         SecurityDashboardService $securityDashboard,
+        CashierAlertCountService $cashierAlerts,
     ): void {
         $user = auth()->user();
         $user?->loadMissing('role');
@@ -25,26 +27,30 @@ new class extends Component
         $this->loadCounts(
             $realtimeDashboard,
             $securityDashboard,
+            $cashierAlerts,
         );
     }
 
     public function refreshNavigationCounts(
         RealtimeDashboardService $realtimeDashboard,
         SecurityDashboardService $securityDashboard,
+        CashierAlertCountService $cashierAlerts,
     ): void {
         $this->loadCounts(
             $realtimeDashboard,
             $securityDashboard,
+            $cashierAlerts,
         );
     }
 
     private function loadCounts(
         RealtimeDashboardService $realtimeDashboard,
         SecurityDashboardService $securityDashboard,
+        CashierAlertCountService $cashierAlerts,
     ): void {
         $this->counts = match ($this->roleName) {
             'Admin' => $realtimeDashboard->admin(),
-            'Cashier' => $realtimeDashboard->cashier(),
+            'Cashier' => $realtimeDashboard->cashier() + $cashierAlerts->counts(),
             'Maintenance Staff' => $realtimeDashboard->maintenance(),
             'Security Guard' => $securityDashboard->overview((int) auth()->id()),
             default => [],
@@ -98,12 +104,12 @@ new class extends Component
             <flux:sidebar.item :href="route('cashier.entrance-slips.index')" :current="request()->routeIs('cashier.entrance-slips.*')" wire:navigate>Entrance Slip</flux:sidebar.item>
 
             <flux:sidebar.group expandable heading="Reservation" :expanded="request()->routeIs('cashier.reservations.*', 'cashier.reservation-conversions.*')" class="grid">
-                <flux:sidebar.item :href="route('cashier.reservations.index')" :current="request()->routeIs('cashier.reservations.*')" wire:navigate>Reservation Management</flux:sidebar.item>
+                <flux:sidebar.item :href="route('cashier.reservations.index')" :current="request()->routeIs('cashier.reservations.*')" :badge="$this->badge('reservations_today')" wire:navigate>Reservation Management</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.reservation-conversions.index')" :current="request()->routeIs('cashier.reservation-conversions.*')" wire:navigate>Reservation Conversion</flux:sidebar.item>
             </flux:sidebar.group>
 
             <flux:sidebar.group expandable heading="Booking" :expanded="request()->routeIs('cashier.bookings.*', 'cashier.check-ins.*', 'cashier.amenity-requests.*', 'cashier.check-outs.*')" class="grid">
-                <flux:sidebar.item :href="route('cashier.bookings.index')" :current="request()->routeIs('cashier.bookings.*')" wire:navigate>Booking Management</flux:sidebar.item>
+                <flux:sidebar.item :href="route('cashier.bookings.index')" :current="request()->routeIs('cashier.bookings.*')" :badge="$this->badge('bookings_arriving')" wire:navigate>Booking Management</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.check-ins.index')" :current="request()->routeIs('cashier.check-ins.*')" wire:navigate>Check-in</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.amenity-requests.index')" :current="request()->routeIs('cashier.amenity-requests.*')" wire:navigate>Amenity Requests</flux:sidebar.item>
                 <flux:sidebar.item :href="route('cashier.check-outs.index')" :current="request()->routeIs('cashier.check-outs.*')" :badge="$this->badge('pending_checkouts')" wire:navigate>Check-out</flux:sidebar.item>
