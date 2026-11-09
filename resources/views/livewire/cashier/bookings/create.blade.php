@@ -888,7 +888,7 @@ protected function validationAttributes(): array
                         placeholder="Required for GCash" 
                     />
                 @endif
-                <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Required core payment" readonly />
+                <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Total Payment" readonly />
                 @if ($this->isCashMode())
                     <flux:field class="relative">
                         <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>

@@ -156,6 +156,32 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             ->get();
     }
 
+    /**
+     * Check-in / check-out times for a rate (schedule), matched by rate code
+     * or, failing that, by the rate's display name.
+     *
+     * @return array{check_in: string, check_out: string}|null
+     */
+    public function rateTimes(?string $rateCode, ?string $displayName = null): ?array
+    {
+        $times = [
+            'day'       => ['check_in' => '6:00 AM', 'check_out' => '6:00 PM'],
+            'night'     => ['check_in' => '4:00 PM', 'check_out' => '12:00 AM'],
+            'both'      => ['check_in' => '6:00 AM', 'check_out' => '12:00 AM'],
+            'overnight' => ['check_in' => '2:00 PM', 'check_out' => '12:00 PM'],
+        ];
+
+        foreach ([$rateCode, $displayName] as $candidate) {
+            $key = strtolower(trim((string) $candidate));
+
+            if (isset($times[$key])) {
+                return $times[$key];
+            }
+        }
+
+        return null;
+    }
+
     public function addGroup(): void
     {
         if (count($this->groups) >= 20) {
@@ -569,6 +595,16 @@ protected function validationAttributes(): array
                                 @endif
                             </flux:field>
                         </div>
+
+                        @php($selectedRate = $selectedProduct?->productRates->first(fn ($rate) => $rate->rate_code->value === ($group['rate_code'] ?? '')))
+                        @php($rateTimes = $planTotal !== '' && $selectedRate ? $this->rateTimes($selectedRate->rate_code->value, $selectedRate->display_name) : null)
+                        @if ($rateTimes)
+                            <div class="mt-4 flex flex-wrap gap-2 text-sm">
+                                <flux:badge color="amber">{{ $selectedRate->display_name }}</flux:badge>
+                                <flux:badge color="zinc">Check-in: {{ $rateTimes['check_in'] }}</flux:badge>
+                                <flux:badge color="zinc">Check-out: {{ $rateTimes['check_out'] }}</flux:badge>
+                            </div>
+                        @endif
 
                         @if ($availability)
                             <div class="mt-4 flex flex-wrap gap-2 text-sm">
