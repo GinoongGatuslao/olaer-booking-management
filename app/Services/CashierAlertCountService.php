@@ -38,13 +38,13 @@ class CashierAlertCountService
     /**
      * Time of day, on the check-out date, from which a checked-in booking counts as due
      * to check out. Check-out times are Day 6 PM, Night/Both 10 PM and overnight rooms
-     * 1 PM; they count 30 minutes earlier (overnight rooms from midnight).
+     * 1 PM; Day and Night/Both count 30 minutes earlier, overnight rooms from 12 PM.
      */
     private const CHECKOUT_COUNT_FROM = [
         'DAY' => '17:30:00',
         'NIGHT' => '21:30:00',
         'BOTH' => '21:30:00',
-        'OVERNIGHT' => '00:00:00',
+        'OVERNIGHT' => '12:00:00',
     ];
 
     /**

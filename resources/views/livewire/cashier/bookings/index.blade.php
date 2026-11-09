@@ -602,6 +602,10 @@ new class extends Component {
                 'tbl_booking_details.check_out_date',
                 'tbl_booking_details.status',
                 'tbl_facility.facility_name',
+                'tbl_facility_type.facility_type',
+                'tbl_booking_details.rate_code',
+                'tbl_guest.contact_no',
+                'tbl_guest.email',
                 DB::raw("(
                     tbl_facility_type.facility_type IN ('Cottage', 'Function Hall')
                     AND tbl_booking_details.rate_code = 'DAY'
@@ -821,40 +825,52 @@ new class extends Component {
             </div>
 
         <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,bookingStatusFilter,detailStatusFilter,perPage,sortBy,clearListFilters">
-            <table class="w-full min-w-[86rem] text-left text-sm">
+            <table class="w-full min-w-[64rem] text-left text-sm">
                 <thead class="border-b border-brand-border bg-zinc-50 text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                     <tr>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('b_ref_no')" class="font-semibold hover:text-brand-text dark:hover:text-white">REFERENCE {{ $this->sortIndicator('b_ref_no') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('guest_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">GUEST {{ $this->sortIndicator('guest_name') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY {{ $this->sortIndicator('facility_name') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_date')" class="font-semibold hover:text-brand-text dark:hover:text-white">BOOKED ON {{ $this->sortIndicator('booking_date') }}</button></th>
-                        <th class="px-5 py-3 font-semibold">Date Range</th>
-                        <th class="px-5 py-3 font-semibold">Rate</th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">TOTAL {{ $this->sortIndicator('total_price') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">BALANCE {{ $this->sortIndicator('amount_due') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">BOOKING STATUS {{ $this->sortIndicator('booking_status') }}</button></th>
-                        <th class="px-5 py-3"><button type="button" wire:click="sortBy('status')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY STATUS {{ $this->sortIndicator('status') }}</button></th>
-                        <th class="px-5 py-3 text-right font-semibold">Actions</th>
+                        <th class="w-10 px-3 py-3"><span class="sr-only">Expand</span></th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('b_ref_no')" class="font-semibold hover:text-brand-text dark:hover:text-white">REFERENCE {{ $this->sortIndicator('b_ref_no') }}</button></th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('guest_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">GUEST {{ $this->sortIndicator('guest_name') }}</button></th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('facility_name')" class="font-semibold hover:text-brand-text dark:hover:text-white">FACILITY {{ $this->sortIndicator('facility_name') }}</button></th>
+                        <th class="px-4 py-3 font-semibold">SCHEDULE</th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('total_price')" class="font-semibold hover:text-brand-text dark:hover:text-white">TOTAL {{ $this->sortIndicator('total_price') }}</button></th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('amount_due')" class="font-semibold hover:text-brand-text dark:hover:text-white">BALANCE {{ $this->sortIndicator('amount_due') }}</button></th>
+                        <th class="px-4 py-3"><button type="button" wire:click="sortBy('booking_status')" class="font-semibold hover:text-brand-text dark:hover:text-white">STATUS {{ $this->sortIndicator('booking_status') }}</button></th>
+                        <th class="px-4 py-3 text-right font-semibold">ACTIONS</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    @forelse ($bookings as $booking)
-                        <tr wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}" class="text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
-                            <td class="px-5 py-4 font-semibold">{{ $booking->b_ref_no }}</td>
-                            <td class="px-5 py-4">{{ trim($booking->guest_name) }}</td>
-                            <td class="px-5 py-4">{{ $booking->facility_name ?? 'No facility' }}</td>
-                            <td class="px-5 py-4">{{ \Carbon\Carbon::parse($booking->booking_date)->format('M d, Y')}}</td>
-                            <td class="px-5 py-4 whitespace-nowrap">{{ \Carbon\Carbon::parse($booking->check_in_date)->format('M d, Y')}} → {{ \Carbon\Carbon::parse($booking->check_out_date)->format('M d, Y')}}</td>
-                            <td class="px-5 py-4">{{ $booking->rate_type }}</td>
-                            <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->total_price, 2) }}</td>
-                            <td class="px-5 py-4 font-medium">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
-                            <td class="px-5 py-4">
+                @php
+                    $rateTimes = [
+                        'DAY' => ['6:00 AM', '6:00 PM'],
+                        'NIGHT' => ['4:00 PM', '12:00 AM'],
+                        'BOTH' => ['6:00 AM', '12:00 AM'],
+                        'OVERNIGHT' => ['2:00 PM', '12:00 PM'],
+                    ];
+                @endphp
+                @forelse ($bookings as $booking)
+                    @php $times = $rateTimes[strtoupper((string) $booking->rate_code)] ?? null; @endphp
+                    <tbody
+                        wire:key="booking-row-{{ $booking->booking_id }}-{{ $booking->booking_details_id }}"
+                        x-data="{ open: false }"
+                        class="border-b border-zinc-100 text-brand-text dark:border-zinc-800 dark:text-zinc-200"
+                    >
+                        <tr
+                            @click="open = ! open"
+                            class="cursor-pointer transition-colors hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/60"
+                        >
+                            <td class="px-3 py-3 text-brand-text-muted dark:text-zinc-400">
+                                <flux:icon.chevron-right class="size-4 transition-transform" x-bind:class="open && 'rotate-90'" />
+                            </td>
+                            <td class="px-4 py-3 font-semibold">{{ $booking->b_ref_no }}</td>
+                            <td class="px-4 py-3 font-medium">{{ trim(preg_replace('/\s+/', ' ', $booking->guest_name)) }}</td>
+                            <td class="px-4 py-3">{{ $booking->facility_name ?? 'No facility' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3">{{ \Carbon\Carbon::parse($booking->check_in_date)->format('M d, Y') }} → {{ \Carbon\Carbon::parse($booking->check_out_date)->format('M d, Y') }}</td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $booking->total_price, 2) }}</td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
+                            <td class="px-4 py-3">
                                 <x-status-badge :status="(string) $booking->booking_status" />
                             </td>
-                            <td class="px-5 py-4">
-                                <x-status-badge :status="(string) $booking->status" />
-                            </td>
-                            <td class="px-5 py-4">
+                            <td class="px-4 py-3" @click.stop>
                                 <div class="flex justify-end">
                                     <x-table-actions label="Actions for booking {{ $booking->b_ref_no }}">
                                         @if (Route::has('cashier.bookings.show'))
@@ -879,9 +895,52 @@ new class extends Component {
                                 </div>
                             </td>
                         </tr>
-                    @empty
+                        <tr x-show="open" x-transition.opacity style="display: none" class="bg-zinc-50/60 dark:bg-zinc-950/40">
+                            <td colspan="9" class="px-6 py-4">
+                                <div class="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Booked on</div>
+                                        <div>{{ \Carbon\Carbon::parse($booking->booking_date)->format('M d, Y') }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Facility</div>
+                                        <div>{{ $booking->facility_name ?? 'No facility' }}@if ($booking->facility_type) <span class="text-xs text-brand-text-muted dark:text-zinc-400">· {{ $booking->facility_type }}</span>@endif</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Rate</div>
+                                        <div>{{ $booking->rate_type ?: '—' }}</div>
+                                        @if ($times)
+                                            <div class="text-xs text-brand-text-muted dark:text-zinc-400">Check-in {{ $times[0] }} · Check-out {{ $times[1] }}</div>
+                                        @endif
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Facility status</div>
+                                        <x-status-badge :status="(string) $booking->status" />
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Contact</div>
+                                        <div>{{ $booking->contact_no ?: '—' }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Email</div>
+                                        <div class="break-all">{{ $booking->email ?: '—' }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Extra guests</div>
+                                        <div>{{ (int) $booking->no_of_extra_guests }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Booking status</div>
+                                        <x-status-badge :status="(string) $booking->booking_status" />
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                @empty
+                    <tbody>
                         <tr>
-                            <td colspan="12" class="px-5 py-6">
+                            <td colspan="9" class="px-5 py-6">
                                 <x-dashboard-empty-state
                                     title="No booking records found"
                                     description="No booking facility records match the current search and status filters."
@@ -889,8 +948,8 @@ new class extends Component {
                                 />
                             </td>
                         </tr>
-                    @endforelse
-                </tbody>
+                    </tbody>
+                @endforelse
             </table>
 
 

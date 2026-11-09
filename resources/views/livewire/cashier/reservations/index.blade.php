@@ -657,9 +657,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
 
         <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,perPage,sortBy,clearListFilters">
-            <table class="w-full min-w-[76rem] text-left text-sm">
+            <table class="w-full min-w-[64rem] text-left text-sm">
                 <thead class="border-b border-brand-border bg-zinc-50 text-xs uppercase tracking-wide text-brand-text-muted dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
                     <tr>
+                        <th class="w-10 px-3 py-3"><span class="sr-only">Expand</span></th>
                         <th class="px-4 py-3">
                             <button
                                 type="button"
@@ -681,7 +682,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                 TOTAL {{ $this->getSortIcon('total_price') }}
                             </button>
                         </th>
-                        <th class="px-4 py-3 font-semibold">Paid</th>
                         <th class="px-4 py-3">
                             <button
                                 type="button"
@@ -703,20 +703,82 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                         <th class="px-4 py-3 text-right font-semibold">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-brand-border dark:divide-zinc-800">
-                    @forelse ($reservations as $reservation)
+                @forelse ($reservations as $reservation)
+                    @php
+                        $details = $reservation->details;
+                        $firstDetail = $details->first();
+                        $extraFacilities = max($details->count() - 1, 0);
+                        $rangeStart = $details->min('check_in_date');
+                        $rangeEnd = $details->max('check_out_date');
+                    @endphp
+                    <tbody
+                        wire:key="reservation-row-{{ $reservation->reservation_id }}"
+                        x-data="{ open: false }"
+                        class="border-b border-brand-border dark:border-zinc-800"
+                    >
                         <tr
-                            wire:key="reservation-row-{{ $reservation->reservation_id }}"
-                            class="transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
+                            @click="open = ! open"
+                            class="cursor-pointer transition hover:bg-brand-surface-muted/70 dark:hover:bg-zinc-800/50"
                         >
+                            <td class="px-3 py-3 text-brand-text-muted dark:text-zinc-400">
+                                <flux:icon.chevron-right class="size-4 transition-transform" x-bind:class="open && 'rotate-90'" />
+                            </td>
                             <td class="px-4 py-3 font-medium text-brand-text dark:text-white">{{ $reservation->r_ref_no }}</td>
                             <td class="px-4 py-3">
                                 <div class="font-medium text-brand-text dark:text-white">{{ $this->fullName($reservation->guest) }}</div>
-                                <div class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $reservation->guest->contact_no }} {{ $reservation->guest->email ? '• '.$reservation->guest->email : '' }}</div>
                             </td>
-                            <td class="px-4 py-3" colspan="2">
+                            <td class="px-4 py-3">
+                                @if ($firstDetail)
+                                    <span class="font-medium text-brand-text dark:text-white">{{ $firstDetail->facility?->facility_name ?? 'Unassigned facility' }}</span>
+                                    @if ($extraFacilities > 0)
+                                        <span class="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-brand-text-muted dark:bg-zinc-800 dark:text-zinc-300">+{{ $extraFacilities }} more</span>
+                                    @endif
+                                @else
+                                    <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
+                                @endif
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                @if ($rangeStart)
+                                    {{ $rangeStart->format('M d, Y') }} → {{ $rangeEnd?->format('M d, Y') }}
+                                @endif
+                            </td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
+                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
+                            <td class="px-4 py-3">
+                                <x-status-badge :status="(string) $reservation->status" />
+                            </td>
+                            <td class="px-4 py-3 text-right" @click.stop>
+                                @if ($reservation->status === 'Active')
+                                    <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
+                                        Cancel Entire Reservation
+                                    </flux:button>
+                                @else
+                                    <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
+                                @endif
+                            </td>
+                        </tr>
+                        <tr x-show="open" x-transition.opacity style="display: none" class="bg-zinc-50/60 dark:bg-zinc-950/40">
+                            <td colspan="9" class="px-6 py-4">
+                                <div class="mb-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Contact</div>
+                                        <div class="text-brand-text dark:text-white">{{ $reservation->guest->contact_no ?: '—' }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Email</div>
+                                        <div class="break-all text-brand-text dark:text-white">{{ $reservation->guest->email ?: '—' }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Paid</div>
+                                        <div class="text-brand-text dark:text-white">₱{{ number_format($this->amountPaid($reservation), 2) }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Facilities</div>
+                                        <div class="text-brand-text dark:text-white">{{ $details->count() }}</div>
+                                    </div>
+                                </div>
                                 <div class="space-y-3">
-                                    @forelse ($reservation->details as $detail)
+                                    @forelse ($details as $detail)
                                         <div @class([
                                             'rounded-lg border p-3',
                                             'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20' => $detail->status === 'Cancelled',
@@ -736,14 +798,16 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                     </div>
                                                 </div>
                                                 @if ($reservation->status === 'Active' && ! in_array((string) $detail->status, ['Cancelled', 'Converted', 'No-show'], true))
-                                                    <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
-                                                        <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
-                                                        @if ($detail->roomOccupants->isNotEmpty())
-                                                            <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
-                                                        @endif
-                                                        <flux:menu.separator />
-                                                        <flux:menu.item icon="x-circle" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel facility</flux:menu.item>
-                                                    </x-table-actions>
+                                                    <div @click.stop>
+                                                        <x-table-actions label="Actions for reservation facility {{ $detail->reservation_details_id }}">
+                                                            <flux:menu.item icon="calendar-days" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'reschedule')">Reschedule</flux:menu.item>
+                                                            @if ($detail->roomOccupants->isNotEmpty())
+                                                                <flux:menu.item icon="user-group" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'occupants')">Occupants</flux:menu.item>
+                                                            @endif
+                                                            <flux:menu.separator />
+                                                            <flux:menu.item icon="x-circle" variant="danger" wire:click="openDetailAction({{ $detail->reservation_details_id }}, 'cancel')">Cancel facility</flux:menu.item>
+                                                        </x-table-actions>
+                                                    </div>
                                                 @endif
                                             </div>
                                         </div>
@@ -752,23 +816,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                     @endforelse
                                 </div>
                             </td>
-                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->total_price, 2) }}</td>
-                            <td class="px-4 py-3">₱{{ number_format($this->amountPaid($reservation), 2) }}</td>
-                            <td class="px-4 py-3">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
-                            <td class="px-4 py-3">
-                                <x-status-badge :status="(string) $reservation->status" />
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                @if ($reservation->status === 'Active')
-                                    <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
-                                        Cancel Entire Reservation
-                                    </flux:button>
-                                @else
-                                    <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
-                                @endif
-                            </td>
                         </tr>
-                    @empty
+                    </tbody>
+                @empty
+                    <tbody>
                         <tr>
                             <td colspan="9" class="px-4 py-8">
                                 <x-dashboard-empty-state
@@ -778,8 +829,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                 />
                             </td>
                         </tr>
-                    @endforelse
-                </tbody>
+                    </tbody>
+                @endforelse
             </table>
 
 
