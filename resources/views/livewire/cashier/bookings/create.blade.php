@@ -718,7 +718,7 @@ protected function validationAttributes(): array
                             <flux:field class="relative" >
                                 <flux:label>Facility name <span class="text-red-500">*</span></flux:label>
                                 <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" :invalid="$errors->has('groups.'.$index.'.facility_product_id')">
-                                <option value="">Choose name</option>
+                                <option value="">Choose a facility</option>
                                 @foreach ($this->products as $candidate)
                                     <option value="{{ $candidate->facility_product_id }}"> {{ $candidate->display_name }}</option>
                                 @endforeach
