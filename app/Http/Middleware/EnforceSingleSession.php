@@ -28,11 +28,6 @@ class EnforceSingleSession
             return $next($request);
         }
 
-        // The column is missing until `php artisan migrate` has run: skip instead of failing.
-        if (! array_key_exists('current_session_id', $user->getAttributes())) {
-            return $next($request);
-        }
-
         if (self::EXEMPT_ROLES !== [] && in_array($user->role?->role_name, self::EXEMPT_ROLES, true)) {
             return $next($request);
         }

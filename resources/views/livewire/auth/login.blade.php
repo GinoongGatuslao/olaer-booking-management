@@ -3,7 +3,6 @@
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use function Livewire\Volt\{layout, mount, rules, state, title};
@@ -70,11 +69,9 @@ $login = function () {
 
     // This session is now the only one allowed to use the account; older ones are signed
     // out by EnforceSingleSession on their next request.
-    if (Schema::hasColumn('tbl_user', 'current_session_id')) {
-        DB::table('tbl_user')
-            ->where('user_id', $user->getAuthIdentifier())
-            ->update(['current_session_id' => session()->getId()]);
-    }
+    DB::table('tbl_user')
+        ->where('user_id', $user->getAuthIdentifier())
+        ->update(['current_session_id' => session()->getId()]);
 
     // Shown as a toast on the page the user lands on.
     session()->flash('welcome', 'Welcome, '.trim((string) ($user->first_name ?: $user->username)));
@@ -100,6 +97,8 @@ $login = function () {
 ?>
 
 <div class="w-full max-w-md">
+    <x-toast :message="session('notice')" type="error" :seconds="8" fresh />
+
     <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div class="mb-6 text-center">
             <img src="/images/olaer/logo.png"
@@ -109,12 +108,6 @@ $login = function () {
             <h1 class="text-2xl font-bold tracking-tight">Olaer Spring Resort</h1>
             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Booking Management with Billing System</p>
         </div>
-
-        @if (session('notice'))
-            <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="status">
-                {{ session('notice') }}
-            </div>
-        @endif
 
         <form wire:submit="login" novalidate class="space-y-5">
             {{-- Empty fields only turn the box red; real problems (wrong password, inactive account) still show text. --}}
