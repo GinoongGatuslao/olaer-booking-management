@@ -2,8 +2,6 @@
 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use function Livewire\Volt\{layout, mount, rules, state, title};
 
@@ -34,44 +32,33 @@ rules([
 $login = function () {
     $this->validate();
 
-    $credentials = [
-        'username' => $this->username,
-        'password' => $this->password,
-    ];
+    $ok = Auth::attempt(
+        [
+            'username' => $this->username,
+            'password' => $this->password,
+        ],
+        (bool) $this->remember,
+    );
 
-    // Check the credentials without opening a session yet.
-    if (! Auth::validate($credentials)) {
+    if (!$ok) {
         throw ValidationException::withMessages([
             'username' => 'The username or password is incorrect.',
         ]);
     }
 
-    $user = Auth::getLastAttempted()->loadMissing('role');
+    session()->regenerate();
+
+    $user = Auth::user()->loadMissing('role');
 
     if ($user->status !== 'Active') {
+        Auth::guard('web')->logout();
+        session()->invalidate();
+        session()->regenerateToken();
+
         throw ValidationException::withMessages([
             'username' => 'Your account is inactive. Please contact the administrator.',
         ]);
     }
-
-    // Newest login wins. A fresh remember token cancels "remember me" on every other device
-    // (a plain query is used so the audit log is not filled with token changes).
-    $rememberToken = Str::random(60);
-
-    DB::table('tbl_user')
-        ->where('user_id', $user->getAuthIdentifier())
-        ->update(['remember_token' => $rememberToken]);
-
-    $user->setRememberToken($rememberToken);
-
-    Auth::login($user, (bool) $this->remember);
-    session()->regenerate();
-
-    // This session is now the only one allowed to use the account; older ones are signed
-    // out by EnforceSingleSession on their next request.
-    DB::table('tbl_user')
-        ->where('user_id', $user->getAuthIdentifier())
-        ->update(['current_session_id' => session()->getId()]);
 
     // Shown as a toast on the page the user lands on.
     session()->flash('welcome', 'Welcome, '.trim((string) ($user->first_name ?: $user->username)));
@@ -97,8 +84,6 @@ $login = function () {
 ?>
 
 <div class="w-full max-w-md">
-    <x-toast :message="session('notice')" type="error" :seconds="8" fresh />
-
     <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div class="mb-6 text-center">
             <img src="/images/olaer/logo.png"
