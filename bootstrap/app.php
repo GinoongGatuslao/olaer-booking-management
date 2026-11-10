@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
         ]);
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnforceSingleSession::class);
         $middleware->appendToGroup('web', \App\Http\Middleware\UpdateUserLastSeen::class);
         $middleware->appendToGroup('web', \App\Http\Middleware\ShareStaffLayoutContext::class);
     })
