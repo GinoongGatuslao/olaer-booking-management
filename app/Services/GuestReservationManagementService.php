@@ -511,6 +511,14 @@ class GuestReservationManagementService
 
             $this->scheduleBlocks->releaseReservationDetails($details);
 
+            // Unreviewed GCash proofs leave "Pending" once the reservation is cancelled.
+            $reservation->payments()
+                ->whereRaw('LOWER(payment_status) = ?', ['pending'])
+                ->get()
+                ->each(fn ($payment) => $payment->update([
+                    'payment_status' => 'Cancelled',
+                ]));
+
             GuestVerificationOtp::query()
                 ->where('reservation_id', $reservation->reservation_id)
                 ->where('purpose', self::OTP_PURPOSE)

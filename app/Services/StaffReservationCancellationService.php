@@ -99,6 +99,8 @@ class StaffReservationCancellationService
 
             $this->scheduleBlocks->releaseReservationDetails($details);
 
+            $this->cancelPendingPayments($reservation);
+
             $this->expireManagementOtps(
                 (int) $reservation->reservation_id,
             );
@@ -111,6 +113,20 @@ class StaffReservationCancellationService
                 'extraGuests',
             ]);
         });
+    }
+
+    /**
+     * Proofs still waiting for review are no longer actionable once the
+     * reservation is gone, so they leave "Pending" and become "Cancelled".
+     */
+    private function cancelPendingPayments(Reservation $reservation): void
+    {
+        $reservation->payments()
+            ->whereRaw('LOWER(payment_status) = ?', ['pending'])
+            ->get()
+            ->each(fn ($payment) => $payment->update([
+                'payment_status' => 'Cancelled',
+            ]));
     }
 
     private function guardCashier(int $userId): void

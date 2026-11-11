@@ -251,6 +251,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                         <option value="Pending">Pending</option>
                         <option value="Verified">Verified</option>
                         <option value="Rejected">Rejected</option>
+                        <option value="Cancelled">Cancelled</option>
                         <option value="all">All</option>
                     </select>
                 </div>
@@ -288,7 +289,11 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                                 </td>
                                 <td class="px-3 py-3 font-medium">₱{{ number_format((float) $payment->amount_paid, 2) }}</td>
                                 <td class="px-3 py-3">
-                                    <span class="rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                                    <span @class([
+                                        'rounded-full px-2 py-1 text-xs font-medium',
+                                        'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' => strtolower((string) $payment->payment_status) === 'cancelled',
+                                        'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' => strtolower((string) $payment->payment_status) !== 'cancelled',
+                                    ])>
                                         {{ $payment->payment_status }}
                                     </span>
                                 </td>
@@ -399,6 +404,10 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
                                     Reject payment
                                 </flux:button>
                             </div>
+                        </div>
+                    @elseif (strtolower((string) $selectedPayment->payment_status) === 'cancelled')
+                        <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
+                            This payment was cancelled because the reservation was cancelled before it was reviewed. It can no longer be verified or rejected.
                         </div>
                     @else
                         <div class="rounded-xl bg-zinc-50 p-3 text-sm text-zinc-600 dark:bg-zinc-950 dark:text-zinc-300">

@@ -56,6 +56,12 @@ class GcashPaymentVerificationService
                 );
             }
 
+            if ($status === 'cancelled') {
+                throw new InvalidArgumentException(
+                    'This GCash payment was cancelled because its reservation was cancelled.',
+                );
+            }
+
             $this->guardPendingGuestGcashPayment($payment);
 
             if ($payment->reservation_id !== null) {
@@ -170,6 +176,12 @@ class GcashPaymentVerificationService
             if ($status === 'verified') {
                 throw new InvalidArgumentException(
                     'A verified GCash payment cannot be rejected.',
+                );
+            }
+
+            if ($status === 'cancelled') {
+                throw new InvalidArgumentException(
+                    'This GCash payment was cancelled because its reservation was cancelled.',
                 );
             }
 
