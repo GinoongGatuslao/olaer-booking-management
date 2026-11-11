@@ -50,9 +50,14 @@ class ReservationQuoteService
             $productRate->amount,
             $baseUnits,
         );
+        // The extra-guest fee is charged per extra guest, per billable day:
+        // 100 x extra guests x days (e.g. 5 guests in a room that fits 4, for 3 days = 300).
         $extraGuestCharge = $this->money->multiply(
-            self::ROOM_EXTRA_GUEST_PRICE,
-            $occupancy['paid_extra_guest_count'],
+            $this->money->multiply(
+                self::ROOM_EXTRA_GUEST_PRICE,
+                $occupancy['paid_extra_guest_count'],
+            ),
+            $baseUnits,
         );
         $discountRate = '0.000000';
         $discountAmount = '0.00';
