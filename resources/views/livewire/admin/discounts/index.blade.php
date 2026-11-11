@@ -242,6 +242,9 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         $this->showEditor = true;
     }
 
+    /** Stored start (Y-m-d\TH:i) of the discount being edited; '' when creating. */
+    public string $originalDiscountStart = '';
+
     public function startEditing(int $discountId): void
     {
         $discount = Discount::query()->findOrFail($discountId);
@@ -256,6 +259,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         );
         $this->discountStart =
             $discount->discount_start?->format('Y-m-d\TH:i') ?? '';
+        $this->originalDiscountStart = $this->discountStart;
         $this->discountEnd =
             $discount->discount_end?->format('Y-m-d\TH:i') ?? '';
         $this->hasValidity = $discount->discount_start !== null || $discount->discount_end !== null;
@@ -286,6 +290,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
         $this->discountName = '';
         $this->discountPercent = '';
         $this->discountStart = '';
+        $this->originalDiscountStart = '';
         $this->discountEnd = '';
         $this->hasValidity = false;
         $this->status = 'Inactive';
@@ -323,6 +328,27 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                 'nullable',
                 Rule::requiredIf($this->hasValidity),
                 'date',
+                // New or changed start times cannot be in the past.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! $this->hasValidity || ! filled($value)) {
+                        return;
+                    }
+
+                    // An existing discount may keep its original (already past) start.
+                    if ($this->editingId !== null && $value === $this->originalDiscountStart) {
+                        return;
+                    }
+
+                    try {
+                        $start = Carbon::parse($value)->startOfMinute();
+                    } catch (\Throwable) {
+                        return; // the 'date' rule reports invalid values
+                    }
+
+                    if ($start->lt(now()->startOfMinute())) {
+                        $fail('Discount start cannot be in the past. Choose the current time or later.');
+                    }
+                },
             ],
             'discountEnd' => [
                 'nullable',
@@ -803,6 +829,9 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                             <input
                                 wire:model="discountStart"
                                 type="datetime-local"
+                                @if ($editingId === null || $discountStart !== $originalDiscountStart)
+                                    min="{{ now()->format('Y-m-d\TH:i') }}"
+                                @endif
                                 class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-white dark:focus:ring-white{{ $errors->has('discountStart') ? ' !border-red-500 ' : '' }}"
                             />
 
