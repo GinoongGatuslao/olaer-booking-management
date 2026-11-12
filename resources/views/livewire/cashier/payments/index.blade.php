@@ -1122,6 +1122,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     <option value="Verified">Verified</option>
                     <option value="Pending">Pending</option>
                     <option value="Rejected">Rejected</option>
+                    <option value="Cancelled">Cancelled</option>
                 </flux:select>
 
                 <flux:select

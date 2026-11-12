@@ -827,7 +827,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         <div class="space-y-5">
             <div>
                 <flux:heading size="lg">{{ $showCheckOutDialog ? 'Confirm facility check-out' : 'Guest check-out' }}</flux:heading>
-                <flux:text class="mt-1">{{ $selectedLabel }}</flux:text>
             </div>
 
             @error('checkOut')

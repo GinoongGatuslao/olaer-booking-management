@@ -1079,7 +1079,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             @if ($pendingAction === 'deliver')
                 <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                     <div class="flex items-center justify-between gap-3">
-                        <p class="text-sm font-semibold">Proof of delivery <span class="font-normal text-zinc-500">(optional)</span></p>
+                        <p class="text-sm font-semibold">Proof of delivery </p>
                         <span class="text-xs text-zinc-500">{{ $dialogPhotos->count() }} / {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }}</span>
                     </div>
 
