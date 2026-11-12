@@ -88,7 +88,5 @@ new #[Layout('layouts.app')] #[Title('Maintenance Notifications - Olaer Spring R
         @endif
     </section>
 
-    <div class="rounded-2xl border border-brand-border bg-brand-water p-4 text-sm leading-6 text-brand-text dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-        Pending amenity requests appear immediately and may be delivered before payment; their charges remain on the booking bill. Inspection alerts appear only after Cashier sends a checkout inspection request.
-    </div>
+    
 </div>
