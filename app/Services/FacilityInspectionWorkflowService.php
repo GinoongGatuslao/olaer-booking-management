@@ -555,7 +555,7 @@ class FacilityInspectionWorkflowService
             || $user->role?->role_name !== 'Maintenance Staff'
         ) {
             throw new InvalidArgumentException(
-                'Only active maintenance staff can record facility inspections.',
+                'Only active maintenance staff can record facility checklists.',
             );
         }
     }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\EntranceSlip;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\TransactionAdjustment;
 use InvalidArgumentException;
@@ -28,29 +29,7 @@ class OutstandingBreakdownService
      */
     public function for(string $targetType, int $targetId): array
     {
-        $charges = match ($targetType) {
-            'booking' => $this->bookingCharges($targetId),
-            'reservation' => $this->reservationCharges($targetId),
-            'entrance_slip' => $this->entranceSlipCharges($targetId),
-            default => throw new InvalidArgumentException('Unsupported transaction type.'),
-        };
-
-        $column = $targetType.'_id';
-        $adjustments = TransactionAdjustment::query()->where($column, $targetId)->get();
-        $creditAdjustments = '0.00';
-
-        foreach ($adjustments as $adjustment) {
-            if (strcasecmp((string) $adjustment->direction, 'Debit') === 0) {
-                $charges[] = [
-                    'group' => 'Adjustments',
-                    'label' => (string) ($adjustment->reason ?: 'Adjustment'),
-                    'detail' => '',
-                    'amount' => $this->money->normalize((string) $adjustment->amount),
-                ];
-            } else {
-                $creditAdjustments = $this->money->add($creditAdjustments, (string) $adjustment->amount);
-            }
-        }
+        [$charges, $creditAdjustments] = $this->chargesWithAdjustments($targetType, $targetId);
 
         $balance = $this->ledger->summaryFor($targetType, $targetId)['balance'];
         $chargeTotal = $this->money->add(...array_column($charges, 'amount') ?: ['0.00']);
@@ -94,6 +73,139 @@ class OutstandingBreakdownService
         }
 
         return ['balance' => $balance, 'lines' => $lines];
+    }
+
+    /**
+     * The itemised charges of a transaction (billing order) and the total of
+     * credit adjustments that reduce what is owed.
+     *
+     * @return array{0: list<array{group: string, label: string, detail: string, amount: string}>, 1: string}
+     */
+    private function chargesWithAdjustments(string $targetType, int $targetId): array
+    {
+        $charges = match ($targetType) {
+            'booking' => $this->bookingCharges($targetId),
+            'reservation' => $this->reservationCharges($targetId),
+            'entrance_slip' => $this->entranceSlipCharges($targetId),
+            default => throw new InvalidArgumentException('Unsupported transaction type.'),
+        };
+
+        $column = $targetType.'_id';
+        $adjustments = TransactionAdjustment::query()->where($column, $targetId)->get();
+        $creditAdjustments = '0.00';
+
+        foreach ($adjustments as $adjustment) {
+            if (strcasecmp((string) $adjustment->direction, 'Debit') === 0) {
+                $charges[] = [
+                    'group' => 'Adjustments',
+                    'label' => (string) ($adjustment->reason ?: 'Adjustment'),
+                    'detail' => '',
+                    'amount' => $this->money->normalize((string) $adjustment->amount),
+                ];
+            } else {
+                $creditAdjustments = $this->money->add($creditAdjustments, (string) $adjustment->amount);
+            }
+        }
+
+        return [$charges, $creditAdjustments];
+    }
+
+    /**
+     * What one verified payment covered, applying the transaction's payments in
+     * the order they were made against its charges (facility, delivered
+     * amenities, fines, adjustments).
+     *
+     * @return array{lines: list<array<string, string>>, unapplied: string, balance_after: string}|null
+     */
+    public function forPayment(Payment $payment): ?array
+    {
+        if ($payment->booking_id !== null) {
+            $targetType = 'booking';
+            $targetId = (int) $payment->booking_id;
+        } elseif ($payment->reservation_id !== null) {
+            $targetType = 'reservation';
+            $targetId = (int) $payment->reservation_id;
+        } elseif ($payment->entrance_slip_id !== null) {
+            $targetType = 'entrance_slip';
+            $targetId = (int) $payment->entrance_slip_id;
+        } else {
+            return null;
+        }
+
+        [$charges, $creditAdjustments] = $this->chargesWithAdjustments($targetType, $targetId);
+
+        // Verified payments of this transaction, oldest first. A booking also owns
+        // the payment taken on the reservation it was converted from.
+        $payments = Payment::query()
+            ->whereRaw('LOWER(payment_status) = ?', ['verified'])
+            ->where(function ($query) use ($targetType, $targetId): void {
+                if ($targetType === 'booking') {
+                    $reservationId = Booking::query()->whereKey($targetId)->first()?->reservation?->reservation_id;
+
+                    $query->where('booking_id', $targetId);
+
+                    if ($reservationId !== null) {
+                        $query->orWhere('reservation_id', $reservationId);
+                    }
+
+                    return;
+                }
+
+                $query->where($targetType.'_id', $targetId);
+            })
+            ->orderBy('payment_id')
+            ->get(['payment_id', 'amount_paid']);
+
+        $before = '0.00';
+
+        foreach ($payments as $other) {
+            if ((int) $other->payment_id >= (int) $payment->payment_id) {
+                break;
+            }
+
+            $before = $this->money->add($before, (string) $other->amount_paid);
+        }
+
+        $thisPayment = $this->money->normalize((string) $payment->amount_paid);
+        $lines = [];
+        $remainingPayment = $thisPayment;
+        $alreadyCovered = $before;
+
+        foreach ($charges as $charge) {
+            // First use up what earlier payments already covered...
+            $coveredEarlier = $this->money->compare($alreadyCovered, $charge['amount']) >= 0
+                ? $charge['amount']
+                : $alreadyCovered;
+            $alreadyCovered = $this->money->subtract($alreadyCovered, $coveredEarlier);
+            $open = $this->money->subtract($charge['amount'], $coveredEarlier);
+
+            if ($this->money->compare($open, '0.00') !== 1 || $this->money->compare($remainingPayment, '0.00') !== 1) {
+                continue;
+            }
+
+            // ...then apply this payment to what is still open.
+            $applied = $this->money->compare($remainingPayment, $open) >= 0 ? $open : $remainingPayment;
+            $remainingPayment = $this->money->subtract($remainingPayment, $applied);
+
+            $lines[] = [
+                'group' => $charge['group'],
+                'label' => $charge['label'],
+                'detail' => $charge['detail'],
+                'charge' => $charge['amount'],
+                'applied' => $applied,
+                'remaining' => $this->money->subtract($open, $applied),
+            ];
+        }
+
+        $chargeTotal = $this->money->add(...array_column($charges, 'amount') ?: ['0.00']);
+        $owed = $this->money->maxZero($this->money->subtract($chargeTotal, $creditAdjustments));
+        $paidThrough = $this->money->add($before, $thisPayment);
+
+        return [
+            'lines' => $lines,
+            'unapplied' => $remainingPayment,
+            'balance_after' => $this->money->maxZero($this->money->subtract($owed, $paidThrough)),
+        ];
     }
 
     /** @return list<array{group: string, label: string, detail: string, amount: string}> */

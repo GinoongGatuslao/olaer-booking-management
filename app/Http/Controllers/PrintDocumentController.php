@@ -7,6 +7,7 @@ use App\Models\EntranceSlip;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Services\BillingStatementService;
+use App\Services\OutstandingBreakdownService;
 use Illuminate\View\View;
 
 class PrintDocumentController extends Controller
@@ -71,6 +72,7 @@ class PrintDocumentController extends Controller
 
     public function paymentReceipt(
         Payment $payment,
+        OutstandingBreakdownService $breakdowns,
     ): View {
         abort_unless(
             strtolower(
@@ -91,8 +93,17 @@ class PrintDocumentController extends Controller
             'entranceSlip.guest',
         ]);
 
+        try {
+            $breakdown = $breakdowns->forPayment($payment);
+        } catch (\Throwable $exception) {
+            // The receipt must still print even if the itemisation can't be built.
+            report($exception);
+            $breakdown = null;
+        }
+
         return view('print.payment-receipt', [
             'payment' => $payment,
+            'breakdown' => $breakdown,
         ]);
     }
 

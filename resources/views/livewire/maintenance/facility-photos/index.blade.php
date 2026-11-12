@@ -14,7 +14,7 @@ use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
-new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] class extends Component
+new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')] class extends Component
 {
     use WithFileUploads;
     use WithPagination;
@@ -25,6 +25,9 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
     /** all | needs_photos | ready | occupied */
     #[Url(as: 'state', except: 'needs_photos')]
     public string $stateFilter = 'needs_photos';
+
+    #[Url(as: 'per_page', except: 10)]
+    public int $perPage = 10;
 
     public ?int $selectedFacilityId = null;
 
@@ -50,6 +53,23 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
 
     public function updatedStateFilter(): void
     {
+        $this->resetPage();
+    }
+
+    public function updatedPerPage(): void
+    {
+        if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
+            $this->perPage = 10;
+        }
+
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->search = '';
+        $this->stateFilter = 'needs_photos';
+        $this->perPage = 10;
         $this->resetPage();
     }
 
@@ -157,7 +177,9 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
             $query->whereRaw("not {$occupiedSql}")->whereRaw("not {$currentSql}");
         }
 
-        return $query->orderBy('tbl_facility.facility_name')->paginate(10);
+        $perPage = in_array($this->perPage, [10, 25, 50, 100], true) ? $this->perPage : 10;
+
+        return $query->orderBy('tbl_facility.facility_name')->paginate($perPage);
     }
 
     private function selectedFacility(): ?Facility
@@ -195,7 +217,7 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
 
 <div class="space-y-6">
     <div>
-        <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Facility Photos</h1>
+        <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Facility Readiness</h1>
         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
             Take photos of a facility while it is empty and ready. They become the “before” record when a guest checks in,
             and go out of date after check-out, so new photos are needed for the next guest.
@@ -205,7 +227,7 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
     <x-toast :message="session('success')" fresh />
 
     <flux:card class="overflow-hidden p-0">
-        <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-3 dark:border-zinc-800">
+        <div class="grid items-end gap-3 border-b border-zinc-200 p-5 md:grid-cols-[1fr_1fr_auto] dark:border-zinc-800">
             <flux:input label="Facility" placeholder="Search facility name" wire:model.live.debounce.300ms="search" clearable />
             <flux:select label="Show" wire:model.live="stateFilter">
                 <option value="needs_photos">Needs new photos</option>
@@ -213,6 +235,16 @@ new #[Layout('layouts.app')] #[Title('Facility Photos - Olaer Spring Resort')] c
                 <option value="occupied">Occupied (guest checked in)</option>
                 <option value="all">All facilities</option>
             </flux:select>
+            <div class="flex items-end gap-2">
+                <flux:select wire:model.live="perPage" label="Rows">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </flux:select>
+
+                <flux:button type="button" wire:click="clearFilters" variant="ghost">Clear Filters</flux:button>
+            </div>
         </div>
 
         <div class="overflow-x-auto">

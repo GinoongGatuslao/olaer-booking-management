@@ -48,7 +48,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Action Center - Olaer Spring R
         @if (Route::has('maintenance.facility-inspections.index'))
             <x-staff-shortcut-card
                 eyebrow="Checkout"
-                title="Facility inspections"
+                title="Facility checklists"
                 description="Accept requests, record findings, and complete assigned inspections."
                 :href="route('maintenance.facility-inspections.index')"
                 tone="info"
@@ -69,7 +69,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Action Center - Olaer Spring R
     <section class="rounded-2xl border border-brand-border bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
         <div class="flex flex-col gap-2 border-b border-brand-border pb-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-700">
             <div>
-                <h2 class="text-lg font-semibold text-brand-text dark:text-white">Pending facility inspections</h2>
+                <h2 class="text-lg font-semibold text-brand-text dark:text-white">Pending facility checklist</h2>
                 <p class="mt-1 text-sm text-brand-text-muted dark:text-zinc-400">
                     Only checkout inspection requests sent by Cashier appear here.
                 </p>

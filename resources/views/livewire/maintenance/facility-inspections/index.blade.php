@@ -21,7 +21,7 @@ use Livewire\Volt\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
-new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort')] class extends Component
+new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort')] class extends Component
 {
 
     public function updated(string $property): void
@@ -1207,7 +1207,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 <div class="space-y-6" wire:poll.15s.visible>
     <x-staff-page-header
         eyebrow="Maintenance operations"
-        title="Facility Inspections"
+        title="Facility Checklists"
         description="Accept only cashier-requested inspections, inspect the correct facility, and send fines to billing."
     >
         <x-slot:actions>

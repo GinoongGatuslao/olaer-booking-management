@@ -31,6 +31,44 @@
         </div>
     </div>
 
+    @if (! empty($breakdown) && count($breakdown['lines']) > 0)
+        <div class="mb-6 rounded-xl border border-zinc-200 p-4 text-sm">
+            <h3 class="mb-3 font-semibold">What this payment covered</h3>
+            <table class="w-full text-left">
+                <thead class="border-b border-zinc-200 text-xs uppercase text-zinc-500">
+                    <tr>
+                        <th class="py-2 pr-3">Item</th>
+                        <th class="py-2 pr-3 text-right">Charge</th>
+                        <th class="py-2 pr-3 text-right">Paid now</th>
+                        <th class="py-2 text-right">Still owed</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-100">
+                    @foreach ($breakdown['lines'] as $line)
+                        <tr>
+                            <td class="py-2 pr-3">
+                                <p class="font-medium">{{ $line['label'] }}</p>
+                                <p class="text-xs text-zinc-500">{{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif</p>
+                            </td>
+                            <td class="py-2 pr-3 text-right">₱{{ number_format((float) $line['charge'], 2) }}</td>
+                            <td class="py-2 pr-3 text-right font-semibold">₱{{ number_format((float) $line['applied'], 2) }}</td>
+                            <td class="py-2 text-right">₱{{ number_format((float) $line['remaining'], 2) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+
+            @if ((float) $breakdown['unapplied'] > 0)
+                <p class="mt-2 text-xs text-zinc-500">₱{{ number_format((float) $breakdown['unapplied'], 2) }} of this payment was not matched to an itemised charge.</p>
+            @endif
+
+            <div class="mt-3 flex justify-between border-t border-zinc-200 pt-2 font-semibold">
+                <span>Balance after this payment</span>
+                <span>₱{{ number_format((float) $breakdown['balance_after'], 2) }}</span>
+            </div>
+        </div>
+    @endif
+
     <div class="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-zinc-200 p-4 text-sm">
         <div class="flex justify-between text-lg"><span>Amount Paid</span><strong>₱{{ number_format((float) $payment->amount_paid, 2) }}</strong></div>
 
