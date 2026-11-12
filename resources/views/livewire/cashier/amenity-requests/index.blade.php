@@ -1156,7 +1156,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                                     href="{{ route('amenity-request-photos.show', $photo) }}"
                                                     target="_blank"
                                                     rel="noopener"
-                                                    class="block size-12 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
+                                                    class="block size-20 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
                                                 >
                                                     <img
                                                         src="{{ route('amenity-request-photos.show', $photo) }}"

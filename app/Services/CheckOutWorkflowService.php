@@ -183,5 +183,16 @@ class CheckOutWorkflowService
                 'A completed maintenance inspection request is required before check-out.',
             );
         }
+
+        // Check-out can be started at any time (inspection request, inspection,
+        // fines), but it cannot be completed while anything is still owed. Fines
+        // from the inspection are already part of amount_due.
+        $amountDue = round((float) $booking->amount_due, 2);
+
+        if ($amountDue > 0.00) {
+            throw new InvalidArgumentException(
+                'This booking still has ₱'.number_format($amountDue, 2).' unpaid, including any inspection fines. Settle it in Payment before completing check-out.',
+            );
+        }
     }
 }

@@ -293,7 +293,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         ], [
             'cashPaid.required' => 'Enter the cash received.',
             'cashPaid.numeric' => 'Cash paid must be a number.',
-            'cashPaid.gte' => 'Cash paid must be at least the amount paid.',
+            'cashPaid.gte' => 'Cash paid must be at least the amount to pay.',
         ]);
 
         try {
@@ -1356,7 +1356,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             @enderror
 
             <flux:field class="relative">
-                <flux:label>Amount paid <span class="text-red-500">*</span></flux:label>
+                <flux:label>Amount to pay <span class="text-red-500">*</span></flux:label>
                 <flux:input wire:model="amountPaid" type="number" min="0.01" step="0.01" :invalid="$errors->has('amountPaid')" />
                 @if ($msg = $this->visibleError('amountPaid'))
                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>

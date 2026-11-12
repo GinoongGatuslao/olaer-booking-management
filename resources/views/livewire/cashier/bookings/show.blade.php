@@ -418,6 +418,32 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
                                 {{ $request->amenity_request_status }}
                             </flux:badge>
                         </div>
+
+                        @if ($request->deliveryPhotos->isNotEmpty())
+                            <div class="mt-3">
+                                <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                    Proof of delivery ({{ $request->deliveryPhotos->count() }})
+                                </p>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach ($request->deliveryPhotos as $photo)
+                                        <a
+                                            wire:key="workspace-delivery-photo-{{ $photo->amenity_request_photo_id }}"
+                                            href="{{ route('amenity-request-photos.show', $photo) }}"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="block size-20 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
+                                        >
+                                            <img
+                                                src="{{ route('amenity-request-photos.show', $photo) }}"
+                                                alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
+                                                loading="lazy"
+                                                class="size-full object-cover"
+                                            />
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 @empty
                     <p class="text-sm text-zinc-500">No amenity request is linked to this booking.</p>

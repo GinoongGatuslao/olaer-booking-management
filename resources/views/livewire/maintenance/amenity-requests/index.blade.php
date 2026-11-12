@@ -257,6 +257,18 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             return;
         }
 
+        // Delivery needs at least one proof photo; keep the dialog open until there is one.
+        if (
+            $this->pendingAction === 'deliver'
+            && ! AmenityRequestPhoto::query()
+                ->where('amenity_request_id', $this->pendingActionRequestId)
+                ->exists()
+        ) {
+            $this->addError('photos', 'Upload at least one proof-of-delivery photo before marking this request as delivered.');
+
+            return;
+        }
+
         $requestId = $this->pendingActionRequestId;
         $action = $this->pendingAction;
         $this->showActionDialog = false;
@@ -1079,7 +1091,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             @if ($pendingAction === 'deliver')
                 <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
                     <div class="flex items-center justify-between gap-3">
-                        <p class="text-sm font-semibold">Proof of delivery </p>
+                        <p class="text-sm font-semibold">Proof of delivery <span class="font-normal text-red-600 dark:text-red-400">(required · at least 1 photo)</span></p>
                         <span class="text-xs text-zinc-500">{{ $dialogPhotos->count() }} / {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }}</span>
                     </div>
 
@@ -1127,7 +1139,12 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
             <div class="flex justify-end gap-3">
                 <flux:button type="button" variant="ghost" wire:click="$set('showActionDialog', false)">Cancel</flux:button>
-                <flux:button type="button" variant="primary" wire:click="confirmAction">
+                <flux:button
+                    type="button"
+                    variant="primary"
+                    wire:click="confirmAction"
+                    :disabled="$pendingAction === 'deliver' && $dialogPhotos->isEmpty()"
+                >
                     {{ $pendingAction === 'accept' ? 'Accept Request' : 'Mark Delivered' }}
                 </flux:button>
             </div>

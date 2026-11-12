@@ -368,6 +368,12 @@ class AmenityRequestWorkflowService
                 );
             }
 
+            if (! $request->deliveryPhotos()->exists()) {
+                throw new InvalidArgumentException(
+                    'Upload at least one proof-of-delivery photo before marking this request as delivered.',
+                );
+            }
+
             $booking = Booking::query()
                 ->lockForUpdate()
                 ->findOrFail((int) $request->booking_id);
