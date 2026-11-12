@@ -338,7 +338,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             return 'Inspection '.$requestStatus;
         }
 
-        if (! filled($inspectionStatus)) {
+        if (! filled($inspectionStatus) || $inspectionStatus === 'In Progress') {
             return 'Waiting for Inspection Result';
         }
 
@@ -381,12 +381,16 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         )
                         ->latest('facility_inspection_request_id')
                         ->limit(1),
+                // Only the inspection that belongs to the latest request counts.
                 'latest_inspection_status' =>
                     FacilityInspection::query()
                         ->select('inspection_status')
                         ->whereColumn(
                             'booking_details_id',
                             'tbl_booking_details.booking_details_id',
+                        )
+                        ->whereRaw(
+                            'facility_inspection_request_id = (select max(r.facility_inspection_request_id) from tbl_facility_inspection_request r where r.booking_details_id = tbl_booking_details.booking_details_id)',
                         )
                         ->latest('facility_inspection_id')
                         ->limit(1),
@@ -441,72 +445,25 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             $this->statusFilter === 'eligible'
             && $this->stageFilter !== 'all'
         ) {
+            // Same definition the workflow stage badge uses: the LATEST request,
+            // and an inspection result that belongs to that request.
+            $latestRequest = '(select max(r.facility_inspection_request_id) from tbl_facility_inspection_request r where r.booking_details_id = tbl_booking_details.booking_details_id)';
+            $latestCompleted = "(select r2.status from tbl_facility_inspection_request r2 where r2.facility_inspection_request_id = {$latestRequest}) = 'Completed'";
+            $resultReady = "exists (select 1 from tbl_facility_inspection i where i.booking_details_id = tbl_booking_details.booking_details_id and i.facility_inspection_request_id = {$latestRequest} and i.inspection_status <> 'In Progress')";
+
             if ($this->stageFilter === 'needs_request') {
-                $query->whereNotExists(function ($query): void {
-                    $query->selectRaw('1')
-                        ->from('tbl_facility_inspection_request as request_filter')
-                        ->whereColumn(
-                            'request_filter.booking_details_id',
-                            'tbl_booking_details.booking_details_id',
-                        );
-                });
+                $query->whereRaw("{$latestRequest} is null");
             } elseif ($this->stageFilter === 'waiting') {
-                $query->whereExists(function ($query): void {
-                    $query->selectRaw('1')
-                        ->from('tbl_facility_inspection_request as request_filter')
-                        ->whereColumn(
-                            'request_filter.booking_details_id',
-                            'tbl_booking_details.booking_details_id',
-                        )
-                        ->where(
-                            'request_filter.status',
-                            '!=',
-                            'Completed',
-                        );
-                });
+                $query->whereRaw("{$latestRequest} is not null")
+                    ->whereRaw("(not ({$latestCompleted}) or not {$resultReady})");
             } elseif ($this->stageFilter === 'payment_due') {
-                $query->where(
-                    'tbl_booking.amount_due',
-                    '>',
-                    0,
-                )->whereExists(function ($query): void {
-                    $query->selectRaw('1')
-                        ->from('tbl_facility_inspection_request as request_filter')
-                        ->whereColumn(
-                            'request_filter.booking_details_id',
-                            'tbl_booking_details.booking_details_id',
-                        )
-                        ->where(
-                            'request_filter.status',
-                            'Completed',
-                        );
-                });
+                $query->whereRaw($latestCompleted)
+                    ->whereRaw($resultReady)
+                    ->where('tbl_booking.amount_due', '>', 0);
             } elseif ($this->stageFilter === 'ready') {
-                $query->where(
-                    'tbl_booking.amount_due',
-                    '<=',
-                    0,
-                )
-                    ->whereExists(function ($query): void {
-                        $query->selectRaw('1')
-                            ->from('tbl_facility_inspection_request as request_filter')
-                            ->whereColumn(
-                                'request_filter.booking_details_id',
-                                'tbl_booking_details.booking_details_id',
-                            )
-                            ->where(
-                                'request_filter.status',
-                                'Completed',
-                            );
-                    })
-                    ->whereExists(function ($query): void {
-                        $query->selectRaw('1')
-                            ->from('tbl_facility_inspection as inspection_filter')
-                            ->whereColumn(
-                                'inspection_filter.booking_details_id',
-                                'tbl_booking_details.booking_details_id',
-                            );
-                    });
+                $query->whereRaw($latestCompleted)
+                    ->whereRaw($resultReady)
+                    ->where('tbl_booking.amount_due', '<=', 0);
             }
         }
 

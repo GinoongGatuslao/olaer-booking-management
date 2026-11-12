@@ -200,6 +200,15 @@ class FacilityInspectionWorkflowService
                 );
             }
 
+            $this->guardDamageWithinFacilityQuantity(
+                $bookingDetailsId,
+                $request,
+                $detail,
+                $fine,
+                $sourceItem,
+                $quantity,
+            );
+
             $unitCharge = $this->money->normalize((string) $fine->fine_charge);
             $totalCharge = $this->money->multiply($unitCharge, $quantity);
 
@@ -527,6 +536,82 @@ class FacilityInspectionWorkflowService
                 'inspected_at' => Carbon::now(),
             ],
         );
+    }
+
+    /**
+     * Damage reported for an item can never add up to more than the facility
+     * actually has. Every draft fine counts (a different fine on the same item
+     * still uses the same units), not just the one being saved.
+     */
+    private function guardDamageWithinFacilityQuantity(
+        int $bookingDetailsId,
+        FacilityInspectionRequest $request,
+        BookingDetail $detail,
+        Fine $fine,
+        ?array $sourceItem,
+        int $quantity,
+    ): void {
+        $drafts = InspectionDraftFine::query()
+            ->with('fine.amenity.amenityName')
+            ->where('facility_inspection_request_id', $request->facility_inspection_request_id)
+            ->where('booking_details_id', $detail->booking_details_id)
+            ->where('status', 'Draft')
+            ->get()
+            // The draft being saved replaces the one with the same identity.
+            ->reject(fn (InspectionDraftFine $draft): bool => (int) $draft->fine_id === (int) $fine->fine_id
+                && $draft->item_source === ($sourceItem['source'] ?? null)
+                && (int) ($draft->source_id ?? 0) === (int) ($sourceItem['source_id'] ?? 0));
+
+        // 1. The specific checklist item (e.g. "Table set x 5").
+        if ($sourceItem !== null) {
+            $alreadyOnItem = (int) $drafts
+                ->filter(fn (InspectionDraftFine $draft): bool => $draft->item_source === $sourceItem['source']
+                    && (int) $draft->source_id === (int) $sourceItem['source_id'])
+                ->sum('quantity');
+
+            $expected = (int) $sourceItem['expected_quantity'];
+
+            if ($alreadyOnItem + $quantity > $expected) {
+                $remaining = max($expected - $alreadyOnItem, 0);
+
+                throw new InvalidArgumentException(
+                    $remaining === 0
+                        ? "All {$expected} of this item already have damage recorded. You can't add more."
+                        : "This item only has {$expected} in the facility ({$alreadyOnItem} already recorded as damaged). You can add up to {$remaining} more.",
+                );
+            }
+        }
+
+        // 2. The amenity as a whole across the facility's checklist, which also
+        // covers a situational fine that is linked to an amenity.
+        if ($fine->amenity_id === null) {
+            return;
+        }
+
+        $amenityId = (int) $fine->amenity_id;
+
+        $facilityHas = (int) collect($this->checklistFor($bookingDetailsId))
+            ->where('amenity_id', $amenityId)
+            ->sum('expected_quantity');
+
+        if ($facilityHas < 1) {
+            return;
+        }
+
+        $alreadyDamaged = (int) $drafts
+            ->filter(fn (InspectionDraftFine $draft): bool => (int) ($draft->fine?->amenity_id ?? 0) === $amenityId)
+            ->sum('quantity');
+
+        if ($alreadyDamaged + $quantity > $facilityHas) {
+            $name = $fine->amenity?->amenityName?->amenity_name ?? 'This amenity';
+            $remaining = max($facilityHas - $alreadyDamaged, 0);
+
+            throw new InvalidArgumentException(
+                $remaining === 0
+                    ? "{$name}: all {$facilityHas} in this facility already have damage recorded."
+                    : "{$name}: the facility only has {$facilityHas} ({$alreadyDamaged} already recorded as damaged). You can add up to {$remaining} more.",
+            );
+        }
     }
 
     private function conditionFromFine(Fine $fine): string
