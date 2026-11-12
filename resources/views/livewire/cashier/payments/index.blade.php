@@ -314,7 +314,9 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
             session()->flash(
                 'success',
-                'Payment recorded successfully. The receipt is ready.',
+                $payment->reservation?->status === 'Converted'
+                    ? 'Payment recorded. The reservation is fully paid and was converted to a booking. The receipt is ready.'
+                    : 'Payment recorded successfully. The receipt is ready.',
             );
         } catch (\InvalidArgumentException $exception) {
             $this->addError('payment', $exception->getMessage());

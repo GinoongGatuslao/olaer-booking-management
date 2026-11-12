@@ -90,12 +90,17 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
         }
 
         try {
-            app(GcashPaymentVerificationService::class)->verify(
+            $verified = app(GcashPaymentVerificationService::class)->verify(
                 paymentId: $this->selectedPaymentId,
                 cashierUserId: (int) Auth::id(),
             );
 
-            session()->flash('success', 'GCash proof verified and the transaction balance was updated.');
+            session()->flash(
+                'success',
+                $verified->reservation?->status === 'Converted'
+                    ? 'GCash proof verified. The reservation is fully paid and was converted to a booking.'
+                    : 'GCash proof verified and the transaction balance was updated.',
+            );
             $this->showVerifyDialog = false;
             $this->selectedPaymentId = null;
             $this->resetPage();

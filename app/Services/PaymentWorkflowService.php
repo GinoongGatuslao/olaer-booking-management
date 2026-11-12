@@ -22,6 +22,7 @@ class PaymentWorkflowService
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DecimalMoneyService $money,
         private readonly TransactionLedgerService $ledger,
+        private readonly ReservationToBookingWorkflowService $reservationConversion,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -154,6 +155,17 @@ class PaymentWorkflowService
                 $newAmountDue,
                 $cashierUserId,
             );
+
+            // A reservation that is now fully paid becomes a booking automatically.
+            if (
+                $targetType === 'reservation'
+                && $this->money->compare($newAmountDue, '0.00') !== 1
+            ) {
+                $this->reservationConversion->convertIfFullyPaid(
+                    $targetId,
+                    $cashierUserId,
+                );
+            }
 
             DB::commit();
 

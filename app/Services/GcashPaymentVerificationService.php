@@ -19,6 +19,7 @@ class GcashPaymentVerificationService
         private readonly FacilityScheduleLockService $scheduleLock,
         private readonly FacilityScheduleBlockService $scheduleBlocks,
         private readonly TransactionLedgerService $ledger,
+        private readonly ReservationToBookingWorkflowService $reservationConversion,
     ) {}
 
     public function verify(
@@ -407,6 +408,14 @@ class GcashPaymentVerificationService
                 ? 'Paid'
                 : 'Active',
         ]);
+
+        // Fully paid and verified: the reservation becomes a booking automatically.
+        if ($this->money->compare($after['balance'], '0.00') !== 1) {
+            $this->reservationConversion->convertIfFullyPaid(
+                (int) $reservation->reservation_id,
+                $cashierUserId,
+            );
+        }
 
         return $this->freshPayment($payment);
     }

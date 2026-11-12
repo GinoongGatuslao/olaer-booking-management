@@ -267,6 +267,43 @@ class ReservationToBookingWorkflowService
         });
     }
 
+    /**
+     * Turns a fully paid reservation into a booking automatically.
+     *
+     * Called right after a verified payment brings the reservation balance to
+     * zero. It never throws: if the conversion cannot happen (for example a
+     * facility is no longer available) the reservation stays "Paid" and the
+     * cashier can still convert it from Reservation Conversion.
+     */
+    public function convertIfFullyPaid(
+        int $reservationId,
+        int $cashierUserId,
+    ): ?Booking {
+        $reservation = Reservation::query()->find($reservationId);
+
+        if (
+            $reservation === null
+            || (string) $reservation->status !== 'Paid'
+            || bccomp(
+                $this->money->normalize((string) $reservation->amount_due),
+                '0.00',
+                2,
+            ) === 1
+            || $reservation->booking()->exists()
+        ) {
+            return null;
+        }
+
+        try {
+            return $this->convert($reservationId, [
+                'user_id' => $cashierUserId,
+                'payment_amount' => '0.00',
+            ]);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
     private function guardCashier(int $userId): void
     {
         if ($userId < 1) {
