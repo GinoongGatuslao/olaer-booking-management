@@ -215,14 +215,27 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
 };
 ?>
 
+
 <div class="space-y-6">
-    <div>
-        <h1 class="text-2xl font-semibold text-zinc-950 dark:text-white">Facility Readiness</h1>
-        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-            Take photos of a facility while it is empty and ready. They become the “before” record when a guest checks in,
-            and go out of date after check-out, so new photos are needed for the next guest.
-        </p>
-    </div>
+    <x-staff-page-header
+        eyebrow="Maintenance operations"
+        title="Facility Readiness"
+        description="Take photos of a facility while it is empty and ready. They become the “before” record when a guest checks in,
+            and go out of date after check-out, so new photos are needed for the next guest."
+    >
+        <x-slot:actions>
+            @if (Route::has('maintenance.dashboard'))
+                <flux:button
+                    href="{{ route('maintenance.dashboard') }}"
+                    wire:navigate
+                    variant="ghost"
+                >
+                    Back to Dashboard
+                </flux:button>
+            @endif
+        </x-slot:actions>
+    </x-staff-page-header>
+
 
     <x-toast :message="session('success')" fresh />
 
