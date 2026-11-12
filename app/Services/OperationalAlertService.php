@@ -347,9 +347,9 @@ class OperationalAlertService
                     'unpaid_checkout_balance',
                 'severity' => 'danger',
                 'title' =>
-                    'Unpaid balance before check-out',
+                    'Unpaid balance on checked-in booking',
                 'message' => sprintf(
-                    '%s has ₱%s unpaid on booking %s. Check-out is blocked until paid.',
+                    '%s has ₱%s unpaid on booking %s. It is settled together with any fines at check-out.',
                     $this->guestName(
                         $booking?->guest,
                     ),

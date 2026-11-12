@@ -342,10 +342,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             return 'Waiting for Inspection Result';
         }
 
-        if ((float) $detail->booking->amount_due > 0) {
-            return 'Payment Due';
-        }
-
         return 'Ready for Check-out';
     }
 
@@ -354,7 +350,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         return match ($stage) {
             'Ready for Check-out' => 'green',
             'Checked-out' => 'blue',
-            'Payment Due' => 'red',
             'Needs Inspection Request' => 'amber',
             'Waiting for Inspection Result' => 'amber',
             default => str_starts_with($stage, 'Inspection ')
@@ -464,29 +459,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             'Completed',
                         );
                 });
-            } elseif ($this->stageFilter === 'payment_due') {
-                $query->where(
-                    'tbl_booking.amount_due',
-                    '>',
-                    0,
-                )->whereExists(function ($query): void {
-                    $query->selectRaw('1')
-                        ->from('tbl_facility_inspection_request as request_filter')
-                        ->whereColumn(
-                            'request_filter.booking_details_id',
-                            'tbl_booking_details.booking_details_id',
-                        )
-                        ->where(
-                            'request_filter.status',
-                            'Completed',
-                        );
-                });
             } elseif ($this->stageFilter === 'ready') {
-                $query->where(
-                    'tbl_booking.amount_due',
-                    '<=',
-                    0,
-                )
+                $query
                     ->whereExists(function ($query): void {
                         $query->selectRaw('1')
                             ->from('tbl_facility_inspection_request as request_filter')
@@ -656,7 +630,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         <option value="all">All </option>
                         <option value="needs_request">Needs inspection request</option>
                         <option value="waiting">Waiting for maintenance</option>
-                        <option value="payment_due">Inspection complete / payment due</option>
                         <option value="ready">Ready for check-out</option>
                     </flux:select>
 
@@ -927,9 +900,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         </div>
                     @endif
 
-                    @if ($selectedBookingAmountDue > 0)
-                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">Settle this balance in the Payment module before check-out.</p>
-                    @endif
                 </div>
 
                 <div>
@@ -1001,7 +971,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         $selectedInspectionRequest !== null
                         && $selectedInspectionRequest->status === 'Completed'
                         && $selectedInspection !== null
-                        && $selectedBookingAmountDue <= 0
                     )
                         <flux:button variant="primary" wire:click="requestCheckOut">
                             Check-out

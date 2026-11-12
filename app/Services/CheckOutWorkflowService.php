@@ -183,11 +183,5 @@ class CheckOutWorkflowService
                 'A completed maintenance inspection request is required before check-out.',
             );
         }
-
-        if (round((float) $booking->amount_due, 2) > 0.00) {
-            throw new InvalidArgumentException(
-                'This guest still has an unpaid balance. Settle the bill before check-out.',
-            );
-        }
     }
 }
