@@ -105,7 +105,8 @@ class TransactionLedgerService
         }
 
         foreach ($booking->amenityRequests as $request) {
-            if (strcasecmp((string) $request->amenity_request_status, 'Cancelled') === 0) {
+            // Only delivered amenities are billed.
+            if (strcasecmp((string) $request->amenity_request_status, 'Delivered') !== 0) {
                 continue;
             }
 

@@ -1144,6 +1144,31 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         </li>
                                     @endforeach
                                 </ul>
+                                @if ($request->deliveryPhotos->isNotEmpty())
+                                    <div class="mt-2">
+                                        <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                            Proof of delivery ({{ $request->deliveryPhotos->count() }})
+                                        </p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            @foreach ($request->deliveryPhotos as $photo)
+                                                <a
+                                                    wire:key="delivery-photo-{{ $photo->amenity_request_photo_id }}"
+                                                    href="{{ route('amenity-request-photos.show', $photo) }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="block size-12 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
+                                                >
+                                                    <img
+                                                        src="{{ route('amenity-request-photos.show', $photo) }}"
+                                                        alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
+                                                        loading="lazy"
+                                                        class="size-full object-cover"
+                                                    />
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
                             </td>
 
                             <td class="px-4 py-4 font-semibold">

@@ -356,7 +356,15 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                             <div class="space-y-2">
                                 @foreach ($statement['amenity_lines'] as $line)
                                     <div class="flex justify-between gap-3 rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-                                        <span>{{ $line['amenity'] }} × {{ $line['quantity'] }} · {{ $line['request_status'] }}</span>
+                                        <div>
+                                            <p class="font-medium">{{ $line['amenity'] }} × {{ $line['quantity'] }}</p>
+                                            <p class="text-xs text-zinc-500">
+                                                Request AR-{{ $line['request_id'] }}
+                                                · {{ $line['facility'] }}
+                                                · {{ $this->money($line['unit_price']) }} each
+                                                @if (! empty($line['delivered_at'])) · Delivered {{ $line['delivered_at'] }} @endif
+                                            </p>
+                                        </div>
                                         <span class="font-medium">{{ $this->money($line['line_total']) }}</span>
                                     </div>
                                 @endforeach

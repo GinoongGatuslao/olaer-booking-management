@@ -61,4 +61,9 @@ class AmenityRequest extends Model
     {
         return $this->hasMany(AmenityRequestDetail::class, 'amenity_request_id', 'amenity_request_id');
     }
+
+    public function deliveryPhotos(): HasMany
+    {
+        return $this->hasMany(AmenityRequestPhoto::class, 'amenity_request_id', 'amenity_request_id');
+    }
 }

@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AmenityRequestPhotoController;
+use App\Http\Controllers\FacilityConditionPhotoController;
+use App\Http\Controllers\FacilityInspectionPhotoController;
 use App\Http\Controllers\GcashProofController;
 use App\Http\Controllers\PrintDocumentController;
 use Illuminate\Http\Request;
@@ -152,6 +155,10 @@ Volt::route('/maintenance/facility-inspections', 'maintenance.facility-inspectio
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.facility-inspections.index');
 
+Volt::route('/maintenance/facility-photos', 'maintenance.facility-photos.index')
+    ->middleware(['auth', 'active', 'role:Maintenance Staff'])
+    ->name('maintenance.facility-photos.index');
+
 Volt::route('/maintenance/amenity-requests', 'maintenance.amenity-requests.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.amenity-requests.index');
@@ -208,6 +215,21 @@ Route::get(
         'role:Admin,Cashier',
     ])
     ->name('payments.gcash-proof');
+
+// secure photo routes (inspection damage, facility condition, amenity delivery proof)
+Route::middleware(['auth', 'active', 'role:Admin,Cashier,Maintenance Staff'])->group(function () {
+    Route::get('/secure/inspection-photos/{photo}', FacilityInspectionPhotoController::class)
+        ->whereNumber('photo')
+        ->name('facility-inspection-photos.show');
+
+    Route::get('/secure/facility-photos/{photo}', FacilityConditionPhotoController::class)
+        ->whereNumber('photo')
+        ->name('facility-condition-photos.show');
+
+    Route::get('/secure/amenity-request-photos/{photo}', AmenityRequestPhotoController::class)
+        ->whereNumber('photo')
+        ->name('amenity-request-photos.show');
+});
 
 // Print
 Route::middleware(['auth', 'active'])->prefix('print')->name('print.')->group(function () {

@@ -3,14 +3,18 @@
 use App\Models\Amenity;
 use App\Models\AmenityRequest;
 use App\Models\Booking;
+use App\Models\AmenityRequestPhoto;
 use App\Models\BookingDetail;
+use App\Services\AmenityDeliveryPhotoService;
 use App\Services\AmenityRequestWorkflowService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Spring Resort')] class extends Component
@@ -35,6 +39,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
         return $value === null || $value === '' || $value === [] ? null : $message;
     }
+    use WithFileUploads;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -59,6 +64,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     public ?int $pendingActionRequestId = null;
     public ?string $pendingAction = null;
     public bool $showActionDialog = false;
+
+    /** Proof-of-delivery photos picked in the confirm dialog; saved right away. */
+    public array $photos = [];
 
     public array $form = [
         'booking_id' => '',
@@ -85,6 +93,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                 $this->selectedBookingDetails(),
             'rentableAmenities' => $this->rentableAmenities(),
             'currentTotal' => $this->calculateTotal($this->items),
+            'dialogPhotos' => $this->dialogPhotos(),
         ];
     }
 
@@ -235,6 +244,8 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         }
 
         AmenityRequest::query()->findOrFail($amenityRequestId);
+        $this->photos = [];
+        $this->resetErrorBag(['photos', 'photos.*']);
         $this->pendingAction = $action;
         $this->pendingActionRequestId = $amenityRequestId;
         $this->showActionDialog = true;
@@ -259,6 +270,67 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         }
 
         $this->markDelivered($requestId, $workflow);
+    }
+
+    /** Save proof photos as soon as they are chosen (max 10 per request, 64 MB each). */
+    public function updatedPhotos(AmenityDeliveryPhotoService $photoService): void
+    {
+        $this->resetErrorBag(['photos', 'photos.*']);
+
+        if ($this->pendingActionRequestId === null || $this->pendingAction !== 'deliver' || $this->photos === []) {
+            $this->photos = [];
+
+            return;
+        }
+
+        try {
+            $this->validate([
+                'photos' => ['array', 'max:'.AmenityDeliveryPhotoService::MAX_PHOTOS],
+                'photos.*' => [
+                    'file',
+                    'mimes:jpg,jpeg,png,webp',
+                    'max:'.AmenityDeliveryPhotoService::MAX_KILOBYTES,
+                ],
+            ], [
+                'photos.max' => 'Choose up to '.AmenityDeliveryPhotoService::MAX_PHOTOS.' photos at a time.',
+                'photos.*.mimes' => 'Photos must be JPG, PNG or WebP images.',
+                'photos.*.max' => 'Each photo must be 64 MB or smaller.',
+                'photos.*.file' => 'One of the chosen files could not be uploaded.',
+            ]);
+
+            $photoService->store(
+                $this->pendingActionRequestId,
+                array_values($this->photos),
+                (int) Auth::id(),
+            );
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            $this->addError('photos', $exception->getMessage());
+        } finally {
+            $this->photos = [];
+        }
+    }
+
+    public function deletePhoto(int $photoId, AmenityDeliveryPhotoService $photoService): void
+    {
+        try {
+            $photoService->delete($photoId, (int) Auth::id());
+        } catch (\Throwable $exception) {
+            $this->addError('photos', $exception->getMessage());
+        }
+    }
+
+    private function dialogPhotos(): Collection
+    {
+        if ($this->pendingActionRequestId === null || $this->pendingAction !== 'deliver') {
+            return new Collection();
+        }
+
+        return AmenityRequestPhoto::query()
+            ->where('amenity_request_id', $this->pendingActionRequestId)
+            ->orderBy('amenity_request_photo_id')
+            ->get();
     }
 
     public function acceptRequest(
@@ -893,6 +965,31 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                         </li>
                                     @endforeach
                                 </ul>
+                                @if ($request->deliveryPhotos->isNotEmpty())
+                                    <div class="mt-2">
+                                        <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                                            Proof of delivery ({{ $request->deliveryPhotos->count() }})
+                                        </p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            @foreach ($request->deliveryPhotos as $photo)
+                                                <a
+                                                    wire:key="delivery-photo-{{ $photo->amenity_request_photo_id }}"
+                                                    href="{{ route('amenity-request-photos.show', $photo) }}"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="block size-12 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
+                                                >
+                                                    <img
+                                                        src="{{ route('amenity-request-photos.show', $photo) }}"
+                                                        alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
+                                                        loading="lazy"
+                                                        class="size-full object-cover"
+                                                    />
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
                             </td>
 
                             <td class="px-4 py-4 font-semibold">
@@ -979,6 +1076,55 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         : 'Confirm that all requested items were delivered to the guest?' }}
                 </flux:text>
             </div>
+            @if ($pendingAction === 'deliver')
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-semibold">Proof of delivery <span class="font-normal text-zinc-500">(optional)</span></p>
+                        <span class="text-xs text-zinc-500">{{ $dialogPhotos->count() }} / {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }}</span>
+                    </div>
+
+                    @if ($dialogPhotos->count() < \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS)
+                        <input
+                            type="file"
+                            multiple
+                            accept="image/jpeg,image/png,image/webp"
+                            wire:model="photos"
+                            class="mt-2 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
+                        />
+                        <p class="mt-1 text-xs text-zinc-500">JPG, PNG or WebP · up to 64 MB each · up to {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }} photos.</p>
+                        <p wire:loading wire:target="photos" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                    @else
+                        <p class="mt-2 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>
+                    @endif
+
+                    @error('photos') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
+                    @error('photos.*') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
+
+                    @if ($dialogPhotos->isNotEmpty())
+                        <div class="mt-3 grid grid-cols-4 gap-2">
+                            @foreach ($dialogPhotos as $photo)
+                                <div wire:key="dialog-photo-{{ $photo->amenity_request_photo_id }}" class="relative overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
+                                    <img
+                                        src="{{ route('amenity-request-photos.show', $photo) }}"
+                                        alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
+                                        class="aspect-square w-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        wire:click="deletePhoto({{ $photo->amenity_request_photo_id }})"
+                                        wire:confirm="Remove this photo?"
+                                        class="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-red-600"
+                                        aria-label="Remove photo"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @endif
+
             <div class="flex justify-end gap-3">
                 <flux:button type="button" variant="ghost" wire:click="$set('showActionDialog', false)">Cancel</flux:button>
                 <flux:button type="button" variant="primary" wire:click="confirmAction">

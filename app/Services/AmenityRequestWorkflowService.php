@@ -20,9 +20,9 @@ class AmenityRequestWorkflowService
      *
      * Correct real-life flow:
      * 1. Cashier records request.
-     * 2. System adds amenity charge to the booking balance.
-     * 3. Request immediately becomes Pending for maintenance delivery.
-     * 4. Maintenance accepts and delivers without waiting for payment.
+     * 2. Request becomes Pending for maintenance delivery (not billed yet).
+     * 3. Maintenance accepts and delivers.
+     * 4. The charge is added to the booking balance only when marked Delivered.
      * 5. Guest pays the amenity charge during checkout/final billing.
      */
     public function createBillableRequest(array $data): AmenityRequest
@@ -102,19 +102,6 @@ class AmenityRequestWorkflowService
                 ]);
             }
 
-            $booking->update([
-                'total_price' => round(
-                    (float) $booking->total_price
-                    + $quote['total'],
-                    2,
-                ),
-                'amount_due' => round(
-                    (float) $booking->amount_due
-                    + $quote['total'],
-                    2,
-                ),
-            ]);
-
             DB::commit();
 
             return $request->fresh([
@@ -185,25 +172,7 @@ class AmenityRequestWorkflowService
                 (int) $request->amenity_request_id,
             );
 
-            $oldTotal = round((float) $request->total_price, 2);
             $quote = $this->quoteItems($cleanItems);
-            $difference = round($quote['total'] - $oldTotal, 2);
-
-            $newTotalPrice = round(
-                (float) $booking->total_price + $difference,
-                2,
-            );
-
-            $newAmountDue = round(
-                (float) $booking->amount_due + $difference,
-                2,
-            );
-
-            if ($newTotalPrice < 0 || $newAmountDue < 0) {
-                throw new InvalidArgumentException(
-                    'Amenity request cannot be modified because the booking balance is inconsistent. Please review payments first.',
-                );
-            }
 
             $request->details()->delete();
 
@@ -219,11 +188,6 @@ class AmenityRequestWorkflowService
 
             $request->update([
                 'total_price' => $quote['total'],
-            ]);
-
-            $booking->update([
-                'total_price' => $newTotalPrice,
-                'amount_due' => $newAmountDue,
             ]);
 
             DB::commit();
@@ -268,35 +232,9 @@ class AmenityRequestWorkflowService
                 );
             }
 
-            $booking = Booking::query()
-                ->lockForUpdate()
-                ->findOrFail((int) $request->booking_id);
-
-            $total = round((float) $request->total_price, 2);
-
-            if (
-                round((float) $booking->amount_due, 2) < $total
-                || round((float) $booking->total_price, 2) < $total
-            ) {
-                throw new InvalidArgumentException(
-                    'Amenity request cannot be cancelled because the booking balance is inconsistent. Please review payments first.',
-                );
-            }
-
             $request->update([
                 'amenity_request_status' => 'Cancelled',
                 'cancelled_at' => Carbon::now(),
-            ]);
-
-            $booking->update([
-                'total_price' => round(
-                    (float) $booking->total_price - $total,
-                    2,
-                ),
-                'amount_due' => round(
-                    (float) $booking->amount_due - $total,
-                    2,
-                ),
             ]);
 
             DB::commit();
@@ -439,6 +377,14 @@ class AmenityRequestWorkflowService
             $request->update([
                 'amenity_request_status' => 'Delivered',
                 'delivered_at' => $request->delivered_at ?? Carbon::now(),
+            ]);
+
+            // Amenities are billed only once delivered: add the charge now.
+            $total = round((float) $request->total_price, 2);
+
+            $booking->update([
+                'total_price' => round((float) $booking->total_price + $total, 2),
+                'amount_due' => round((float) $booking->amount_due + $total, 2),
             ]);
 
             DB::commit();

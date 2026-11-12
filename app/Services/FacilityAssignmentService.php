@@ -781,10 +781,7 @@ class FacilityAssignmentService
             ]);
         }
 
-        $booking->update([
-            'total_price' => $this->money->add((string) $booking->total_price, $total),
-            'amount_due' => $total,
-        ]);
+        // Billed when maintenance marks the request Delivered, not at creation.
     }
 
     /** @return EloquentCollection<int, Facility> */

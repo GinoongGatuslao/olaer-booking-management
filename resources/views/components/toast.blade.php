@@ -17,6 +17,12 @@
 @endphp
 
 @if (filled($message))
+    @php
+        // Tell the layout this page already shows the flash message, so the
+        // layout's fallback toast doesn't show it a second time.
+        request()->attributes->set('toast_rendered', true);
+    @endphp
+
     {{-- Floats over the page at the top right, so it never pushes the layout around. --}}
     <div
         wire:key="{{ $key }}"

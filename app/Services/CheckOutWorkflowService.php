@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\User;
@@ -47,6 +48,19 @@ class CheckOutWorkflowService
 
             // This stay's baseline photos are now outdated; new photos are needed.
             app(FacilityConditionPhotoService::class)->retireForStay($detail);
+
+            // Amenity requests for this facility that were never delivered are
+            // cancelled at check-out. They were never billed and never count
+            // toward amenity fines (only Delivered requests do).
+            AmenityRequest::query()
+                ->where('booking_id', $booking->booking_id)
+                ->whereIn('amenity_request_status', ['Pending', 'Awaiting Payment', 'Delivering'])
+                ->whereHas('details', fn ($query) => $query->where('facility_id', $detail->facility_id))
+                ->get()
+                ->each(fn (AmenityRequest $request) => $request->update([
+                    'amenity_request_status' => 'Cancelled',
+                    'cancelled_at' => now(),
+                ]));
 
             $this->scheduleBlocks->releaseBookingDetails([$detail]);
 

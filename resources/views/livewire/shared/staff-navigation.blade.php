@@ -129,10 +129,10 @@ new class extends Component
             </flux:sidebar.group>
         @elseif ($roleName === 'Maintenance Staff')
             <flux:sidebar.item :href="route('maintenance.amenity-requests.index')" :current="request()->routeIs('maintenance.amenity-requests.*')" :badge="$this->badge('amenity_requests')" wire:navigate>Amenity Requests</flux:sidebar.item>
-            <flux:sidebar.item :href="route('maintenance.facility-inspections.index')" :current="request()->routeIs('maintenance.facility-inspections.*')" :badge="$this->badge('inspection_requests')" wire:navigate>Facility Inspections</flux:sidebar.item>
-            @if (\Illuminate\Support\Facades\Route::has('maintenance.facility-photos.index'))
-                <flux:sidebar.item :href="route('maintenance.facility-photos.index')" :current="request()->routeIs('maintenance.facility-photos.*')" wire:navigate>Facility Photos</flux:sidebar.item>
-            @endif
+            <flux:sidebar.group expandable heading="Facility Inspection" :expanded="request()->routeIs('maintenance.facility-inspections.*', 'maintenance.facility-photos.*')" class="grid">
+                <flux:sidebar.item :href="route('maintenance.facility-inspections.index')" :current="request()->routeIs('maintenance.facility-inspections.*')" :badge="$this->badge('inspection_requests')" wire:navigate>Facility Checklist</flux:sidebar.item>
+                <flux:sidebar.item :href="route('maintenance.facility-photos.index')" :current="request()->routeIs('maintenance.facility-photos.*')" wire:navigate>Facility Readiness</flux:sidebar.item>
+            </flux:sidebar.group>
             <flux:sidebar.item :href="route('maintenance.notifications.index')" :current="request()->routeIs('maintenance.notifications.*')" :badge="$this->maintenanceWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
             <flux:sidebar.item :href="route('maintenance.action-center')" :current="request()->routeIs('maintenance.action-center')" :badge="$this->maintenanceWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
         @elseif ($roleName === 'Security Guard')

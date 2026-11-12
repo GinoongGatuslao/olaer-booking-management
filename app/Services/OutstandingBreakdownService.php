@@ -85,7 +85,7 @@ class OutstandingBreakdownService
         if ($this->money->compare($unexplained, '0.00') === 1) {
             $lines[] = [
                 'group' => 'Other',
-                'label' => 'Other charges',
+                'label' => 'Other charges (not itemised)',
                 'detail' => '',
                 'amount' => $unexplained,
                 'paid' => '0.00',
@@ -124,7 +124,12 @@ class OutstandingBreakdownService
             $charges[] = [
                 'group' => 'Amenity',
                 'label' => $line['amenity'].' × '.$line['quantity'],
-                'detail' => (string) $line['facility'],
+                'detail' => implode(' · ', array_filter([
+                    'Request AR-'.$line['request_id'],
+                    (string) $line['facility'],
+                    '₱'.number_format((float) $line['unit_price'], 2).' each',
+                    ! empty($line['delivered_at']) ? 'Delivered '.$line['delivered_at'] : null,
+                ])),
                 'amount' => $this->money->normalize((string) $line['line_total']),
             ];
         }

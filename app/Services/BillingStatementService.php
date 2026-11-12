@@ -206,7 +206,7 @@ class BillingStatementService
 
         $amenityLines = $booking->amenityRequests
             ->filter(function ($request): bool {
-                return (string) $request->amenity_request_status !== 'Cancelled';
+                return (string) $request->amenity_request_status === 'Delivered';
             })
             ->flatMap(function ($request) {
                 return $request->details->map(function ($detail) use ($request): array {
@@ -217,6 +217,7 @@ class BillingStatementService
                         'request_id' => (int) $request->amenity_request_id,
                         'request_status' => (string) $request->amenity_request_status,
                         'date_created' => optional($request->date_created)->toDateString(),
+                        'delivered_at' => optional($request->delivered_at)->format('M d, Y h:i A'),
                         'amenity' => $detail->amenity?->amenityName?->amenity_name ?? 'Amenity unavailable',
                         'facility' => $detail->facility?->facility_name ?? 'Facility unavailable',
                         'quantity' => $quantity,
@@ -309,7 +310,7 @@ class BillingStatementService
     {
         return AmenityRequest::query()
             ->with(['booking.guest', 'details.amenity.amenityName'])
-            ->where('amenity_request_status', '!=', 'Cancelled')
+            ->where('amenity_request_status', 'Delivered')
             ->when($this->from($filters), function ($query, string $from): void {
                 $query->whereDate('date_created', '>=', $from);
             })
@@ -540,8 +541,7 @@ class BillingStatementService
             )
             ->where(
                 'billing_amenity_request.amenity_request_status',
-                '!=',
-                'Cancelled',
+                'Delivered',
             )
             ->when(
                 $this->from($filters),
