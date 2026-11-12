@@ -38,6 +38,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
     public ?string $selectedTransactionType = null;
     public ?int $selectedTransactionId = null;
     public ?string $errorMessage = null;
+    public bool $showStatementModal = false;
 
     public function with(): array
     {
@@ -115,6 +116,16 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         $this->selectedTransactionType = $type;
         $this->selectedTransactionId = $id;
         $this->errorMessage = null;
+        $this->showStatementModal = true;
+    }
+
+    public function updatedShowStatementModal(bool $open): void
+    {
+        if (! $open) {
+            $this->selectedTransactionType = null;
+            $this->selectedTransactionId = null;
+            $this->errorMessage = null;
+        }
     }
 
     public function selectedStatement(): ?array
@@ -220,7 +231,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
             </div>
     </flux:card>
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(26rem,0.9fr)]">
+    <div>
         <flux:card class="overflow-hidden p-0">
             <div class="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
                 <h2 class="font-semibold">Historical Transactions</h2>
@@ -287,14 +298,16 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
             </div>
         </flux:card>
 
-        <flux:card>
+    </div>
+
+    <flux:modal wire:model="showStatementModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[48rem]">
             @if (! $statement)
                 <div class="py-12 text-center text-sm text-zinc-500">
-                    Select a Reservation or Booking to view its detailed statement.
+                    {{ $errorMessage ?? 'Loading statement...' }}
                 </div>
             @else
                 <div class="space-y-6">
-                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="flex flex-col gap-3 pe-8 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <p class="text-xs uppercase tracking-wide text-zinc-500">{{ $statement['transaction_type'] }}</p>
                             <h2 class="text-xl font-semibold">{{ $statement['reference_no'] }}</h2>
@@ -462,6 +475,5 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                     </div>
                 </div>
             @endif
-        </flux:card>
-    </div>
+    </flux:modal>
 </div>
