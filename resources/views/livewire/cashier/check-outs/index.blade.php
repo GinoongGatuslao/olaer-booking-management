@@ -2,6 +2,7 @@
 
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
+use App\Models\FacilityConditionPhoto;
 use App\Models\FacilityInspectionPhoto;
 use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
@@ -86,6 +87,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             'selectedInspection' => $this->selectedInspection(),
             'selectedInspectionRequest' => $this->selectedInspectionRequest(),
             'inspectionPhotos' => $this->inspectionPhotos(),
+            'conditionPhotos' => $this->conditionPhotos(),
         ];
     }
 
@@ -569,6 +571,19 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             ->first();
     }
 
+    /** Facility photos taken before this stay's check-in ("before" baseline). */
+    private function conditionPhotos(): \Illuminate\Support\Collection
+    {
+        if ($this->selectedBookingDetailsId === null) {
+            return collect();
+        }
+
+        return FacilityConditionPhoto::query()
+            ->where('booking_details_id', $this->selectedBookingDetailsId)
+            ->orderBy('facility_condition_photo_id')
+            ->get();
+    }
+
     /** Damage photos maintenance attached to the latest inspection request (read-only here). */
     private function inspectionPhotos(): \Illuminate\Support\Collection
     {
@@ -885,6 +900,32 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                                 </div>
                             </div>
                         @endif
+                    @endif
+
+                    @if ($conditionPhotos->isNotEmpty())
+                        <div>
+                            <p class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                Facility before check-in ({{ $conditionPhotos->count() }})
+                            </p>
+                            <div class="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                                @foreach ($conditionPhotos as $photo)
+                                    <a
+                                        wire:key="checkout-before-photo-{{ $photo->facility_condition_photo_id }}"
+                                        href="{{ route('facility-condition-photos.show', $photo) }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                                    >
+                                        <img
+                                            src="{{ route('facility-condition-photos.show', $photo) }}"
+                                            alt="{{ $photo->original_name ?? 'Facility photo' }}"
+                                            loading="lazy"
+                                            class="aspect-square w-full object-cover"
+                                        />
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
                     @endif
 
                     @if ($selectedBookingAmountDue > 0)
