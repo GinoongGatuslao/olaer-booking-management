@@ -109,13 +109,32 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function with(): array
     {
+        $selectedPayment = $this->selectedPayment();
+
         return [
             'payables' => $this->payables(),
             'payments' => $this->payments(),
             'modeOfPayments' => $this->modeOfPayments(),
-            'selectedPayment' => $this->selectedPayment(),
+            'selectedPayment' => $selectedPayment,
+            'receiptBreakdown' => $this->receiptBreakdown($selectedPayment),
             'breakdown' => $this->selectedBreakdown(),
         ];
+    }
+
+    /** What the selected verified payment covered, same data as the printed receipt. */
+    public function receiptBreakdown(?Payment $payment): ?array
+    {
+        if ($payment === null || strtolower(trim((string) $payment->payment_status)) !== 'verified') {
+            return null;
+        }
+
+        try {
+            return app(\App\Services\OutstandingBreakdownService::class)->forPayment($payment);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
     }
 
     /** Unpaid parts of the selected transaction (fully paid charges are left out). */
@@ -971,6 +990,54 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     <dd class="mt-1 font-medium">{{ $this->targetTypeOf($selectedPayment) }}</dd>
                 </div>
             </dl>
+
+            @if ($receiptBreakdown !== null && $receiptBreakdown['lines'] !== [])
+                <div class="mt-5 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
+                    <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        @foreach ($receiptBreakdown['lines'] as $line)
+                            <div class="flex items-center justify-between gap-4 px-4 py-3 text-sm" wire:key="receipt-line-{{ $loop->index }}">
+                                <div class="flex min-w-0 items-center gap-3">
+                                    <flux:badge size="sm" color="{{ match ($line['group']) {
+                                        'Facility' => 'blue',
+                                        'Amenity' => 'emerald',
+                                        'Fine' => 'red',
+                                        'Adjustments' => 'amber',
+                                        default => 'zinc',
+                                    } }}">{{ $line['group'] }}</flux:badge>
+
+                                    <div class="min-w-0">
+                                        <p class="truncate font-medium">{{ $line['label'] }}</p>
+                                        @if ($line['detail'] !== '')
+                                            <p class="truncate text-xs text-zinc-500">{{ $line['detail'] }}</p>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="text-right">
+                                    <p class="whitespace-nowrap font-semibold">₱{{ number_format((float) $line['applied'], 2) }}</p>
+                                    <p class="whitespace-nowrap text-xs text-zinc-500">
+                                        of ₱{{ number_format((float) $line['charge'], 2) }}
+                                        @if ((float) $line['remaining'] > 0)
+                                            · ₱{{ number_format((float) $line['remaining'], 2) }} still owed
+                                        @endif
+                                    </p>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @if ((float) $receiptBreakdown['unapplied'] > 0)
+                        <p class="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+                            ₱{{ number_format((float) $receiptBreakdown['unapplied'], 2) }} of this payment was not matched to an itemised charge.
+                        </p>
+                    @endif
+
+                    <div class="flex items-center justify-between gap-4 bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900/60">
+                        <span>Balance after this payment</span>
+                        <span class="text-base">₱{{ number_format((float) $receiptBreakdown['balance_after'], 2) }}</span>
+                    </div>
+                </div>
+            @endif
         </flux:card>
     @endif
 
