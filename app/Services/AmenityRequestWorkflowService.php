@@ -6,6 +6,7 @@ use App\Models\Amenity;
 use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
+use App\Models\AmenityRequestDetail;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +69,12 @@ class AmenityRequestWorkflowService
                 $booking,
                 $bookingDetailId,
                 $facilityId,
+            );
+
+            $this->guardAmenityLimits(
+                $cleanItems,
+                (int) $booking->booking_id,
+                (int) $bookingDetail->facility_id,
             );
 
             $quote = $this->quoteItems($cleanItems);
@@ -169,6 +176,13 @@ class AmenityRequestWorkflowService
                 $booking,
                 0,
                 $facilityId,
+            );
+
+            $this->guardAmenityLimits(
+                $cleanItems,
+                (int) $booking->booking_id,
+                $facilityId,
+                (int) $request->amenity_request_id,
             );
 
             $oldTotal = round((float) $request->total_price, 2);
@@ -440,6 +454,75 @@ class AmenityRequestWorkflowService
             DB::rollBack();
 
             throw $exception;
+        }
+    }
+
+    /**
+     * An amenity can only be requested up to its limit (default 10, set by the
+     * admin) for one facility of a booking. Units already on other
+     * non-cancelled requests for that facility count toward the limit.
+     *
+     * @param  list<array{amenity_id: int, quantity: int}>  $items
+     */
+    private function guardAmenityLimits(
+        array $items,
+        int $bookingId,
+        int $facilityId,
+        ?int $excludeRequestId = null,
+    ): void {
+        $requested = [];
+
+        foreach ($items as $item) {
+            $requested[$item['amenity_id']] = ($requested[$item['amenity_id']] ?? 0) + $item['quantity'];
+        }
+
+        $alreadyRequested = AmenityRequestDetail::query()
+            ->join(
+                'tbl_amenity_request',
+                'tbl_amenity_request.amenity_request_id',
+                '=',
+                'tbl_amenity_request_details.amenity_request_id',
+            )
+            ->where('tbl_amenity_request.booking_id', $bookingId)
+            ->where('tbl_amenity_request_details.facility_id', $facilityId)
+            ->where('tbl_amenity_request.amenity_request_status', '!=', 'Cancelled')
+            ->when(
+                $excludeRequestId !== null,
+                fn ($query) => $query->where('tbl_amenity_request.amenity_request_id', '!=', $excludeRequestId),
+            )
+            ->whereIn('tbl_amenity_request_details.amenity_id', array_keys($requested))
+            ->groupBy('tbl_amenity_request_details.amenity_id')
+            ->selectRaw('tbl_amenity_request_details.amenity_id as amenity_id, SUM(tbl_amenity_request_details.amenity_quantity) as total')
+            ->pluck('total', 'amenity_id');
+
+        $amenities = Amenity::query()
+            ->with('amenityName')
+            ->whereIn('amenity_id', array_keys($requested))
+            ->get()
+            ->keyBy('amenity_id');
+
+        foreach ($requested as $amenityId => $quantity) {
+            $amenity = $amenities->get($amenityId);
+
+            if ($amenity === null) {
+                continue;
+            }
+
+            $limit = max((int) ($amenity->request_limit ?? 10), 1);
+            $already = (int) ($alreadyRequested[$amenityId] ?? 0);
+            $remaining = max($limit - $already, 0);
+
+            if ($quantity <= $remaining) {
+                continue;
+            }
+
+            $name = $amenity->amenityName?->amenity_name ?? 'This amenity';
+
+            throw new InvalidArgumentException(
+                $remaining === 0
+                    ? "{$name} has reached its limit of {$limit} for this facility."
+                    : "Only {$remaining} more {$name} can be requested for this facility (limit {$limit}, {$already} already requested).",
+            );
         }
     }
 

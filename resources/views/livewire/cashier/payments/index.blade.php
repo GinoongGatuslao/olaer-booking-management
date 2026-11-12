@@ -5,6 +5,7 @@ use App\Models\EntranceSlip;
 use App\Models\ModeOfPayment;
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Services\OutstandingBreakdownService;
 use App\Services\PaymentWorkflowService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -113,7 +114,24 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             'payments' => $this->payments(),
             'modeOfPayments' => $this->modeOfPayments(),
             'selectedPayment' => $this->selectedPayment(),
+            'breakdown' => $this->selectedBreakdown(),
         ];
+    }
+
+    /** Unpaid parts of the selected transaction (fully paid charges are left out). */
+    public function selectedBreakdown(): ?array
+    {
+        if (! $this->showPaymentModal || $this->selectedTargetId === null) {
+            return null;
+        }
+
+        try {
+            return app(OutstandingBreakdownService::class)->for($this->targetType, $this->selectedTargetId);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
     }
 
     public function updatedPayableSearch(): void
@@ -1307,6 +1325,30 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     Balance: <span class="font-semibold">₱{{ number_format((float) $selectedAmountDue, 2) }}</span>
                 </flux:text>
             </div>
+
+            @if ($breakdown && count($breakdown['lines']) > 0)
+                <div class="rounded-xl border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Unpaid breakdown</p>
+                    <div class="space-y-2">
+                        @foreach ($breakdown['lines'] as $line)
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="font-medium">{{ $line['label'] }}</p>
+                                    <p class="text-xs text-zinc-500">
+                                        {{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif
+                                        @if ((float) $line['paid'] > 0) · ₱{{ number_format((float) $line['paid'], 2) }} of ₱{{ number_format((float) $line['amount'], 2) }} paid @endif
+                                    </p>
+                                </div>
+                                <span class="whitespace-nowrap font-semibold">₱{{ number_format((float) $line['remaining'], 2) }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div class="mt-3 flex justify-between border-t border-zinc-200 pt-2 font-semibold dark:border-zinc-700">
+                        <span>Total unpaid</span>
+                        <span>₱{{ number_format((float) $breakdown['balance'], 2) }}</span>
+                    </div>
+                </div>
+            @endif
 
             @error('payment')
                 <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>

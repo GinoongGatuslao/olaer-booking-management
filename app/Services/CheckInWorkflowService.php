@@ -55,6 +55,9 @@ class CheckInWorkflowService
                 'user_id' => $userId,
             ]);
 
+            // The facility's current condition photos become this stay's baseline.
+            app(FacilityConditionPhotoService::class)->attachToStay($detail);
+
             $facility->update([
                 'facility_status' => 'Occupied',
             ]);

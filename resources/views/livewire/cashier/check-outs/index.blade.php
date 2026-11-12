@@ -2,6 +2,7 @@
 
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
+use App\Models\FacilityInspectionPhoto;
 use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
 use App\Services\CheckOutWorkflowService;
@@ -84,6 +85,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             'selectedGuestFines' => $this->selectedGuestFines(),
             'selectedInspection' => $this->selectedInspection(),
             'selectedInspectionRequest' => $this->selectedInspectionRequest(),
+            'inspectionPhotos' => $this->inspectionPhotos(),
         ];
     }
 
@@ -567,6 +569,21 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             ->first();
     }
 
+    /** Damage photos maintenance attached to the latest inspection request (read-only here). */
+    private function inspectionPhotos(): \Illuminate\Support\Collection
+    {
+        $request = $this->selectedInspectionRequest();
+
+        if ($request === null) {
+            return collect();
+        }
+
+        return FacilityInspectionPhoto::query()
+            ->where('facility_inspection_request_id', $request->facility_inspection_request_id)
+            ->orderBy('facility_inspection_photo_id')
+            ->get();
+    }
+
     private function selectedInspection(): ?FacilityInspection
     {
         if ($this->selectedBookingDetailsId === null) {
@@ -841,6 +858,32 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         </p>
                         @if ($selectedInspection->remarks)
                             <p class="text-xs text-zinc-600 dark:text-zinc-300">Remarks: {{ $selectedInspection->remarks }}</p>
+                        @endif
+
+                        @if ($inspectionPhotos->isNotEmpty())
+                            <div>
+                                <p class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                    Damage photos ({{ $inspectionPhotos->count() }})
+                                </p>
+                                <div class="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                                    @foreach ($inspectionPhotos as $photo)
+                                        <a
+                                            wire:key="checkout-photo-{{ $photo->facility_inspection_photo_id }}"
+                                            href="{{ route('facility-inspection-photos.show', $photo) }}"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                                        >
+                                            <img
+                                                src="{{ route('facility-inspection-photos.show', $photo) }}"
+                                                alt="{{ $photo->original_name ?? 'Damage photo' }}"
+                                                loading="lazy"
+                                                class="aspect-square w-full object-cover"
+                                            />
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
                         @endif
                     @endif
 

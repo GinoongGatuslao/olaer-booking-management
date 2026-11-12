@@ -58,6 +58,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
     public string $amenityDescription = '';
     public string $amenityType = 'Rentable';
     public string $amenityPrice = '';
+    public string $requestLimit = '10';
 
     #[Computed]
     public function amenities(): LengthAwarePaginator
@@ -222,6 +223,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             '',
         );
 
+        $this->requestLimit = (string) ($amenity->request_limit ?? 10);
+
         $this->resetValidation();
         $this->showEditor = true;
     }
@@ -240,6 +243,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
         $this->amenityDescription = '';
         $this->amenityType = 'Rentable';
         $this->amenityPrice = '';
+        $this->requestLimit = '10';
 
         $this->resetValidation();
     }
@@ -264,7 +268,12 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 'min:0',
                 'max:999999.99',
             ],
+            'requestLimit' => ['required', 'integer', 'min:1', 'max:1000'],
         ], [
+            'requestLimit.required' => 'Enter how many units can be requested per facility.',
+            'requestLimit.integer' => 'The request limit must be a whole number.',
+            'requestLimit.min' => 'The request limit must be at least 1.',
+            'requestLimit.max' => 'The request limit cannot be more than 1000.',
             'amenityName.required' => 'Amenity name is required.',
             'amenityName.max' => 'Amenity name must not exceed 50 characters.',
             'amenityDescription.required' => 'Amenity description is required.',
@@ -296,11 +305,14 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             return;
         }
 
+        $requestLimit = (int) $validated['requestLimit'];
+
         DB::transaction(function () use (
             $name,
             $description,
             $type,
             $price,
+            $requestLimit,
         ): void {
             $amenityName = AmenityName::query()
                 ->whereRaw(
@@ -343,6 +355,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 'amenity_description' => $description,
                 'amenity_type' => $type,
                 'amenity_price' => $price,
+                'request_limit' => $requestLimit,
             ];
 
             if ($this->editingId !== null) {
@@ -492,6 +505,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                                 <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_description')">DESCRIPTION{{ $this->sortIcon('amenity_description') }}</button></th>
                                 <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_type')">AMENITY TYPE{{ $this->sortIcon('amenity_type') }}</button></th>
                                 <th class="px-5 py-3 text-left"><button type="button" wire:click="sortBy('amenity_price')">PRICE{{ $this->sortIcon('amenity_price') }}</button></th>
+                                <th class="px-5 py-3 text-left">REQUEST LIMIT</th>
                                 <th class="px-5 py-3 text-right">Action</th>
                             </tr>
                         </thead>
@@ -518,6 +532,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
 
                                     <td class="px-5 py-4 font-medium">
                                         ₱{{ number_format((float) $amenity->amenity_price, 2) }}
+                                    </td>
+
+                                    <td class="px-5 py-4">
+                                        {{ $amenity->amenity_type === 'Rentable' ? (int) ($amenity->request_limit ?? 10).' per facility' : '—' }}
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
@@ -613,6 +631,24 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                         label="Price"
                         placeholder="0.00"
                     />
+                    @endif
+
+                    @if ($amenityType === 'Rentable')
+                        <flux:field class="relative">
+                            <flux:label>Request limit per facility <span class="text-red-500">*</span></flux:label>
+                            <flux:input
+                                wire:model="requestLimit"
+                                type="number"
+                                min="1"
+                                max="1000"
+                                step="1"
+                                :invalid="$errors->has('requestLimit')"
+                            />
+                            <flux:text class="text-xs">Most units guests can request for one facility (default 10).</flux:text>
+                            @if ($msg = $this->visibleError('requestLimit'))
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                            @endif
+                        </flux:field>
                     @endif
 
 

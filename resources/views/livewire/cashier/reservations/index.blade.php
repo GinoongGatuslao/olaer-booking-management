@@ -332,6 +332,22 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->resetValidation();
     }
 
+    public function updatedDetailCheckInDate(): void
+    {
+        // The stay keeps its original length, so the check-out date follows the check-in date.
+        if ($this->detailAction !== 'reschedule' || $this->detailCheckInDate === '') {
+            return;
+        }
+
+        try {
+            $this->detailCheckOutDate = \Illuminate\Support\Carbon::parse($this->detailCheckInDate)
+                ->addDays((int) $this->detailOriginalDays)
+                ->toDateString();
+        } catch (\Throwable) {
+            $this->detailCheckOutDate = '';
+        }
+    }
+
     public function updatedDetailFacilityProductId(): void
     {
         // A different destination product means the facility must be chosen again.
@@ -864,8 +880,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             <form wire:submit="saveDetailAction" novalidate class="space-y-4">
                 @if ($detailAction === 'reschedule')
                     <div class="grid gap-4 md:grid-cols-2">
-                        <flux:input wire:model="detailCheckInDate" type="date" label="New check-in/use date *" />
-                        <flux:input wire:model="detailCheckOutDate" type="date" label="New check-out/end date *" />
+                        <flux:input wire:model.live="detailCheckInDate" type="date" label="New check-in/use date *" />
+                        <div>
+                            <flux:input wire:model="detailCheckOutDate" type="date" readonly label="New check-out/end date *" />
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                Set automatically: @if ((int) $detailOriginalDays === 0) the same day as check-in @else {{ (int) $detailOriginalDays }} {{ (int) $detailOriginalDays === 1 ? 'day' : 'days' }} after check-in @endif, the same length as the original stay.
+                            </p>
+                        </div>
                     </div>
 
                 @elseif ($detailAction === 'transfer')

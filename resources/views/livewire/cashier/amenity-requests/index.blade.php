@@ -861,6 +861,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         ₱{{ number_format((float) $amenity->amenity_price, 2) }}
                                         —
                                         {{ $amenity->amenity_description }}
+                                        (max {{ (int) ($amenity->request_limit ?? 10) }})
                                     </option>
                                 @endforeach
                             </flux:select>
@@ -960,6 +961,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                     {{ $amenity->amenityName?->amenity_name }}
                                     —
                                     ₱{{ number_format((float) $amenity->amenity_price, 2) }}
+                                    (max {{ (int) ($amenity->request_limit ?? 10) }})
                                 </option>
                             @endforeach
                         </flux:select>

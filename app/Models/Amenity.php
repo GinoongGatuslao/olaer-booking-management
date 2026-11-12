@@ -21,12 +21,14 @@ class Amenity extends Model
         'amenity_description',
         'amenity_type',
         'amenity_price',
+        'request_limit',
     ];
 
     protected function casts(): array
     {
         return [
             'amenity_price' => 'decimal:2',
+            'request_limit' => 'integer',
         ];
     }
 

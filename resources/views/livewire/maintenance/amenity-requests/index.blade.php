@@ -709,7 +709,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
                                 @foreach ($rentableAmenities as $amenity)
                                     <option value="{{ $amenity->amenity_id }}">
-                                        {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }}
+                                        {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }} (max {{ (int) ($amenity->request_limit ?? 10) }})
                                     </option>
                                 @endforeach
                             </flux:select>

@@ -31,6 +31,13 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
             ->inspectionRequests($this->bookingId);
     }
 
+    /** Booking payments plus the payment taken at reservation conversion. */
+    #[Computed]
+    public function payments()
+    {
+        return app(BookingWorkspaceService::class)->allPayments($this->booking);
+    }
+
     #[Computed]
     public function summary(): array
     {
@@ -308,7 +315,7 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
 
                 <div class="flex items-center justify-between gap-3">
                     <dt class="text-zinc-500">Payment records</dt>
-                    <dd class="font-semibold">{{ $this->booking->payments->count() }}</dd>
+                    <dd class="font-semibold">{{ $this->payments->count() }}</dd>
                 </div>
 
                 <div class="flex items-center justify-between gap-3">
@@ -487,7 +494,7 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
             </div>
 
             <div class="space-y-3">
-                @forelse ($this->booking->payments->sortByDesc('payment_id') as $payment)
+                @forelse ($this->payments->sortByDesc('payment_id') as $payment)
                     <div class="flex items-start justify-between gap-4 border-b border-zinc-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-800">
                         <div>
                             <p class="font-medium">{{ $payment->p_ref_no ?? 'Payment #'.$payment->payment_id }}</p>

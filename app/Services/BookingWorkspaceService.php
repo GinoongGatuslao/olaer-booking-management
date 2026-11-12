@@ -16,7 +16,9 @@ class BookingWorkspaceService
             ->with([
                 'guest.address',
                 'user',
-                'reservation',
+                'reservation.payments.modeOfPayment',
+                'reservation.payments.user',
+                'reservation.payments.verifier',
                 'entranceSlip',
                 'details.facility.facilityType',
                 'details.discount',
@@ -50,9 +52,25 @@ class BookingWorkspaceService
             ->get();
     }
 
+    /**
+     * Every payment of this booking, including payments taken on the reservation
+     * it was converted from. A conversion payment can sit on either record (or
+     * both), so merge and dedupe by primary key.
+     */
+    public function allPayments(Booking $booking): \Illuminate\Support\Collection
+    {
+        $payments = collect($booking->payments);
+
+        if ($booking->reservation !== null) {
+            $payments = $payments->concat($booking->reservation->payments);
+        }
+
+        return $payments->unique(fn ($payment) => $payment->getKey())->values();
+    }
+
     public function summary(Booking $booking): array
     {
-        $verifiedPayments = $booking->payments->filter(
+        $verifiedPayments = $this->allPayments($booking)->filter(
             fn ($payment): bool => strcasecmp((string) $payment->payment_status, 'Verified') === 0
         );
 

@@ -108,6 +108,30 @@ new class extends Component {
         ];
     }
 
+    public function updatedRescheduleForm(mixed $value, string $key): void
+    {
+        // The stay keeps its original length, so the check-out date follows the check-in date.
+        if ($key === 'new_check_in_date') {
+            $this->rescheduleForm['new_check_out_date'] = $this->checkOutAfterStay(
+                (string) $value,
+                (int) ($this->rescheduleForm['original_days'] ?? 0),
+            );
+        }
+    }
+
+    private function checkOutAfterStay(string $checkIn, int $days): string
+    {
+        if ($checkIn === '') {
+            return '';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($checkIn)->addDays($days)->toDateString();
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
     public function updatedTransferForm(mixed $value, string $key): void
     {
         // A different destination product means the facility must be chosen again.
@@ -1030,14 +1054,17 @@ new class extends Component {
             <div class="grid gap-4 sm:grid-cols-2">
                 <flux:field class="relative">
                     <flux:label>New check-in date <span class="text-red-500">*</span></flux:label>
-                    <flux:input type="date" wire:model="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
+                    <flux:input type="date" wire:model.live="rescheduleForm.new_check_in_date" :invalid="$errors->has('rescheduleForm.new_check_in_date')" />
                     @if ($msg = $this->visibleError('rescheduleForm.new_check_in_date'))
                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
                 <flux:field class="relative">
                     <flux:label>New check-out date <span class="text-red-500">*</span></flux:label>
-                    <flux:input type="date" wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
+                    <flux:input type="date" readonly wire:model="rescheduleForm.new_check_out_date" :invalid="$errors->has('rescheduleForm.new_check_out_date')" />
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Set automatically: @if ((int) ($rescheduleForm['original_days'] ?? 0) === 0) the same day as check-in @else {{ (int) $rescheduleForm['original_days'] }} {{ (int) $rescheduleForm['original_days'] === 1 ? 'day' : 'days' }} after check-in @endif, the same length as the original stay.
+                    </p>
                     @if ($msg = $this->visibleError('rescheduleForm.new_check_out_date'))
                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif

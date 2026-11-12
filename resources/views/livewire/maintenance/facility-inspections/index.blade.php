@@ -2,11 +2,13 @@
 
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
+use App\Models\FacilityInspectionPhoto;
 use App\Models\FacilityInspectionRequest;
 use App\Models\Fine;
 use App\Models\GuestFine;
 use App\Models\InspectionDraftFine;
 use App\Services\CheckOutInspectionRequestService;
+use App\Services\FacilityInspectionPhotoService;
 use App\Services\FacilityInspectionWorkflowService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -16,6 +18,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort')] class extends Component
@@ -40,6 +43,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
 
         return $value === null || $value === '' || $value === [] ? null : $message;
     }
+    use WithFileUploads;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -71,6 +75,9 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
     public ?int $fineId = null;
     public int $fineQuantity = 1;
     public string $remarks = '';
+
+    /** Photos picked by the maintenance staff; saved right after they upload. */
+    public array $photos = [];
     public ?string $pendingCompletion = null;
     public bool $showCompletionDialog = false;
 
@@ -91,6 +98,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
             'selectedChecklistItems' => $this->selectedChecklistItems(),
             'selectedGuestFines' => $this->selectedGuestFines(),
             'selectedDraftFines' => $this->selectedDraftFines(),
+            'inspectionPhotos' => $this->inspectionPhotos(),
             'selectedInspection' => $this->selectedInspection(),
             'selectedInspectionRequest' =>
                 $this->selectedInspectionRequest(),
@@ -272,6 +280,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                 .' — '
                 .$facilityName;
 
+            $this->photos = [];
             $this->selectedChecklistKey = '';
             $this->fineId = null;
             $this->fineQuantity = 1;
@@ -299,6 +308,7 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         $this->fineId = null;
         $this->fineQuantity = 1;
         $this->remarks = '';
+        $this->photos = [];
 
         $this->resetValidation();
     }
@@ -482,6 +492,76 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
         } catch (\Throwable $exception) {
             $this->addError('inspection', $exception->getMessage());
         }
+    }
+
+    /** Save photos as soon as they are chosen (max 10 per inspection, 64 MB each). */
+    public function updatedPhotos(FacilityInspectionPhotoService $photoService): void
+    {
+        $this->resetErrorBag(['photos', 'photos.*', 'inspection']);
+
+        if ($this->selectedRequestId === null || $this->photos === []) {
+            $this->photos = [];
+
+            return;
+        }
+
+        try {
+            $this->validate([
+                'photos' => ['array', 'max:'.FacilityInspectionPhotoService::MAX_PHOTOS],
+                'photos.*' => [
+                    'file',
+                    'mimes:jpg,jpeg,png,webp',
+                    'max:'.FacilityInspectionPhotoService::MAX_KILOBYTES,
+                ],
+            ], [
+                'photos.max' => 'Choose up to '.FacilityInspectionPhotoService::MAX_PHOTOS.' photos at a time.',
+                'photos.*.mimes' => 'Photos must be JPG, PNG or WebP images.',
+                'photos.*.max' => 'Each photo must be 64 MB or smaller.',
+                'photos.*.file' => 'One of the chosen files could not be uploaded.',
+            ]);
+
+            $this->guardCanRecordFine();
+
+            $photoService->store(
+                $this->selectedRequestId,
+                array_values($this->photos),
+                (int) Auth::id(),
+            );
+
+            session()->flash('success', 'Damage photo(s) uploaded.');
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            $this->addError('photos', $exception->getMessage());
+        } finally {
+            $this->photos = [];
+        }
+    }
+
+    public function deletePhoto(
+        int $photoId,
+        FacilityInspectionPhotoService $photoService,
+    ): void {
+        try {
+            $photoService->delete($photoId, (int) Auth::id());
+
+            session()->flash('success', 'Photo removed.');
+        } catch (\Throwable $exception) {
+            $this->addError('photos', $exception->getMessage());
+        }
+    }
+
+    private function inspectionPhotos(): Collection
+    {
+        if ($this->selectedRequestId === null) {
+            return new Collection();
+        }
+
+        return FacilityInspectionPhoto::query()
+            ->with('uploadedBy')
+            ->where('facility_inspection_request_id', $this->selectedRequestId)
+            ->orderBy('facility_inspection_photo_id')
+            ->get();
     }
 
     public function canMarkNoDamage(): bool
@@ -1405,6 +1485,68 @@ new #[Layout('layouts.app')] #[Title('Facility Inspections - Olaer Spring Resort
                     This request is assigned to another maintenance staff member.
                 </div>
             @endif
+
+            <div class="mt-5 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                <div class="flex items-center justify-between gap-3">
+                    <h3 class="font-semibold">Damage photos</h3>
+                    <span class="text-xs text-zinc-500">
+                        {{ $inspectionPhotos->count() }} / {{ \App\Services\FacilityInspectionPhotoService::MAX_PHOTOS }}
+                    </span>
+                </div>
+
+                @if ($this->canRecordFine())
+                    @if ($inspectionPhotos->count() < \App\Services\FacilityInspectionPhotoService::MAX_PHOTOS)
+                        <div class="mt-3">
+                            <input
+                                type="file"
+                                multiple
+                                accept="image/jpeg,image/png,image/webp"
+                                wire:model="photos"
+                                class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
+                            />
+                            <p class="mt-1 text-xs text-zinc-500">
+                                JPG, PNG or WebP · up to 64 MB each · up to {{ \App\Services\FacilityInspectionPhotoService::MAX_PHOTOS }} photos per inspection.
+                            </p>
+                            <p wire:loading wire:target="photos" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                        </div>
+                    @else
+                        <p class="mt-3 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>
+                    @endif
+
+                    @error('photos') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
+                    @error('photos.*') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
+                @endif
+
+                @if ($inspectionPhotos->isNotEmpty())
+                    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                        @foreach ($inspectionPhotos as $photo)
+                            <div wire:key="inspection-photo-{{ $photo->facility_inspection_photo_id }}" class="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                                <a href="{{ route('facility-inspection-photos.show', $photo) }}" target="_blank" rel="noopener">
+                                    <img
+                                        src="{{ route('facility-inspection-photos.show', $photo) }}"
+                                        alt="{{ $photo->original_name ?? 'Damage photo' }}"
+                                        loading="lazy"
+                                        class="aspect-square w-full object-cover"
+                                    />
+                                </a>
+                                @if ($this->canRecordFine())
+                                    <button
+                                        type="button"
+                                        wire:click="deletePhoto({{ $photo->facility_inspection_photo_id }})"
+                                        wire:confirm="Remove this photo?"
+                                        class="absolute right-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white hover:bg-red-600"
+                                        aria-label="Remove photo"
+                                    >
+                                        Remove
+                                    </button>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="mt-3 text-sm text-zinc-500">No photos attached.</p>
+                @endif
+            </div>
 
             @if ($selectedDraftFines->isNotEmpty())
                 <div class="mt-5 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/20">

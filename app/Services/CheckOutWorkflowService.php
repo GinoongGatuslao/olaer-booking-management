@@ -45,6 +45,9 @@ class CheckOutWorkflowService
                 'user_id' => $userId,
             ]);
 
+            // This stay's baseline photos are now outdated; new photos are needed.
+            app(FacilityConditionPhotoService::class)->retireForStay($detail);
+
             $this->scheduleBlocks->releaseBookingDetails([$detail]);
 
             if ($detail->facility !== null) {
