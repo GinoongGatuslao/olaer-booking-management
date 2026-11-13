@@ -30,6 +30,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     public int $perPage = 10;
 
     public ?int $selectedFacilityId = null;
+    public bool $showPhotoModal = false;
 
     /** Photos picked by the staff member; saved as soon as they are chosen. */
     public array $photos = [];
@@ -79,13 +80,22 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     public function selectFacility(int $facilityId): void
     {
         $this->selectedFacilityId = Facility::query()->whereKey($facilityId)->exists() ? $facilityId : null;
+        $this->showPhotoModal = $this->selectedFacilityId !== null;
         $this->photos = [];
         $this->resetValidation();
+    }
+
+    public function updatedShowPhotoModal(bool $open): void
+    {
+        if (! $open) {
+            $this->clearSelection();
+        }
     }
 
     public function clearSelection(): void
     {
         $this->selectedFacilityId = null;
+        $this->showPhotoModal = false;
         $this->photos = [];
         $this->resetValidation();
     }
@@ -320,9 +330,10 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
         </div>
     </flux:card>
 
+    <flux:modal wire:model="showPhotoModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[48rem]">
     @if ($selectedFacility)
-        <flux:card>
-            <div class="flex items-start justify-between gap-3">
+        <div>
+            <div class="flex items-start justify-between gap-3 pe-8">
                 <div>
                     <h2 class="text-lg font-semibold">{{ $selectedFacility->facility_name }}</h2>
                     <p class="text-sm text-zinc-500">
@@ -330,7 +341,6 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                         @if ($outdatedCount > 0) · {{ $outdatedCount }} older photo(s) kept as record @endif
                     </p>
                 </div>
-                <flux:button size="sm" variant="ghost" wire:click="clearSelection">Close</flux:button>
             </div>
 
             @if ($occupied)
@@ -360,7 +370,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
             @endif
 
             @if ($activePhotos->isNotEmpty())
-                <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                     @foreach ($activePhotos as $photo)
                         <div wire:key="facility-photo-{{ $photo->facility_condition_photo_id }}" class="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
                             <a href="{{ route('facility-condition-photos.show', $photo) }}" target="_blank" rel="noopener">
@@ -388,6 +398,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
             @else
                 <p class="mt-4 text-sm text-zinc-500">No current photos. Add photos so the next check-in has a “before” record.</p>
             @endif
-        </flux:card>
+        </div>
     @endif
+    </flux:modal>
 </div>

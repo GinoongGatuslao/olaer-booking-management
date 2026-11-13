@@ -151,11 +151,11 @@ Volt::route('/maintenance/dashboard', 'maintenance.dashboard')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.dashboard');
 
-Volt::route('/maintenance/facility-inspections', 'maintenance.facility-inspections.index')
+Volt::route('/maintenance/facility-checklist', 'maintenance.facility-inspections.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.facility-inspections.index');
 
-Volt::route('/maintenance/facility-photos', 'maintenance.facility-photos.index')
+Volt::route('/maintenance/facility-readiness', 'maintenance.facility-photos.index')
     ->middleware(['auth', 'active', 'role:Maintenance Staff'])
     ->name('maintenance.facility-photos.index');
 

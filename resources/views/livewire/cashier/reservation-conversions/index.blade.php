@@ -39,6 +39,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public ?string $successMessage = null;
     public ?string $errorMessage = null;
     public ?int $convertedBookingId = null;
+    public bool $showConversionModal = false;
 
     public function reservations()
     {
@@ -84,6 +85,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public function selectReservation(int $reservationId): void
     {
         $this->resetMessages();
+        $this->showConversionModal = false;
         $this->selectedReservationId = null;
         $this->paymentAmount = '';
         $this->modeOfPaymentId = null;
@@ -100,6 +102,20 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 
         $this->selectedReservationId = (int) $reservation->reservation_id;
         $this->paymentAmount = (string) $reservation->amount_due;
+        $this->showConversionModal = true;
+    }
+
+    public function updatedShowConversionModal(bool $open): void
+    {
+        if (! $open) {
+            $this->selectedReservationId = null;
+            $this->paymentAmount = '';
+            $this->modeOfPaymentId = null;
+            $this->referenceNumber = '';
+            $this->cashPaid = '';
+            $this->errorMessage = null;
+            $this->resetValidation();
+        }
     }
 
     public function isCashMode(): bool
@@ -158,6 +174,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 
             $this->successMessage = 'Reservation converted to booking. Booking reference: ' . $booking->b_ref_no;
             $this->convertedBookingId = (int) $booking->booking_id;
+            $this->showConversionModal = false;
             $this->selectedReservationId = null;
             $this->paymentAmount = '';
             $this->modeOfPaymentId = null;
@@ -208,14 +225,14 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             @endif
     </x-toast>
 
-    @if ($errorMessage)
+    @if ($errorMessage && ! $showConversionModal)
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
             {{ $errorMessage }}
         </div>
     @endif
 
-    <div class="grid gap-6 xl:grid-cols-3">
-        <section class="xl:col-span-2">
+    <div>
+        <section>
             <div class="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
                     <h2 class="font-semibold">Active Reservations</h2>
@@ -276,11 +293,18 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                 </div>
             </div>
         </section>
+    </div>
 
-        <aside class="space-y-6">
-            <div class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <h2 class="font-semibold">Conversion Payment</h2>
+    <flux:modal wire:model="showConversionModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[30rem]">
+            <div>
+                <h2 class="pe-8 font-semibold">Conversion Payment</h2>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Exact remaining balance is required before conversion.</p>
+
+                @if ($errorMessage)
+                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+                        {{ $errorMessage }}
+                    </div>
+                @endif
 
                 @php($selected = $this->selectedReservation())
 
@@ -349,6 +373,5 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     </div>
                 @endif
             </div>
-        </aside>
-    </div>
+    </flux:modal>
 </div>
