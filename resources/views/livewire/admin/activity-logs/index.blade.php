@@ -11,6 +11,13 @@ use Livewire\WithPagination;
 new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] class extends Component
 {
     use WithPagination;
+    public function mount(): void
+    {
+        // The list starts on today; a date in the address bar still wins.
+        if ($this->dateFrom === '' && ! request()->has('date_from')) {
+            $this->dateFrom = now()->toDateString();
+        }
+    }
 
 
     #[Url(as: 'q', except: '')]
@@ -492,16 +499,16 @@ new #[Layout('layouts.app')] #[Title('Activity Logs - Olaer Spring Resort')] cla
             )
             ->when(
                 $this->dateFrom !== '',
-                fn ($query) => $query->whereDate(
-                    'created_at',
+                fn ($query) => $query->where(
+                    'tbl_activity_log.created_at', 
                     '>=',
                     $this->dateFrom,
                 ),
             )
             ->when(
                 $this->dateTo !== '',
-                fn ($query) => $query->whereDate(
-                    'created_at',
+                fn ($query) => $query->where(
+                    'tbl_activity_log.created_at',
                     '<=',
                     $this->dateTo,
                 ),
