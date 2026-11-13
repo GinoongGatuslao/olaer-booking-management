@@ -26,6 +26,12 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
 
+        // Livewire keeps a chosen file in a temporary folder for a few seconds
+        // before the app saves it for good. Keep that step on the server's own
+        // disk, so the browser never uploads straight to the R2 bucket. The
+        // final copy is still saved to the bucket by the photo/proof services.
+        config(['livewire.temporary_file_upload.disk' => 'local']);
+
         app(AuditObserverRegistry::class)
             ->register();
     }
