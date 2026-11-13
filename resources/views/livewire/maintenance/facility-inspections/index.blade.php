@@ -78,6 +78,9 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
 
     /** Photos picked by the maintenance staff; saved right after they upload. */
     public array $photos = [];
+
+    /** One file at a time: the bucket (S3) upload driver does not accept multiple files. */
+    public $photo = null;
     public ?string $pendingCompletion = null;
     public bool $showCompletionDialog = false;
 
@@ -492,6 +495,18 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
         } catch (\Throwable $exception) {
             $this->addError('inspection', $exception->getMessage());
         }
+    }
+
+    public function updatedPhoto(FacilityInspectionPhotoService $photoService): void
+    {
+        if ($this->photo === null) {
+            return;
+        }
+
+        $this->photos = [$this->photo];
+        $this->photo = null;
+
+        $this->updatedPhotos($photoService);
     }
 
     /** Save photos as soon as they are chosen (max 10 per inspection, 64 MB each). */
@@ -1499,15 +1514,14 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                         <div class="mt-3">
                             <input
                                 type="file"
-                                multiple
                                 accept="image/jpeg,image/png,image/webp"
-                                wire:model="photos"
+                                wire:model="photo" x-data x-on:livewire-upload-finish="$el.value = ''"
                                 class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
                             />
                             <p class="mt-1 text-xs text-zinc-500">
-                                JPG, PNG or WebP · up to 64 MB each · up to {{ \App\Services\FacilityInspectionPhotoService::MAX_PHOTOS }} photos per inspection.
+                                JPG, PNG or WebP · one photo at a time · up to 64 MB each · up to {{ \App\Services\FacilityInspectionPhotoService::MAX_PHOTOS }} photos per inspection.
                             </p>
-                            <p wire:loading wire:target="photos" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                            <p wire:loading wire:target="photo" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
                         </div>
                     @else
                         <p class="mt-3 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>

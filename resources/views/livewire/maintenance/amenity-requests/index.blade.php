@@ -68,6 +68,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     /** Proof-of-delivery photos picked in the confirm dialog; saved right away. */
     public array $photos = [];
 
+    /** One file at a time: the bucket (S3) upload driver does not accept multiple files. */
+    public $photo = null;
+
     public array $form = [
         'booking_id' => '',
         'booking_detail_id' => '',
@@ -282,6 +285,18 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
         }
 
         $this->markDelivered($requestId, $workflow);
+    }
+
+    public function updatedPhoto(AmenityDeliveryPhotoService $photoService): void
+    {
+        if ($this->photo === null) {
+            return;
+        }
+
+        $this->photos = [$this->photo];
+        $this->photo = null;
+
+        $this->updatedPhotos($photoService);
     }
 
     /** Save proof photos as soon as they are chosen (max 10 per request, 64 MB each). */
@@ -1098,13 +1113,12 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                     @if ($dialogPhotos->count() < \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS)
                         <input
                             type="file"
-                            multiple
                             accept="image/jpeg,image/png,image/webp"
-                            wire:model="photos"
+                            wire:model="photo" x-data x-on:livewire-upload-finish="$el.value = ''"
                             class="mt-2 block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
                         />
-                        <p class="mt-1 text-xs text-zinc-500">JPG, PNG or WebP · up to 64 MB each · up to {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }} photos.</p>
-                        <p wire:loading wire:target="photos" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                        <p class="mt-1 text-xs text-zinc-500">JPG, PNG or WebP · one photo at a time · up to 64 MB each · up to {{ \App\Services\AmenityDeliveryPhotoService::MAX_PHOTOS }} photos.</p>
+                        <p wire:loading wire:target="photo" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
                     @else
                         <p class="mt-2 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>
                     @endif
