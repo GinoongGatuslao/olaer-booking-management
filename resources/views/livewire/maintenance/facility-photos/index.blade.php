@@ -34,6 +34,9 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     /** Photos picked by the staff member; saved as soon as they are chosen. */
     public array $photos = [];
 
+    /** One file at a time: the bucket (S3) upload driver does not accept multiple files. */
+    public $photo = null;
+
     public function with(): array
     {
         return [
@@ -87,19 +90,25 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
         $this->resetValidation();
     }
 
-    /** Max 10 photos per facility, 64 MB each; allowed only while no guest is checked in. Runs from the Upload button. */
-    public function uploadPhotos(FacilityConditionPhotoService $photoService): void
+    public function updatedPhoto(FacilityConditionPhotoService $photoService): void
     {
-        $this->resetErrorBag(['photos', 'photos.*']);
-
-        if ($this->selectedFacilityId === null) {
-            $this->photos = [];
-
+        if ($this->photo === null) {
             return;
         }
 
-        if ($this->photos === []) {
-            $this->addError('photos', 'Choose at least one photo first.');
+        $this->photos = [$this->photo];
+        $this->photo = null;
+
+        $this->updatedPhotos($photoService);
+    }
+
+    /** Max 10 photos per facility, 64 MB each; allowed only while no guest is checked in. */
+    public function updatedPhotos(FacilityConditionPhotoService $photoService): void
+    {
+        $this->resetErrorBag(['photos', 'photos.*']);
+
+        if ($this->selectedFacilityId === null || $this->photos === []) {
+            $this->photos = [];
 
             return;
         }
@@ -126,7 +135,6 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
             );
 
             session()->flash('success', 'Facility photo(s) uploaded.');
-            $this->dispatch('photos-uploaded');
         } catch (ValidationException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
@@ -334,32 +342,14 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                     <div class="mt-4">
                         <input
                             type="file"
-                            multiple
                             accept="image/jpeg,image/png,image/webp"
-                            wire:model="photos" x-data x-on:photos-uploaded.window="$el.value = ''"
+                            wire:model="photo" x-data x-on:livewire-upload-finish="$el.value = ''"
                             class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
                         />
                         <p class="mt-1 text-xs text-zinc-500">
-                            JPG, PNG or WebP · up to 64 MB each · up to {{ \App\Services\FacilityConditionPhotoService::MAX_PHOTOS }} photos per facility.
+                            JPG, PNG or WebP · one photo at a time · up to 64 MB each · up to {{ \App\Services\FacilityConditionPhotoService::MAX_PHOTOS }} photos per facility.
                         </p>
-                        <p wire:loading wire:target="photos" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Preparing photos…</p>
-
-                        <flux:button
-                            type="button"
-                            variant="primary"
-                            size="sm"
-                            icon="arrow-up-tray"
-                            class="mt-3"
-                            wire:click="uploadPhotos"
-                            wire:loading.attr="disabled"
-                            wire:target="photos,uploadPhotos"
-                            :disabled="count($this->photos) === 0"
-                        >
-                            <span wire:loading.remove wire:target="uploadPhotos">
-                                Upload {{ count($this->photos) > 0 ? count($this->photos).' photo'.(count($this->photos) === 1 ? '' : 's') : 'photos' }}
-                            </span>
-                            <span wire:loading wire:target="uploadPhotos">Uploading…</span>
-                        </flux:button>
+                        <p wire:loading wire:target="photo" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
                     </div>
                 @else
                     <p class="mt-4 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>
