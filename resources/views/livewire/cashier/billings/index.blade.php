@@ -10,6 +10,12 @@ use Livewire\WithPagination;
 new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')] class extends Component
 {
     use WithPagination;
+    public function mount(): void
+    {
+        // The list starts on today.
+        $this->fromDate = now()->toDateString();
+    }
+
 
     #[Url(as: 'q', except: '')]
     public string $search = '';

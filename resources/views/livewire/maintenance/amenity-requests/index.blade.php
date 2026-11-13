@@ -45,11 +45,11 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     #[Url(as: 'q', except: '')]
     public string $search = '';
 
-    #[Url(as: 'status', except: '')]
-    public string $statusFilter = '';
+    #[Url(as: 'status', except: 'Pending')]
+    public string $statusFilter = 'Pending';
 
-    #[Url(as: 'assignment', except: '')]
-    public string $assignmentFilter = '';
+    #[Url(as: 'assignment', except: 'unassigned')]
+    public string $assignmentFilter = 'unassigned';
 
     #[Url(as: 'sort', except: 'amenity_request_id')]
     public string $sortField = 'amenity_request_id';
@@ -1002,6 +1002,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                                 <a
                                                     wire:key="delivery-photo-{{ $photo->amenity_request_photo_id }}"
                                                     href="{{ route('amenity-request-photos.show', $photo) }}"
+                                                    title="Uploaded {{ $photo->created_at?->format('M d, Y · h:i A') }}@if ($photo->uploadedBy) by {{ $photo->uploadedBy->full_name }}@endif"
                                                     target="_blank"
                                                     rel="noopener"
                                                     class="block size-12 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
@@ -1135,6 +1136,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                         alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
                                         class="aspect-square w-full object-cover"
                                     />
+                                    <p class="px-1 py-0.5 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</p>
                                     <button
                                         type="button"
                                         wire:click="deletePhoto({{ $photo->amenity_request_photo_id }})"

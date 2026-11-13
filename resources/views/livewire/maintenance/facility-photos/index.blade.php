@@ -381,6 +381,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                                     class="aspect-square w-full object-cover"
                                 />
                             </a>
+                            <p class="px-2 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, Y · h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</p>
                             @if ($photo->status === 'Current')
                                 <button
                                     type="button"

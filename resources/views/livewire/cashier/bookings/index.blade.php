@@ -14,6 +14,14 @@ use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
 new class extends Component {
+    public function mount(): void
+    {
+        // The list starts on today; a date in the address bar still wins.
+        if ($this->dateFrom === '' && ! request()->has('date_from')) {
+            $this->dateFrom = now()->toDateString();
+        }
+    }
+
 
     public function updated(string $property): void
     {
@@ -820,6 +828,13 @@ new class extends Component {
         <x-slot:actions>
             <flux:button href="{{ route('cashier.bookings.create') }}" variant="primary" wire:navigate>
                 New booking
+            </flux:button>
+            <flux:button
+                :href="route('cashier.dashboard')"
+                wire:navigate
+                variant="ghost"
+            >
+                Back to dashboard
             </flux:button>
         </x-slot:actions>
     </x-staff-page-header>

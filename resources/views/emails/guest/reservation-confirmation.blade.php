@@ -70,7 +70,20 @@
 
     @foreach ($details as $detail)
         @php($facility = $detail->facility)
-        @php($discount = $detail->discount)
+        @php
+            // Show the discount as a whole percent (10%, not 10.00%). The rate saved with the
+            // booking is used first; the discount's current value is only a fallback.
+            $discount = $detail->discount;
+            $discountRate = (float) $detail->discount_rate;
+
+            if ($discountRate <= 0 && $discount) {
+                $rawDiscount = (float) $discount->discount_amount;
+                $discountRate = $rawDiscount > 1 ? min($rawDiscount / 100, 1) : max($rawDiscount, 0);
+            }
+
+            $discountPercent = rtrim(rtrim(number_format($discountRate * 100, 2, '.', ''), '0'), '.');
+            $discountSaved = (float) $detail->discount_amount;
+        @endphp
 
         @if ($multiple)
             <h3 style="font-size: 16px; margin: 20px 0 0;">Facility {{ $loop->iteration }} of {{ $loop->count }}</h3>
@@ -100,10 +113,15 @@
                         <td style="{{ $value }}">{{ $detail->guest_count }}</td>
                     </tr>
                 @endif
-                @if ($discount)
+                @if ($discount || $discountSaved > 0)
                     <tr>
                         <td style="{{ $label }}">Discount</td>
-                        <td style="{{ $value }}">{{ $discount->discount_name }} ({{ number_format(((float) $discount->discount_percentage) * 100, 2) }}%)</td>
+                        <td style="{{ $value }}">
+                            {{ $discount?->discount_name ?? 'Discount' }}@if ($discountRate > 0) ({{ $discountPercent }}%)@endif
+                            @if ($discountSaved > 0)
+                                &ndash; saves ₱{{ number_format($discountSaved, 2) }}
+                            @endif
+                        </td>
                     </tr>
                 @endif
                 @if ($multiple && $detail->line_total !== null)

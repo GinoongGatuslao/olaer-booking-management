@@ -1151,8 +1151,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         </p>
                                         <div class="flex flex-wrap gap-1.5">
                                             @foreach ($request->deliveryPhotos as $photo)
-                                                <a
-                                                    wire:key="delivery-photo-{{ $photo->amenity_request_photo_id }}"
+                                                <div wire:key="delivery-photo-{{ $photo->amenity_request_photo_id }}" class="w-20">
+                                                    <a
                                                     href="{{ route('amenity-request-photos.show', $photo) }}"
                                                     target="_blank"
                                                     rel="noopener"
@@ -1165,6 +1165,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                                         class="size-full object-cover"
                                                     />
                                                 </a>
+                                                    <p class="mt-0.5 break-words text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</p>
+                                                </div>
                                             @endforeach
                                         </div>
                                     </div>

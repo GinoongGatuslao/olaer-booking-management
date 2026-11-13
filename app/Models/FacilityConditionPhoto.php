@@ -15,6 +15,9 @@ class FacilityConditionPhoto extends Model
 
     protected $table = 'tbl_facility_condition_photo';
 
+    /** The uploader's name is shown next to the upload time. */
+    protected $with = ['uploadedBy'];
+
     protected $primaryKey = 'facility_condition_photo_id';
 
     protected $fillable = [

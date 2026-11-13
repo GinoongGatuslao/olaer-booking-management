@@ -9,6 +9,9 @@ class AmenityRequestPhoto extends Model
 {
     protected $table = 'tbl_amenity_request_photo';
 
+    /** The uploader's name is shown next to the upload time. */
+    protected $with = ['uploadedBy'];
+
     protected $primaryKey = 'amenity_request_photo_id';
 
     protected $fillable = [
@@ -19,6 +22,11 @@ class AmenityRequestPhoto extends Model
         'mime_type',
         'file_size',
     ];
+
+    public function uploadedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'uploaded_by_user_id', 'user_id');
+    }
 
     public function request(): BelongsTo
     {

@@ -31,8 +31,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
     #[Url(as: 'stage', except: 'all')]
     public string $stageFilter = 'all';
 
-    #[Url(as: 'departure', except: 'all')]
-    public string $dateFilter = 'all';
+    #[Url(as: 'departure', except: 'today')]
+    public string $dateFilter = 'today';
 
     #[Url(as: 'sort', except: 'check_out_date')]
     public string $sortField = 'check_out_date';
@@ -851,6 +851,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                                                 loading="lazy"
                                                 class="aspect-square w-full object-cover"
                                             />
+                                            <span class="block px-1.5 py-1 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</span>
                                         </a>
                                     @endforeach
                                 </div>
@@ -878,6 +879,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                                             loading="lazy"
                                             class="aspect-square w-full object-cover"
                                         />
+                                        <span class="block px-1.5 py-1 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</span>
                                     </a>
                                 @endforeach
                             </div>

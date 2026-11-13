@@ -16,8 +16,8 @@ new class extends Component {
     #[Url(as: 'list', except: 'eligible')]
     public string $statusFilter = 'eligible';
 
-    #[Url(as: 'arrival', except: 'all')]
-    public string $dateFilter = 'all';
+    #[Url(as: 'arrival', except: 'today')]
+    public string $dateFilter = 'today';
 
     #[Url(as: 'sort', except: 'check_in_date')]
     public string $sortField = 'check_in_date';

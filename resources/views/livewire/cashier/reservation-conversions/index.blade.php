@@ -7,9 +7,17 @@ use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
+use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spring Resort')] class extends Component
 {
+    use WithPagination;
+    public function mount(): void
+    {
+        // The list starts on today.
+        $this->dateFrom = now()->toDateString();
+    }
+
 
     public function updated(string $property): void
     {
@@ -40,12 +48,79 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     public ?string $errorMessage = null;
     public ?int $convertedBookingId = null;
     public bool $showConversionModal = false;
+    public string $dateFrom = '';
+    public string $dateTo = '';
+    public int $perPage = 10;
+    public string $sortField = 'check_in_date';
+    public string $sortDirection = 'asc';
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedDateFrom(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedDateTo(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPerPage(): void
+    {
+        if (! in_array($this->perPage, [10, 25, 50, 100], true)) {
+            $this->perPage = 10;
+        }
+
+        $this->resetPage();
+    }
+
+    public function clearListFilters(): void
+    {
+        $this->search = '';
+        $this->dateFrom = '';
+        $this->dateTo = '';
+        $this->perPage = 10;
+        $this->sortField = 'check_in_date';
+        $this->sortDirection = 'asc';
+
+        $this->resetPage();
+    }
+
+    public function sortBy(string $field): void
+    {
+        if (! in_array($field, ['r_ref_no', 'guest_name', 'facility_name', 'check_in_date', 'amount_due'], true)) {
+            return;
+        }
+
+        if ($this->sortField === $field) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
+        }
+
+        $this->resetPage();
+    }
+
+    public function sortIndicator(string $field): string
+    {
+        if ($this->sortField !== $field) {
+            return '↕';
+        }
+
+        return $this->sortDirection === 'asc' ? '↑' : '↓';
+    }
 
     public function reservations()
     {
         $search = trim($this->search);
+        $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
 
-        return Reservation::query()
+        $query = Reservation::query()
             ->with(['guest', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments'])
             ->whereIn('status', ['Active', 'Paid'])
             ->whereDoesntHave('booking')
@@ -61,9 +136,37 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                         });
                 });
             })
-            ->latest('reservation_id')
-            ->limit(25)
-            ->get();
+            ->when($this->dateFrom !== '' || $this->dateTo !== '', function ($query): void {
+                // From / To filter the check-in date of the reserved facility.
+                $query->whereHas('details', function ($details): void {
+                    if ($this->dateFrom !== '') {
+                        $details->whereDate('check_in_date', '>=', $this->dateFrom);
+                    }
+
+                    if ($this->dateTo !== '') {
+                        $details->whereDate('check_in_date', '<=', $this->dateTo);
+                    }
+                });
+            });
+
+        $guest = fn (string $column): string => "(select g.{$column} from tbl_guest g where g.guest_id = tbl_reservation.guest_id)";
+
+        if ($this->sortField === 'guest_name') {
+            $query->orderByRaw($guest('last_name').' '.$direction)
+                ->orderByRaw($guest('first_name').' '.$direction);
+        } elseif ($this->sortField === 'facility_name') {
+            $query->orderByRaw('(select min(f.facility_name) from tbl_reservation_details d inner join tbl_facility f on f.facility_id = d.facility_id where d.reservation_id = tbl_reservation.reservation_id) '.$direction);
+        } elseif ($this->sortField === 'check_in_date') {
+            $query->orderByRaw('(select min(d.check_in_date) from tbl_reservation_details d where d.reservation_id = tbl_reservation.reservation_id) '.$direction);
+        } elseif ($this->sortField === 'amount_due') {
+            $query->orderBy('tbl_reservation.amount_due', $direction);
+        } else {
+            $query->orderBy('tbl_reservation.r_ref_no', $direction);
+        }
+
+        $perPage = in_array($this->perPage, [10, 25, 50, 100], true) ? $this->perPage : 10;
+
+        return $query->orderByDesc('tbl_reservation.reservation_id')->paginate($perPage);
     }
 
     public function modesOfPayment()
@@ -198,19 +301,21 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <p class="text-sm font-medium text-zinc-500">Cashier</p>
-            <h1 class="text-2xl font-bold tracking-tight">Convert Reservation to Booking</h1>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Use this when a guest with an active reservation settles the required payment and wants the facility confirmed as a booking.
-            </p>
-        </div>
-
-        <a href="{{ route('cashier.dashboard') }}" class="text-sm font-medium text-zinc-600 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-white">
-            Back to dashboard
-        </a>
-    </div>
+    <x-staff-page-header
+        eyebrow="Cashier operations"
+        title="Reservation Conversion"
+        description="Use this when a guest with an active reservation settles the required payment and wants the facility confirmed as a booking."
+    >
+    <x-slot:actions>
+            <flux:button
+                :href="route('cashier.dashboard')"
+                wire:navigate
+                variant="ghost"
+            >
+                Back to dashboard
+            </flux:button>
+        </x-slot:actions>
+    </x-staff-page-header>
 
     <x-toast :message="$successMessage" :seconds="15">
         @if ($convertedBookingId && Route::has('cashier.bookings.show'))
@@ -234,37 +339,62 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
     <div>
         <section>
             <div class="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div class="border-b border-zinc-200 p-5 dark:border-zinc-800">
-                    <h2 class="font-semibold">Active Reservations</h2>
-                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Search by reference number, guest name, contact number, or email.</p>
-                    <div class="mt-4 max-w-md">
-                        <flux:input wire:model.live.debounce.300ms="search" placeholder="Search reservations..." />
+                <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-4 dark:border-zinc-800">
+                    <flux:input
+                        wire:model.live.debounce.300ms="search"
+                        label="Search"
+                        placeholder="Reference, guest, contact, or email"
+                    />
+
+                    <flux:input wire:model.live="dateFrom" type="date" label="From" />
+
+                    <flux:input wire:model.live="dateTo" type="date" label="To" />
+
+                    <div class="flex items-end gap-2">
+                        <flux:select wire:model.live="perPage" label="Rows">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </flux:select>
+
+                        <flux:button type="button" wire:click="clearListFilters" variant="ghost">Clear Filters</flux:button>
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                        <thead class="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
+                @php($reservations = $this->reservations())
+
+                <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,dateFrom,dateTo,perPage,sortBy,clearListFilters,gotoPage,previousPage,nextPage">
+                    <table class="w-full min-w-[56rem] text-left text-sm">
+                        <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                             <tr>
-                                <th class="px-5 py-3">Reference</th>
-                                <th class="px-5 py-3">Guest</th>
-                                <th class="px-5 py-3">Facility</th>
-                                <th class="px-5 py-3">Date</th>
-                                <th class="px-5 py-3 text-right">Amount Due</th>
-                                <th class="px-5 py-3"></th>
+                                @foreach (['r_ref_no' => 'Reference', 'guest_name' => 'Guest', 'facility_name' => 'Facility', 'check_in_date' => 'Date'] as $field => $label)
+                                    <th class="px-4 py-3">
+                                        <button type="button" wire:click="sortBy('{{ $field }}')" class="font-semibold transition hover:text-zinc-900 dark:hover:text-white">
+                                            {{ $label }} {{ $this->sortIndicator($field) }}
+                                        </button>
+                                    </th>
+                                @endforeach
+                                <th class="px-4 py-3 font-semibold">Status</th>
+                                <th class="px-4 py-3 text-right">
+                                    <button type="button" wire:click="sortBy('amount_due')" class="font-semibold transition hover:text-zinc-900 dark:hover:text-white">
+                                        Amount Due {{ $this->sortIndicator('amount_due') }}
+                                    </button>
+                                </th>
+                                <th class="px-4 py-3 text-right font-semibold">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                            @forelse ($this->reservations() as $reservation)
+                            @forelse ($reservations as $reservation)
                                 @php($detail = $reservation->details->first())
-                                <tr class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }} text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
-                                    <td class="px-5 py-4 font-medium">{{ $reservation->r_ref_no }}</td>
-                                    <td class="px-5 py-4">
-                                        {{ $reservation->guest?->first_name }} {{ $reservation->guest?->last_name }}
+                                <tr wire:key="conversion-{{ $reservation->reservation_id }}" class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }} text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
+                                    <td class="whitespace-nowrap px-4 py-4 font-medium">{{ $reservation->r_ref_no }}</td>
+                                    <td class="px-4 py-4">
+                                        <div class="font-medium">{{ $reservation->guest?->first_name }} {{ $reservation->guest?->last_name }}</div>
                                         <div class="text-xs text-zinc-500">{{ $reservation->guest?->contact_no }}</div>
                                     </td>
-                                    <td class="px-5 py-4">
-                                        {{ $detail?->facility?->facility_name ?? 'No facility' }}
+                                    <td class="px-4 py-4">
+                                        <div class="font-medium">{{ $detail?->facility?->facility_name ?? 'No facility' }}</div>
                                         <div class="text-xs text-zinc-500">
                                             {{ $detail?->facility?->facilityType?->facility_type }} · {{ $detail?->rate_type }}
                                             @if ($detail?->discount)
@@ -272,24 +402,35 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                                             @endif
                                         </div>
                                     </td>
-                                    <td class="px-5 py-4">
-                                        {{ optional($detail?->check_in_date)->format('M d, Y') }}
+                                    <td class="whitespace-nowrap px-4 py-4">
+                                        <div>{{ optional($detail?->check_in_date)->format('M d, Y') }}</div>
                                         <div class="text-xs text-zinc-500">to {{ optional($detail?->check_out_date)->format('M d, Y') }}</div>
                                     </td>
-                                    <td class="px-5 py-4 text-right font-medium">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
-                                    <td class="px-5 py-4 text-right">
-                                        <flux:button size="sm" wire:click="selectReservation({{ $reservation->reservation_id }})">
-                                            Select
+                                    <td class="px-4 py-4">
+                                        @if ($reservation->status === 'Paid')
+                                            <flux:badge size="sm" color="green">Fully paid</flux:badge>
+                                        @else
+                                            <flux:badge size="sm" color="amber">Balance due</flux:badge>
+                                        @endif
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-4 text-right font-medium">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
+                                    <td class="px-4 py-4 text-right">
+                                        <flux:button size="sm" variant="primary" wire:click="selectReservation({{ $reservation->reservation_id }})">
+                                            Convert
                                         </flux:button>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="px-5 py-8 text-center text-zinc-500">No active reservations found.</td>
+                                    <td colspan="7" class="px-5 py-10 text-center text-zinc-500">No active reservations match the current filters.</td>
                                 </tr>
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                    {{ $reservations->links() }}
                 </div>
             </div>
         </section>

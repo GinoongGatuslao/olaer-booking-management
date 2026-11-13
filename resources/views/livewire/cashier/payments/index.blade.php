@@ -90,6 +90,11 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function mount(): void
     {
+        // The list starts on today; a date in the address bar still wins.
+        if ($this->historyDateFrom === '' && ! request()->has('date_from')) {
+            $this->historyDateFrom = now()->toDateString();
+        }
+
         $firstMode = ModeOfPayment::query()
             ->orderBy('mode_of_payment_id')
             ->first();

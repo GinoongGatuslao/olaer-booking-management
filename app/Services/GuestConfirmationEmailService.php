@@ -42,6 +42,7 @@ class GuestConfirmationEmailService
             $booking->loadMissing([
                 'guest.address',
                 'details.facility.facilityType',
+                'details.discount',
                 'extraGuests',
                 'payments.modeOfPayment',
             ]);

@@ -23,6 +23,14 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Resort')] class extends Component
 {
+    public function mount(): void
+    {
+        // The list starts on today; a date in the address bar still wins.
+        if ($this->dateFrom === '' && ! request()->has('date_from')) {
+            $this->dateFrom = now()->toDateString();
+        }
+    }
+
 
     public function updated(string $property): void
     {

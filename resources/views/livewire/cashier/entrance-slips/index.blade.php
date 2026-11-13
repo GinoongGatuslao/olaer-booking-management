@@ -63,6 +63,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
     public int $perPage = 10;
 
     public ?int $selectedSlipId = null;
+    public bool $showSlipModal = false;
     public string $modeOfPaymentId = '';
     public string $referenceNumber = '';
     public string $cashPaid = '';
@@ -70,6 +71,11 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
     public function mount(): void
     {
+        // The list starts on today; a date in the address bar still wins.
+        if ($this->dateFrom === '' && ! request()->has('date_from')) {
+            $this->dateFrom = now()->toDateString();
+        }
+
         $this->modeOfPaymentId = (string) (
             ModeOfPayment::query()
                 ->where('mode_of_payment', 'Cash')
@@ -350,10 +356,19 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
         unset($this->selectedSlip, $this->selectedPayment);
         $this->resetValidation();
+        $this->showSlipModal = true;
+    }
+
+    public function updatedShowSlipModal(bool $open): void
+    {
+        if (! $open) {
+            $this->clearSelection();
+        }
     }
 
     public function clearSelection(): void
     {
+        $this->showSlipModal = false;
         $this->selectedSlipId = null;
         $this->selectedPaymentId = null;
         $this->referenceNumber = '';
@@ -553,13 +568,15 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
         </div>
     @endif
 
-    @error('payment')
-        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-            {{ $message }}
-        </div>
-    @enderror
+    @if (! $showSlipModal)
+        @error('payment')
+            <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+                {{ $message }}
+            </div>
+        @enderror
+    @endif
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+    <div>
         <section class="min-w-0">
             <flux:card class="overflow-hidden p-0">
                 
@@ -782,27 +799,22 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                 </div>
             </flux:card>
         </section>
+    </div>
 
-        <aside>
-            <flux:card>
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="font-semibold">Entrance slip details</h2>
-                        <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            Full payment is required before admission.
-                        </p>
-                    </div>
-
-                    @if ($this->selectedSlip !== null)
-                        <flux:button
-                            wire:click="clearSelection"
-                            size="sm"
-                            variant="ghost"
-                        >
-                            Close
-                        </flux:button>
-                    @endif
+    <flux:modal wire:model="showSlipModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[36rem]">
+            <div>
+                <div class="pe-8">
+                    <h2 class="font-semibold">Entrance slip details</h2>
+                    <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        Full payment is required before admission.
+                    </p>
                 </div>
+
+                @error('payment')
+                    <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+                        {{ $message }}
+                    </div>
+                @enderror
 
                 @if ($this->selectedSlip !== null)
                     <div class="mt-5 space-y-5">
@@ -1070,7 +1082,6 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                         Select an entrance slip to review its headcount, fee breakdown, payment status, and receipt.
                     </p>
                 @endif
-            </flux:card>
-        </aside>
-    </div>
+            </div>
+    </flux:modal>
 </div>

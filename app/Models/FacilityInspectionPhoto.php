@@ -9,6 +9,9 @@ class FacilityInspectionPhoto extends Model
 {
     protected $table = 'tbl_facility_inspection_photo';
 
+    /** The uploader's name is shown next to the upload time. */
+    protected $with = ['uploadedBy'];
+
     protected $primaryKey = 'facility_inspection_photo_id';
 
     protected $fillable = [
