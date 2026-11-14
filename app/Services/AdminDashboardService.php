@@ -21,16 +21,25 @@ class AdminDashboardService
         $today = today();
 
         return [
-            'today_revenue' => (float) Payment::query()
+            // Net of refunds the cashier actually gave back, same as the revenue report.
+            'today_revenue' => round((float) Payment::query()
                 ->where('payment_status', 'Verified')
                 ->whereDate('date_paid', $today)
-                ->sum('amount_paid'),
+                ->sum('amount_paid')
+                - app(FinancialReportMetricsService::class)->refundedTotal(
+                    $today->toDateString(),
+                    $today->toDateString(),
+                ), 2),
 
-            'month_revenue' => (float) Payment::query()
+            'month_revenue' => round((float) Payment::query()
                 ->where('payment_status', 'Verified')
                 ->whereYear('date_paid', $today->year)
                 ->whereMonth('date_paid', $today->month)
-                ->sum('amount_paid'),
+                ->sum('amount_paid')
+                - app(FinancialReportMetricsService::class)->refundedTotal(
+                    $today->copy()->startOfMonth()->toDateString(),
+                    $today->copy()->endOfMonth()->toDateString(),
+                ), 2),
 
             'occupied_facilities' => Facility::query()
                 ->where('facility_status', 'Occupied')
@@ -60,6 +69,21 @@ class AdminDashboardService
             ->whereBetween('date_paid', [$start->toDateString(), today()->toDateString()])
             ->groupBy('date_paid')
             ->pluck('total', 'date_paid');
+
+        // Refunds reduce the day they were given.
+        $refunds = \Illuminate\Support\Facades\DB::table('tbl_refund_request')
+            ->selectRaw('DATE(refunded_at) AS refund_date, SUM(refunded_amount) AS total')
+            ->whereNotNull('refunded_at')
+            ->whereDate('refunded_at', '>=', $start->toDateString())
+            ->whereDate('refunded_at', '<=', today()->toDateString())
+            ->groupBy(\Illuminate\Support\Facades\DB::raw('DATE(refunded_at)'))
+            ->pluck('total', 'refund_date');
+
+        $totals = $totals->map(fn ($total) => (float) $total);
+
+        foreach ($refunds as $date => $refunded) {
+            $totals[$date] = (float) ($totals[$date] ?? 0) - (float) $refunded;
+        }
 
         return collect(range(0, $days - 1))
             ->map(function (int $offset) use ($start, $totals): array {

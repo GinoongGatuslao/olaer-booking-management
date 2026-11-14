@@ -14,14 +14,19 @@ class CashierDashboardService
     public function overview(int $cashierUserId): array
     {
         return [
-            'my_revenue_today' => (float) Payment::query()
+            'my_revenue_today' => round((float) Payment::query()
                 ->where('payment_status', 'Verified')
                 ->whereDate('date_paid', today())
                 ->where(function ($query) use ($cashierUserId): void {
                     $query->where('user_id', $cashierUserId)
                         ->orWhere('verified_by_user_id', $cashierUserId);
                 })
-                ->sum('amount_paid'),
+                ->sum('amount_paid')
+                - app(FinancialReportMetricsService::class)->refundedTotal(
+                    today()->toDateString(),
+                    today()->toDateString(),
+                    $cashierUserId,
+                ), 2),
 
             'unpaid_entrance_slips' => EntranceSlip::query()
                 ->where('status', 'Unpaid')

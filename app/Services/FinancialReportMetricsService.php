@@ -273,6 +273,17 @@ class FinancialReportMetricsService
             );
     }
 
+    /** Refunds the cashier actually gave back within the range (for dashboards). */
+    public function refundedTotal(
+        ?string $dateFrom = null,
+        ?string $dateTo = null,
+        ?int $cashierUserId = null,
+    ): float {
+        [$from, $to] = $this->normalizeRange($dateFrom, $dateTo);
+
+        return $this->sumRefunds($this->refundsQuery($from, $to, $cashierUserId));
+    }
+
     private function sumRefunds(Builder $query): float
     {
         return round((float) $query->sum('rr.refunded_amount'), 2);

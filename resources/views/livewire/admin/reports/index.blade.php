@@ -495,25 +495,23 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                         @endforeach
                     </flux:select>
 
-                    <flux:input
-                        wire:model.live="year"
-                        label="Year"
-                        type="number"
-                        min="2000"
-                        max="2100"
-                    />
+                    <flux:field>
+                        <flux:label class="flex items-center gap-2">Year <span wire:loading.inline-flex wire:target="year" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
+                        <flux:input wire:model.live="year" type="number" min="2000" max="2100" :loading="false" />
+                        <flux:error name="year" />
+                    </flux:field>
                 @else
-                    <flux:input
-                        wire:model.live="startDate"
-                        label="Start Date"
-                        type="date"
-                    />
+                    <flux:field>
+                        <flux:label class="flex items-center gap-2">Start Date <span wire:loading.inline-flex wire:target="startDate" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
+                        <flux:input wire:model.live="startDate" type="date" :loading="false" />
+                        <flux:error name="startDate" />
+                    </flux:field>
 
-                    <flux:input
-                        wire:model.live="endDate"
-                        label="End Date"
-                        type="date"
-                    />
+                    <flux:field>
+                        <flux:label class="flex items-center gap-2">End Date <span wire:loading.inline-flex wire:target="endDate" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
+                        <flux:input wire:model.live="endDate" type="date" :loading="false" />
+                        <flux:error name="endDate" />
+                    </flux:field>
                 @endif
 
                 @if ($this->usesFacilityType())
@@ -574,14 +572,16 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
         @if (! $printAll)
             <flux:card class="print:hidden">
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <flux:input
-                        wire:model.live.debounce.300ms="reportSearch"
-                        :loading="false"
-                        label="Search generated report"
-                        placeholder="Reference, guest, facility, staff, or status"
-                        clearable
-                        class="xl:col-span-2"
-                    />
+                    <flux:field class="xl:col-span-2">
+                        <flux:label class="flex items-center gap-2">Search generated report <span wire:loading.inline-flex wire:target="reportSearch" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
+                        <flux:input
+                            wire:model.live.debounce.300ms="reportSearch"
+                            :loading="false"
+                            placeholder="Reference, guest, facility, staff, or status"
+                            clearable
+                        />
+                        <flux:error name="reportSearch" />
+                    </flux:field>
 
                     <flux:select wire:model.live="perPage" label="Rows per page">
                         <option value="10">10</option>
