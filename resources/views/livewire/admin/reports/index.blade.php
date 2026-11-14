@@ -576,6 +576,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <flux:input
                         wire:model.live.debounce.300ms="reportSearch"
+                        :loading="false"
                         label="Search generated report"
                         placeholder="Reference, guest, facility, staff, or status"
                         clearable

@@ -68,6 +68,10 @@ class FinancialReportMetricsService
 
         $verifiedRevenue = round($grossRevenue - $refundedTotal, 2);
 
+        // The three sources must not overlap, or they will not add up to net revenue.
+        // The payment taken when a reservation is converted carries both a booking_id
+        // and a reservation_id, so it is counted once, under Booking. Reservation
+        // revenue is only money still held on a reservation, less refunds given back.
         $bookingRevenue = $this->sumAmount(
             (clone $payments)->whereNotNull(
                 'p.booking_id',
@@ -75,9 +79,9 @@ class FinancialReportMetricsService
         );
 
         $reservationRevenue = round($this->sumAmount(
-            (clone $payments)->whereNotNull(
-                'p.reservation_id',
-            ),
+            (clone $payments)
+                ->whereNull('p.booking_id')
+                ->whereNotNull('p.reservation_id'),
         ) - $refundedTotal, 2);
 
         $entranceRevenue = $this->sumAmount(
