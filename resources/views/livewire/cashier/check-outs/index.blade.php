@@ -528,12 +528,13 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         ->latest('facility_inspection_id')
                         ->limit(1),
             ]);
-        if ($this->statusFilter === 'all'){
-             $query->whereNotIn('tbl_booking.status', ['Cancelled', 'Checked-out']);
-        }
-        else if ($this->statusFilter === 'checked_out') {
+        if ($this->statusFilter === 'checked_out') {
+            // History view: facilities that have already been checked out.
             $query->where('tbl_booking_details.status', 'Checked-out');
         } else {
+            // Check-out queue: only facilities that are actually Checked-in.
+            // Facilities still Booked (never checked in) can't be checked out,
+            // so they never appear here.
             $query->where('tbl_booking_details.status', 'Checked-in')
                 ->whereNotIn('tbl_booking.status', ['Cancelled', 'Checked-out']);
         }
@@ -575,7 +576,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         }
 
         if (
-            $this->statusFilter === 'eligible'
+            $this->statusFilter !== 'checked_out'
             && $this->stageFilter !== 'all'
         ) {
             // Same definition the workflow stage badge uses: the LATEST request,
@@ -731,8 +732,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         label="List"
                         wire:model.live="statusFilter"
                     >
-                        <option value="all">All</option>
-                        <option value="eligible">Checked-in / Pending check-out</option>
+                        <option value="all">Checked-in / Pending check-out</option>
                         <option value="checked_out">Checked-out history</option>
                     </flux:select>
 
