@@ -386,13 +386,11 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                             </tr>
                         </thead>
                         @forelse ($reservations as $reservation)
-                            @php
-                                $details = $reservation->details;
-                                $firstDetail = $details->first();
-                                $extraFacilities = max($details->count() - 1, 0);
-                                $rangeStart = $details->min('check_in_date');
-                                $rangeEnd = $details->max('check_out_date');
-                            @endphp
+                            @php($details = $reservation->details)
+                            @php($firstDetail = $details->first())
+                            @php($extraFacilities = max($details->count() - 1, 0))
+                            @php($rangeStart = $details->min('check_in_date'))
+                            @php($rangeEnd = $details->max('check_out_date'))
                             <tbody
                                 wire:key="conversion-{{ $reservation->reservation_id }}"
                                 x-data="{ open: false }"
