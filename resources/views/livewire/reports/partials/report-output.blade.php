@@ -385,7 +385,13 @@
                             <td class="whitespace-nowrap p-2 text-right">{{ $paidTotal > 0 ? $this->money($paidTotal) : '—' }}</td>
                             <td class="p-2">
                                 @if ($approvedRefund)
-                                    <div class="font-medium">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                    @if ($approvedRefund->refunded_at)
+                                        <div class="font-medium">{{ $this->money($approvedRefund->refunded_amount) }} given to guest</div>
+                                        <div class="text-xs text-zinc-500">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                    @else
+                                        <div class="font-medium">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                        <div class="text-xs text-zinc-500">Not yet given to guest</div>
+                                    @endif
                                     @if ($approvedRefund->admin_note)
                                         <div class="text-xs text-zinc-500">{{ $approvedRefund->admin_note }}</div>
                                     @endif

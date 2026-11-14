@@ -8,6 +8,7 @@ use App\Models\Reservation;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class RefundRequestWorkflowService
@@ -196,6 +197,21 @@ class RefundRequestWorkflowService
     ): RefundRequest {
         $this->guardRole($cashierUserId, 'Cashier', 'give refunds to guests');
 
+        // The release columns come from the 2026_11_15_000000 migration. Without them the
+        // save fails with a database error the cashier cannot act on, so say what is wrong.
+        if (! Schema::hasColumns('tbl_refund_request', [
+            'refunded_amount',
+            'refund_mode_of_payment_id',
+            'refund_reference_number',
+            'refund_proof_path',
+            'refunded_at',
+            'refunded_by_user_id',
+        ])) {
+            throw new InvalidArgumentException(
+                'Refund recording is not set up yet: the database is missing the refund release columns. Ask the developer to run "php artisan migrate".',
+            );
+        }
+
         $mode = ModeOfPayment::query()->find($modeOfPaymentId);
 
         if ($mode === null) {
@@ -236,9 +252,13 @@ class RefundRequestWorkflowService
             }
 
             $approved = $this->money->normalize((string) $request->approved_amount);
-            $given = ($amount === null || trim($amount) === '')
-                ? $approved
-                : $this->parseAmount($amount, 'The refund amount');
+            // The cashier must state what was actually handed over; it is never assumed to be
+            // the approved amount, because this figure is what reduces revenue.
+            if ($amount === null || trim($amount) === '') {
+                throw new InvalidArgumentException('Enter the amount actually given to the guest.');
+            }
+
+            $given = $this->parseAmount($amount, 'The amount given');
 
             if ($this->money->compare($given, $approved) > 0) {
                 throw new InvalidArgumentException(
