@@ -233,13 +233,7 @@ class PaymentWorkflowService
         } elseif ($targetType === 'reservation') {
             $this->guardReservationIsPayable($target);
         } elseif ($targetType === 'entrance_slip') {
-            $this->guardEntranceSlipIsPayable(
-                $target,
-                $amountDue,
-                $amountPaid,
-            );
-
-            return;
+            $this->guardEntranceSlipIsPayable($target);
         }
 
         if ($this->money->compare($amountDue, '0.00') !== 1) {
@@ -290,8 +284,6 @@ class PaymentWorkflowService
 
     private function guardEntranceSlipIsPayable(
         Model $target,
-        string $amountDue,
-        string $amountPaid,
     ): void {
         if (! $target instanceof EntranceSlip) {
             throw new InvalidArgumentException(
@@ -311,33 +303,14 @@ class PaymentWorkflowService
             );
         }
 
-        $verifiedPaymentExists = $target->payments()
-            ->whereRaw(
-                'LOWER(payment_status) = ?',
-                ['verified'],
-            )
-            ->exists();
-
-        if ($verifiedPaymentExists) {
-            throw new InvalidArgumentException(
-                'This entrance slip already has a verified payment.',
-            );
-        }
-
+        // Partial payments are accepted: the slip stays Unpaid (with a smaller
+        // balance) until the balance reaches zero. The shared checks in
+        // guardTargetIsPayable() reject a zero balance and overpayment.
         $totalPrice = $this->money->normalize((string) $target->getAttribute('total_price'));
 
-        if (
-            $this->money->compare($totalPrice, '0.00') !== 1
-            || ! $this->money->equals($amountDue, $totalPrice)
-        ) {
+        if ($this->money->compare($totalPrice, '0.00') !== 1) {
             throw new InvalidArgumentException(
                 'This entrance slip has an inconsistent balance and must be reviewed before payment.',
-            );
-        }
-
-        if (! $this->money->equals($amountPaid, $amountDue)) {
-            throw new InvalidArgumentException(
-                'Entrance slips must be paid in full.',
             );
         }
     }
@@ -369,9 +342,11 @@ class PaymentWorkflowService
 
         if ($targetType === 'entrance_slip') {
             $target->update([
-                'amount_due' => 0.00,
+                'amount_due' => $newAmountDue,
                 'handled_by_user_id' => $cashierUserId,
-                'status' => 'Paid',
+                'status' => $this->money->compare($newAmountDue, '0.00') !== 1
+                    ? 'Paid'
+                    : $target->getAttribute('status'),
             ]);
         }
     }
