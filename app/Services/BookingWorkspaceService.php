@@ -81,7 +81,7 @@ class BookingWorkspaceService
             'facility_count' => $booking->details->count(),
             'extra_guest_count' => $booking->extraGuests->count(),
             'amenity_request_count' => $booking->amenityRequests
-                ->where('amenity_request_status', '!=', 'Cancelled')
+                ->whereNotIn('amenity_request_status', ['Cancelled', 'Undelivered'])
                 ->count(),
             'fine_count' => $booking->guestFines->count(),
         ];
@@ -154,6 +154,7 @@ class BookingWorkspaceService
             'pending', 'awaiting payment' => 'amber',
             'accepted', 'delivering', 'in progress' => 'blue',
             'cancelled', 'rejected' => 'red',
+            'undelivered' => 'orange',
             default => 'zinc',
         };
     }

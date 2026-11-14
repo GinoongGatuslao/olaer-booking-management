@@ -24,6 +24,7 @@ class AmenityRequest extends Model
         'assigned_to_user_id',
         'delivered_at',
         'cancelled_at',
+        'undelivered_at',
     ];
 
     protected function casts(): array
@@ -33,6 +34,7 @@ class AmenityRequest extends Model
             'date_created' => 'date',
             'delivered_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'undelivered_at' => 'datetime',
         ];
     }
 

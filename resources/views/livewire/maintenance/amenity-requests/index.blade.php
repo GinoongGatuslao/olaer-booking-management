@@ -554,7 +554,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             ])
             ->whereIn(
                 'amenity_request_status',
-                ['Pending', 'Delivering', 'Delivered'],
+                ['Pending', 'Delivering', 'Delivered', 'Undelivered'],
             )
             ->when(
                 $this->statusFilter !== '',
@@ -876,6 +876,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                         <option value="Pending">Pending</option>
                         <option value="Delivering">Delivering</option>
                         <option value="Delivered">Delivered</option>
+                        <option value="Undelivered">Undelivered</option>
                     </flux:select>
 
                     <flux:select

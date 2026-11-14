@@ -437,7 +437,7 @@ class AmenityRequestWorkflowService
             )
             ->where('tbl_amenity_request.booking_id', $bookingId)
             ->where('tbl_amenity_request_details.facility_id', $facilityId)
-            ->where('tbl_amenity_request.amenity_request_status', '!=', 'Cancelled')
+            ->whereNotIn('tbl_amenity_request.amenity_request_status', ['Cancelled', 'Undelivered'])
             ->when(
                 $excludeRequestId !== null,
                 fn ($query) => $query->where('tbl_amenity_request.amenity_request_id', '!=', $excludeRequestId),

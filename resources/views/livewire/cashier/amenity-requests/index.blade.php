@@ -451,6 +451,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             'Delivering' => 'purple',
             'Delivered' => 'green',
             'Cancelled' => 'red',
+            'Undelivered' => 'orange',
             default => 'zinc',
         };
     }
@@ -1047,6 +1048,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                     <option value="Pending">Pending</option>
                     <option value="Delivering">Delivering</option>
                     <option value="Delivered">Delivered</option>
+                    <option value="Undelivered">Undelivered</option>
                     <option value="Cancelled">Cancelled</option>
                 </flux:select>
 
@@ -1196,6 +1198,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 @if ($request->delivered_at)
                                     <p class="mt-1 text-xs text-gray-500">
                                         {{ $request->delivered_at->format('M d, Y h:i A') }}
+                                    </p>
+                                @elseif ($request->undelivered_at)
+                                    <p class="mt-1 text-xs text-orange-500">
+                                        Undelivered {{ $request->undelivered_at->format('M d, Y h:i A') }}
                                     </p>
                                 @elseif ($request->cancelled_at)
                                     <p class="mt-1 text-xs text-red-500">

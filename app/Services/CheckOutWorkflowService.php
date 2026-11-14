@@ -50,16 +50,17 @@ class CheckOutWorkflowService
             app(FacilityConditionPhotoService::class)->retireForStay($detail);
 
             // Amenity requests for this facility that were never delivered are
-            // cancelled at check-out. They were never billed and never count
-            // toward amenity fines (only Delivered requests do).
+            // marked Undelivered at check-out (not Cancelled, which is reserved
+            // for requests cancelled on purpose). They were never billed and
+            // never count toward amenity fines (only Delivered requests do).
             AmenityRequest::query()
                 ->where('booking_id', $booking->booking_id)
                 ->whereIn('amenity_request_status', ['Pending', 'Awaiting Payment', 'Delivering'])
                 ->whereHas('details', fn ($query) => $query->where('facility_id', $detail->facility_id))
                 ->get()
                 ->each(fn (AmenityRequest $request) => $request->update([
-                    'amenity_request_status' => 'Cancelled',
-                    'cancelled_at' => now(),
+                    'amenity_request_status' => 'Undelivered',
+                    'undelivered_at' => now(),
                 ]));
 
             $this->scheduleBlocks->releaseBookingDetails([$detail]);
