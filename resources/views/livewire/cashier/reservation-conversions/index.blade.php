@@ -121,7 +121,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
         $direction = $this->sortDirection === 'desc' ? 'desc' : 'asc';
 
         $query = Reservation::query()
-            ->with(['guest', 'details.facility.facilityType', 'details.discount', 'extraGuests', 'payments'])
+            ->with(['guest', 'details.facility.facilityType', 'details.facility.facilityProduct', 'details.discount', 'extraGuests', 'payments'])
             ->whereIn('status', ['Active', 'Paid'])
             ->whereDoesntHave('booking')
             ->when($search !== '', function ($query) use ($search): void {
@@ -368,6 +368,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     <table class="w-full min-w-[56rem] text-left text-sm">
                         <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                             <tr>
+                                <th class="w-10 px-3 py-3"><span class="sr-only">Expand</span></th>
                                 @foreach (['r_ref_no' => 'Reference', 'guest_name' => 'Guest', 'facility_name' => 'Facility', 'check_in_date' => 'Date'] as $field => $label)
                                     <th class="px-4 py-3">
                                         <button type="button" wire:click="sortBy('{{ $field }}')" class="font-semibold transition hover:text-zinc-900 dark:hover:text-white">
@@ -384,27 +385,54 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                                 <th class="px-4 py-3 text-right font-semibold">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                            @forelse ($reservations as $reservation)
-                                @php($detail = $reservation->details->first())
-                                <tr wire:key="conversion-{{ $reservation->reservation_id }}" class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }} text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60">
+                        @forelse ($reservations as $reservation)
+                            @php
+                                $details = $reservation->details;
+                                $firstDetail = $details->first();
+                                $extraFacilities = max($details->count() - 1, 0);
+                                $rangeStart = $details->min('check_in_date');
+                                $rangeEnd = $details->max('check_out_date');
+                            @endphp
+                            <tbody
+                                wire:key="conversion-{{ $reservation->reservation_id }}"
+                                x-data="{ open: false }"
+                                class="border-b border-zinc-100 dark:border-zinc-800"
+                            >
+                                <tr
+                                    @click="open = ! open"
+                                    class="{{ $selectedReservationId === $reservation->reservation_id ? 'bg-blue-50 dark:bg-blue-950/30' : '' }} cursor-pointer text-brand-text transition-colors hover:bg-brand-surface-muted/70 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+                                >
+                                    <td class="px-3 py-4 text-zinc-500 dark:text-zinc-400">
+                                        <flux:icon.chevron-right class="size-4 transition-transform" x-bind:class="open && 'rotate-90'" />
+                                    </td>
                                     <td class="whitespace-nowrap px-4 py-4 font-medium">{{ $reservation->r_ref_no }}</td>
                                     <td class="px-4 py-4">
                                         <div class="font-medium">{{ $reservation->guest?->first_name }} {{ $reservation->guest?->last_name }}</div>
                                         <div class="text-xs text-zinc-500">{{ $reservation->guest?->contact_no }}</div>
                                     </td>
                                     <td class="px-4 py-4">
-                                        <div class="font-medium">{{ $detail?->facility?->facility_name ?? 'No facility' }}</div>
-                                        <div class="text-xs text-zinc-500">
-                                            {{ $detail?->facility?->facilityType?->facility_type }} · {{ $detail?->rate_type }}
-                                            @if ($detail?->discount)
-                                                · {{ $detail->discount->discount_name }}
+                                        @if ($firstDetail)
+                                            <div class="flex flex-wrap items-center gap-1">
+                                                <span class="font-medium">{{ $firstDetail->facility?->facility_name ?? 'No facility' }}</span>
+                                                @if ($extraFacilities > 0)
+                                                    <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">+{{ $extraFacilities }} more</span>
+                                                @endif
+                                            </div>
+                                            @if ($extraFacilities === 0)
+                                                <div class="text-xs text-zinc-500">
+                                                    {{ $firstDetail->facility?->facilityType?->facility_type }} · {{ $firstDetail->rate_type }}
+                                                    @if ($firstDetail->discount)
+                                                        · {{ $firstDetail->discount->discount_name }}
+                                                    @endif
+                                                </div>
                                             @endif
-                                        </div>
+                                        @else
+                                            <div class="font-medium">No facility</div>
+                                        @endif
                                     </td>
                                     <td class="whitespace-nowrap px-4 py-4">
-                                        <div>{{ optional($detail?->check_in_date)->format('M d, Y') }}</div>
-                                        <div class="text-xs text-zinc-500">to {{ optional($detail?->check_out_date)->format('M d, Y') }}</div>
+                                        <div>{{ optional($rangeStart)->format('M d, Y') }}</div>
+                                        <div class="text-xs text-zinc-500">to {{ optional($rangeEnd)->format('M d, Y') }}</div>
                                     </td>
                                     <td class="px-4 py-4">
                                         @if ($reservation->status === 'Paid')
@@ -414,18 +442,48 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                                         @endif
                                     </td>
                                     <td class="whitespace-nowrap px-4 py-4 text-right font-medium">₱{{ number_format((float) $reservation->amount_due, 2) }}</td>
-                                    <td class="px-4 py-4 text-right">
+                                    <td class="px-4 py-4 text-right" @click.stop>
                                         <flux:button size="sm" variant="primary" wire:click="selectReservation({{ $reservation->reservation_id }})">
                                             Convert
                                         </flux:button>
                                     </td>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="px-5 py-10 text-center text-zinc-500">No active reservations match the current filters.</td>
+
+                                {{-- View-only list of the reserved facilities; no actions here. --}}
+                                <tr x-show="open" x-transition.opacity style="display: none" class="bg-zinc-50/60 dark:bg-zinc-950/40">
+                                    <td colspan="8" class="px-6 py-4">
+                                        <div class="mb-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                            Reserved facilities ({{ $details->count() }})
+                                        </div>
+                                        <div class="space-y-3">
+                                            @forelse ($details as $detail)
+                                                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                                                    <div class="font-medium">{{ $detail->facility?->facility_name ?? 'Unassigned facility' }}</div>
+                                                    <div class="text-xs text-zinc-500 dark:text-zinc-400">
+                                                        {{ $detail->facility?->facilityType?->facility_type }}
+                                                        · {{ $detail->facility?->facilityProduct?->display_name }}
+                                                        · {{ $detail->rate_type }}
+                                                        · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}
+                                                        · {{ $detail->status ?? 'Active' }}
+                                                        @if ($detail->discount)
+                                                            · {{ $detail->discount->discount_name }}
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @empty
+                                                <span class="text-zinc-500 dark:text-zinc-400">No facility details</span>
+                                            @endforelse
+                                        </div>
+                                    </td>
                                 </tr>
-                            @endforelse
-                        </tbody>
+                            </tbody>
+                        @empty
+                            <tbody>
+                                <tr>
+                                    <td colspan="8" class="px-5 py-10 text-center text-zinc-500">No active reservations match the current filters.</td>
+                                </tr>
+                            </tbody>
+                        @endforelse
                     </table>
                 </div>
 

@@ -82,6 +82,10 @@
 
 [data-flux-field]:not(ui-radio, ui-checkbox) {
     @apply grid gap-2;
+    /* When a neighbouring field in the same grid row is taller (it reserves room for an
+       error message), keep this field's label and control packed at the top instead of
+       letting the extra height spread them apart. */
+    align-content: start;
 }
 
 [data-flux-label] {
@@ -229,7 +233,9 @@ select:focus[data-flux-control] {
 }
 
 
-/* Reserve room for the floating message only while a field actually has an error. */
-[data-flux-field]:has(.field-error, [data-invalid]) {
+/* Reserve room for the floating message only while an error message is actually shown.
+   A field that is merely highlighted red (an empty required field has no message)
+   must not add any space. */
+[data-flux-field]:has(.field-error, [data-flux-error]) {
     margin-bottom: 1.5rem;
 }

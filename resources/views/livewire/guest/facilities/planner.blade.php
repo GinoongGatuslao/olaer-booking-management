@@ -90,6 +90,9 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
     public string $token = '';
     public bool $bookingMode = false;
     public string $planTotal = '';
+
+    /** Bumped on every save/submit so the error toast shows again even if the messages are unchanged. */
+    public int $errorToastTick = 0;
     public string $paymentAmount = '';
     public string $referenceNumber = '';
     public $proofOfPayment = null;
@@ -271,6 +274,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
     ): void {
+        $this->errorToastTick++;
         $this->resetErrorBag('plan');
         $this->validate($this->planRules());
 
@@ -301,6 +305,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         GcashProofStorageService $proofStorage,
         GuestSubmissionConfirmationService $confirmations,
     ): void {
+        $this->errorToastTick++;
         $this->validate($this->rules());
 
         $proofPath = null;
@@ -516,10 +521,6 @@ protected function validationAttributes(): array
     </div>
 
     <x-toast :message="session('success')" fresh />
-
-    @error('plan')
-        <div class="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">{{ $message }}</div>
-    @enderror
 
     <form wire:submit="submit" novalidate class="mt-8 space-y-6">
         <flux:card>
@@ -769,13 +770,26 @@ protected function validationAttributes(): array
             </div>
         </flux:card>
 
-        @if ($this->bannerErrors() !== [])
-            <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
-                <ul class="list-disc space-y-1 pl-5">
-                    @foreach ($this->bannerErrors() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
+        {{-- Errors show as a toast in the top-right corner (required-but-empty fields are only highlighted). --}}
+        @php($toastErrors = $this->bannerErrors())
+        @if ($toastErrors !== [])
+            <div
+                wire:key="error-toast-{{ $errorToastTick }}-{{ md5(json_encode($toastErrors)) }}"
+                x-data="{ show: true }"
+                x-init="setTimeout(() => show = false, 8000)"
+                x-show="show"
+                x-transition.opacity.duration.200ms
+                role="alert"
+                class="fixed right-4 top-4 z-[60] w-[calc(100vw-2rem)] max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+            >
+                <div class="flex items-start gap-3">
+                    <ul class="min-w-0 flex-1 list-disc space-y-1 pl-5">
+                        @foreach ($toastErrors as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                    <button type="button" x-on:click="show = false" class="shrink-0 text-red-700 hover:text-red-900 dark:text-red-200 dark:hover:text-white" aria-label="Dismiss">&times;</button>
+                </div>
             </div>
         @endif
 
