@@ -566,7 +566,7 @@ protected function validationAttributes(): array
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                                 @if ($selectedProduct && \App\Support\DayRateCutoff::closedFor($selectedProduct->schedule_policy, (string) ($group['check_in_date'] ?? '')))
-                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Only the Night rate is available currently.</p>
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Only Night rate is available currently.</p>
                                 @endif
                             </flux:field>
                             <flux:field class="relative">
@@ -612,6 +612,16 @@ protected function validationAttributes(): array
                                 <flux:badge color="amber">{{ $selectedRate->display_name }}</flux:badge>
                                 <flux:badge color="zinc">Check-in: {{ $rateTimes['check_in'] }}</flux:badge>
                                 <flux:badge color="zinc">Check-out: {{ $rateTimes['check_out'] }}</flux:badge>
+                            </div>
+                        @endif
+
+                        @php($rowSummary = \App\Support\GroupRowPricing::summarize($selectedProduct, $group))
+                        @if ($rowSummary)
+                            <div class="mt-4 flex flex-wrap gap-2 text-sm">
+                                @if ($rowSummary['is_room'])
+                                    <flux:badge color="amber">{{ $rowSummary['days'] }} {{ \Illuminate\Support\Str::plural('day', $rowSummary['days']) }}</flux:badge>
+                                @endif
+                                <flux:badge color="green" title="Before any discount">Subtotal: ₱{{ number_format($rowSummary['subtotal'], 2) }}</flux:badge>
                             </div>
                         @endif
 

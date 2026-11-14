@@ -96,6 +96,9 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
     public array $roomOccupants = [];
     public string $planTotal = '';
 
+    /** Bumped on every action that can raise an error, so the toast shows again even if the messages are unchanged. */
+    public int $errorToastTick = 0;
+
     /** Facility picked for each unit: group index => unit position => facility id. */
     public array $facilitySelection = [];
 
@@ -183,6 +186,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
 
     public function addGroup(): void
     {
+        $this->errorToastTick++;
         if (count($this->groups) >= 20) {
             $this->addError('groups', 'You can add up to 20 facility groups.');
 
@@ -343,6 +347,7 @@ new #[Layout('layouts.app')] #[Title('Create Booking - Olaer Spring Resort')] cl
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
     ): void {
+        $this->errorToastTick++;
         $this->resetErrorBag();
         $this->validate($this->planRules());
 
@@ -428,6 +433,7 @@ protected function validationAttributes(): array
     /** Re-quote when the cashier picks a different facility from a dropdown. */
     public function updatedFacilitySelection(): void
     {
+        $this->errorToastTick++;
         $this->resetErrorBag('plan');
 
         try {
@@ -449,6 +455,7 @@ protected function validationAttributes(): array
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
     ): void {
+        $this->errorToastTick++;
         $this->validate($this->rules());
 
         try {
@@ -643,9 +650,6 @@ protected function validationAttributes(): array
         <flux:button href="{{ route('cashier.bookings.index') }}" variant="ghost" wire:navigate>Back to bookings</flux:button>
     </div>
 
-    @error('plan')
-        <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{{ $message }}</div>
-    @enderror
 
     <form wire:submit="submit" novalidate class="space-y-6">
         <flux:card>
@@ -711,9 +715,6 @@ protected function validationAttributes(): array
             </div>
 
             <div class="mt-5 space-y-4">
-                @error('groups')
-                    <p class="text-sm text-red-700 dark:text-red-300">{{ $message }}</p>
-                @enderror
                 @foreach ($groups as $index => $group)
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
@@ -744,7 +745,7 @@ protected function validationAttributes(): array
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                                 @if ($product && \App\Support\DayRateCutoff::closedFor($product->schedule_policy, (string) ($group['check_in_date'] ?? '')))
-                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Only the Night rate is available currently.</p>
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Only Night rate is available currently.</p>
                                 @endif
                             </flux:field>
                             <flux:field class="relative">
@@ -923,11 +924,26 @@ protected function validationAttributes(): array
 
         </flux:card>
 
-        @if ($this->bannerErrors() !== [])
-            <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-                <ul class="list-disc space-y-1 pl-5">
-                    @foreach ($this->bannerErrors() as $error)<li>{{ $error }}</li>@endforeach
-                </ul>
+        {{-- Errors show as a toast in the top-right corner (required-but-empty fields are only highlighted). --}}
+        @php($toastErrors = $this->bannerErrors())
+        @if ($toastErrors !== [])
+            <div
+                wire:key="error-toast-{{ $errorToastTick }}-{{ md5(json_encode($toastErrors)) }}"
+                x-data="{ show: true }"
+                x-init="setTimeout(() => show = false, 8000)"
+                x-show="show"
+                x-transition.opacity.duration.200ms
+                role="alert"
+                class="fixed right-4 top-20 z-[60] w-[calc(100vw-2rem)] max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+            >
+                <div class="flex items-start gap-3">
+                    <ul class="min-w-0 flex-1 list-disc space-y-1 pl-5">
+                        @foreach ($toastErrors as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                    <button type="button" x-on:click="show = false" class="shrink-0 text-red-700 hover:text-red-900 dark:text-red-200 dark:hover:text-white" aria-label="Dismiss">&times;</button>
+                </div>
             </div>
         @endif
 

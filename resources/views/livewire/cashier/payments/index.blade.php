@@ -298,6 +298,23 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->cashPaid = '';
     }
 
+    /**
+     * The amount that will actually be recorded. For cash, if the cash received is
+     * less than the amount to pay, the cash received is recorded as a partial payment.
+     */
+    public function effectiveAmount(): ?string
+    {
+        if (! is_numeric($this->amountPaid)) {
+            return null;
+        }
+
+        if ($this->isCashMode() && is_numeric($this->cashPaid) && (float) $this->cashPaid > 0) {
+            return number_format(min((float) $this->amountPaid, (float) $this->cashPaid), 2, '.', '');
+        }
+
+        return (string) $this->amountPaid;
+    }
+
     public function recordPayment(PaymentWorkflowService $paymentWorkflow): void
     {
         $validated = $this->validate([
@@ -313,18 +330,21 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                 'exists:tbl_mode_of_payment,mode_of_payment_id',
             ],
             'referenceNumber' => ['nullable', 'string', 'max:50'],
-            'cashPaid' => [$this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gte:amountPaid'],
+            // No "must cover the amount" rule: less cash than the amount is a partial payment.
+            'cashPaid' => [$this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gt:0'],
         ], [
             'cashPaid.required' => 'Enter the cash received.',
             'cashPaid.numeric' => 'Cash paid must be a number.',
-            'cashPaid.gte' => 'Cash paid must be at least the amount to pay.',
+            'cashPaid.gt' => 'Cash paid must be greater than zero.',
         ]);
+
+        $amountToRecord = $this->effectiveAmount() ?? (string) $validated['amountPaid'];
 
         try {
             $payment = $paymentWorkflow->recordCashierPayment([
                 'target_type' => $validated['targetType'],
                 'target_id' => (int) $validated['selectedTargetId'],
-                'amount_paid' => $validated['amountPaid'],
+                'amount_paid' => $amountToRecord,
                 'mode_of_payment_id' => (int) $validated['modeOfPaymentId'],
                 'reference_number' => $validated['referenceNumber'] ?? null,
                 'cash_paid' => $this->isCashMode() ? ($validated['cashPaid'] ?? null) : null,
@@ -1475,6 +1495,12 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                     <span>Change</span>
                     <span>₱{{ number_format(is_numeric($cashPaid) && is_numeric($amountPaid) ? max(0, (float) $cashPaid - (float) $amountPaid) : 0, 2) }}</span>
                 </div>
+                @if (is_numeric($cashPaid) && is_numeric($amountPaid) && (float) $cashPaid > 0 && (float) $cashPaid < (float) $amountPaid)
+                    <p class="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                        Partial payment: ₱{{ number_format((float) $cashPaid, 2) }} will be recorded and
+                        ₱{{ number_format(max(0, (float) $selectedAmountDue - (float) $cashPaid), 2) }} will remain unpaid.
+                    </p>
+                @endif
             @endif
 
             <div class="flex justify-end gap-3">
