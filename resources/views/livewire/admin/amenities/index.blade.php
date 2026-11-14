@@ -58,7 +58,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
     public string $amenityDescription = '';
     public string $amenityType = 'Rentable';
     public string $amenityPrice = '';
-    public string $requestLimit = '10';
+    public string $requestLimitCottage = '10';
+    public string $requestLimitRoom = '10';
+    public string $requestLimitFunctionHall = '10';
 
     #[Computed]
     public function amenities(): LengthAwarePaginator
@@ -223,7 +225,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             '',
         );
 
-        $this->requestLimit = (string) ($amenity->request_limit ?? 10);
+        $this->requestLimitCottage = (string) $amenity->requestLimitFor('Cottage');
+        $this->requestLimitRoom = (string) $amenity->requestLimitFor('Room');
+        $this->requestLimitFunctionHall = (string) $amenity->requestLimitFor('Function Hall');
 
         $this->resetValidation();
         $this->showEditor = true;
@@ -243,13 +247,30 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
         $this->amenityDescription = '';
         $this->amenityType = 'Rentable';
         $this->amenityPrice = '';
-        $this->requestLimit = '10';
+        $this->requestLimitCottage = '10';
+        $this->requestLimitRoom = '10';
+        $this->requestLimitFunctionHall = '10';
 
         $this->resetValidation();
     }
 
     public function save(): void
     {
+        $limitRules = [];
+        $limitMessages = [];
+
+        foreach ([
+            'requestLimitCottage' => 'Cottage',
+            'requestLimitRoom' => 'Room',
+            'requestLimitFunctionHall' => 'Function Hall',
+        ] as $field => $label) {
+            $limitRules[$field] = ['required', 'integer', 'min:1', 'max:1000'];
+            $limitMessages["{$field}.required"] = "Enter how many units can be requested per {$label} facility.";
+            $limitMessages["{$field}.integer"] = "The {$label} limit must be a whole number.";
+            $limitMessages["{$field}.min"] = "The {$label} limit must be at least 1.";
+            $limitMessages["{$field}.max"] = "The {$label} limit cannot be more than 1000.";
+        }
+
         $validated = $this->validate([
             'editingId' => [
                 'nullable',
@@ -268,12 +289,9 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 'min:0',
                 'max:999999.99',
             ],
-            'requestLimit' => ['required', 'integer', 'min:1', 'max:1000'],
+            ...$limitRules,
         ], [
-            'requestLimit.required' => 'Enter how many units can be requested per facility.',
-            'requestLimit.integer' => 'The request limit must be a whole number.',
-            'requestLimit.min' => 'The request limit must be at least 1.',
-            'requestLimit.max' => 'The request limit cannot be more than 1000.',
+            ...$limitMessages,
             'amenityName.required' => 'Amenity name is required.',
             'amenityName.max' => 'Amenity name must not exceed 50 characters.',
             'amenityDescription.required' => 'Amenity description is required.',
@@ -305,14 +323,18 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
             return;
         }
 
-        $requestLimit = (int) $validated['requestLimit'];
+        $limitCottage = (int) $validated['requestLimitCottage'];
+        $limitRoom = (int) $validated['requestLimitRoom'];
+        $limitFunctionHall = (int) $validated['requestLimitFunctionHall'];
 
         DB::transaction(function () use (
             $name,
             $description,
             $type,
             $price,
-            $requestLimit,
+            $limitCottage,
+            $limitRoom,
+            $limitFunctionHall,
         ): void {
             $amenityName = AmenityName::query()
                 ->whereRaw(
@@ -355,7 +377,10 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                 'amenity_description' => $description,
                 'amenity_type' => $type,
                 'amenity_price' => $price,
-                'request_limit' => $requestLimit,
+                'request_limit' => max($limitCottage, $limitRoom, $limitFunctionHall),
+                'request_limit_cottage' => $limitCottage,
+                'request_limit_room' => $limitRoom,
+                'request_limit_function_hall' => $limitFunctionHall,
             ];
 
             if ($this->editingId !== null) {
@@ -535,7 +560,13 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                                     </td>
 
                                     <td class="px-5 py-4">
-                                        {{ $amenity->amenity_type === 'Rentable' ? (int) ($amenity->request_limit ?? 10).' per facility' : '—' }}
+                                        @if ($amenity->amenity_type === 'Rentable')
+                                            <div>Cottage: {{ $amenity->requestLimitFor('Cottage') }}</div>
+                                            <div>Room: {{ $amenity->requestLimitFor('Room') }}</div>
+                                            <div>Function Hall: {{ $amenity->requestLimitFor('Function Hall') }}</div>
+                                        @else
+                                            —
+                                        @endif
                                     </td>
 
                                     <td class="px-5 py-4 text-right">
@@ -634,21 +665,30 @@ new #[Layout('layouts.app')] #[Title('Amenity Management - Olaer Spring Resort')
                     @endif
 
                     @if ($amenityType === 'Rentable')
-                        <flux:field class="relative">
-                            <flux:label>Request limit per facility <span class="text-red-500">*</span></flux:label>
-                            <flux:input
-                                wire:model="requestLimit"
-                                type="number"
-                                min="1"
-                                max="1000"
-                                step="1"
-                                :invalid="$errors->has('requestLimit')"
-                            />
-                            <flux:text class="text-xs">Most units guests can request for one facility (default 10).</flux:text>
-                            @if ($msg = $this->visibleError('requestLimit'))
-                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                            @endif
-                        </flux:field>
+                        <div class="space-y-2">
+                            <flux:label>Request limit per facility type <span class="text-red-500">*</span></flux:label>
+
+                            <div class="grid gap-3 sm:grid-cols-3">
+                                @foreach (['requestLimitCottage' => 'Cottage', 'requestLimitRoom' => 'Room', 'requestLimitFunctionHall' => 'Function Hall'] as $field => $label)
+                                    <flux:field class="relative">
+                                        <flux:label>{{ $label }}</flux:label>
+                                        <flux:input
+                                            wire:model="{{ $field }}"
+                                            type="number"
+                                            min="1"
+                                            max="1000"
+                                            step="1"
+                                            :invalid="$errors->has($field)"
+                                        />
+                                        @if ($msg = $this->visibleError($field))
+                                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                        @endif
+                                    </flux:field>
+                                @endforeach
+                            </div>
+
+                            <flux:text class="text-xs">Most units that can be requested for one facility of that type (default 10).</flux:text>
+                        </div>
                     @endif
 
 

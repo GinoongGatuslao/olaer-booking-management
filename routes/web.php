@@ -64,6 +64,10 @@ Volt::route('/admin/fines', 'admin.fines.index')
     ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.fines.index');
 
+Volt::route('/admin/refund-requests', 'admin.refund-requests.index')
+    ->middleware(['auth', 'active', 'role:Admin'])
+    ->name('admin.refund-requests.index');
+
 Volt::route('/admin/users', 'admin.users.index')
     ->middleware(['auth', 'active', 'role:Admin'])
     ->name('admin.users.index');
@@ -196,6 +200,13 @@ Volt::route('/book', 'guest.facilities.planner')
 
 Volt::route('/booking/success', 'guest.bookings.success')
     ->name('guest.bookings.success');
+
+Volt::route('/check-your-email', 'guest.submissions.sent')
+    ->name('guest.submissions.sent');
+
+Volt::route('/confirm-request/{token}', 'guest.submissions.confirm')
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->name('guest.submissions.confirm');
 
 Volt::route('/reservation/manage', 'guest.reservations.manage')
     ->name('guest.reservations.manage');

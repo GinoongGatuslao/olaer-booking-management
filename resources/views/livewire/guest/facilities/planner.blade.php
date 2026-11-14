@@ -5,6 +5,7 @@ use App\Models\FacilityProduct;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
 use App\Services\GcashProofStorageService;
+use App\Services\GuestSubmissionConfirmationService;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -294,6 +295,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
         GcashProofStorageService $proofStorage,
+        GuestSubmissionConfirmationService $confirmations,
     ): void {
         $this->validate($this->rules());
 
@@ -321,33 +323,31 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 'room_occupants' => $this->roomOccupants,
             ];
 
+            $type = $this->bookingMode ? 'booking' : 'reservation';
+
+            // Nothing is created yet: check the payment terms, keep the request, and
+            // email a link. The reservation/booking and the payment are created when
+            // the guest clicks that link.
+            $confirmations->assertPaymentTerms($type, $this->planTotal, $this->paymentAmount, $this->referenceNumber);
+
             $proofPath = $proofStorage->store($this->proofOfPayment);
 
-            if ($this->bookingMode) {
-                $booking = $assignments->createPendingBooking($intent, [
-                    ...$guestData,
-                    'payment_amount' => $this->paymentAmount,
-                    'reference_number' => $this->referenceNumber,
-                    'proof_of_payment_path' => $proofPath,
-                ]);
-
-                session()->forget('guest.booking_plan_token');
-                session()->put('guest.booking_confirmation_id', (int) $booking->booking_id);
-                $this->redirect(route('guest.bookings.success'), navigate: true);
-
-                return;
-            }
-
-            $reservation = $assignments->createReservation($intent, [
-                ...$guestData,
+            $confirmations->request($type, [
+                'party_count' => $this->partyCount,
+                'groups' => $this->groups,
+                'plan_total' => $this->planTotal,
+                'guest' => $guestData,
                 'payment_amount' => $this->paymentAmount,
                 'reference_number' => $this->referenceNumber,
                 'proof_of_payment_path' => $proofPath,
             ]);
 
-            session()->forget('guest.facility_plan_token');
-            session()->put('guest.reservation_confirmation_id', (int) $reservation->reservation_id);
-            $this->redirect(route('guest.reservations.success'), navigate: true);
+            session()->forget($this->bookingMode ? 'guest.booking_plan_token' : 'guest.facility_plan_token');
+            session()->put('guest.submission_sent', [
+                'type' => $type,
+                'email' => $this->email,
+            ]);
+            $this->redirect(route('guest.submissions.sent'), navigate: true);
         } catch (\InvalidArgumentException $exception) {
             if ($proofPath !== null) {
                 $proofStorage->deletePrivate($proofPath);
@@ -771,8 +771,12 @@ protected function validationAttributes(): array
             </div>
         @endif
 
+        <p class="text-sm text-zinc-600 dark:text-zinc-300">
+            We will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).
+        </p>
+
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Submit booking for verification' : 'Submit reservation' }}</flux:button>
+            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Send booking confirmation email' : 'Send reservation confirmation email' }}</flux:button>
         </div>
     </form>
 </section>

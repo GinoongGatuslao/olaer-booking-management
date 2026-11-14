@@ -22,6 +22,9 @@ class Amenity extends Model
         'amenity_type',
         'amenity_price',
         'request_limit',
+        'request_limit_cottage',
+        'request_limit_room',
+        'request_limit_function_hall',
     ];
 
     protected function casts(): array
@@ -29,7 +32,26 @@ class Amenity extends Model
         return [
             'amenity_price' => 'decimal:2',
             'request_limit' => 'integer',
+            'request_limit_cottage' => 'integer',
+            'request_limit_room' => 'integer',
+            'request_limit_function_hall' => 'integer',
         ];
+    }
+
+    /**
+     * The most units of this amenity that can be requested for one facility of
+     * the given type (Cottage, Room or Function Hall).
+     */
+    public function requestLimitFor(?string $facilityType): int
+    {
+        $column = match (strtolower(trim((string) $facilityType))) {
+            'cottage' => 'request_limit_cottage',
+            'room' => 'request_limit_room',
+            'function hall' => 'request_limit_function_hall',
+            default => 'request_limit',
+        };
+
+        return max((int) ($this->{$column} ?? $this->request_limit ?? 10), 1);
     }
 
     public function amenityName(): BelongsTo

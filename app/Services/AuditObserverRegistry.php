@@ -21,6 +21,7 @@ use App\Models\Fine;
 use App\Models\GuestFine;
 use App\Models\Payment;
 use App\Models\ProductRate;
+use App\Models\RefundRequest;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\ReservationRoomOccupant;
@@ -59,6 +60,7 @@ class AuditObserverRegistry
         FacilityInspectionRequest::class,
         FacilityInspection::class,
         GuestFine::class,
+        RefundRequest::class,
     ];
 
     public function register(): void

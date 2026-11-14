@@ -484,6 +484,23 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             ->get();
     }
 
+    /** Request limit of an amenity for the facility picked in the form (null until one is picked). */
+    public function maxFor(\App\Models\Amenity $amenity, mixed $bookingDetailId): ?int
+    {
+        if ($bookingDetailId === null || $bookingDetailId === '') {
+            return null;
+        }
+
+        $type = BookingDetail::query()
+            ->with('facility.facilityType')
+            ->find((int) $bookingDetailId)
+            ?->facility
+            ?->facilityType
+            ?->facility_type;
+
+        return $amenity->requestLimitFor($type);
+    }
+
     private function rentableAmenities(): Collection
     {
         return Amenity::query()
@@ -768,7 +785,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
                     <flux:field class="relative">
                         <flux:label>Checked-in Facility <span class="text-red-500">*</span></flux:label>
-                        <flux:select wire:model="form.booking_detail_id" :invalid="$errors->has('form.booking_detail_id')">
+                        <flux:select wire:model.live="form.booking_detail_id" :invalid="$errors->has('form.booking_detail_id')">
                         <option value="">Select facility</option>
 
                         @foreach ($selectedBookingDetails as $detail)
@@ -808,7 +825,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
                                 @foreach ($rentableAmenities as $amenity)
                                     <option value="{{ $amenity->amenity_id }}">
-                                        {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }} (max {{ (int) ($amenity->request_limit ?? 10) }})
+                                        {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }} @if (($max = $this->maxFor($amenity, $form['booking_detail_id'])) !== null)(max {{ $max }})@endif
                                     </option>
                                 @endforeach
                             </flux:select>

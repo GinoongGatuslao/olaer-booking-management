@@ -7,6 +7,7 @@ use App\Models\ReservationDetail;
 use App\Models\FacilityProduct;
 use App\Services\DecimalMoneyService;
 use App\Services\FacilityAvailabilityService;
+use App\Services\RefundRequestWorkflowService;
 use App\Services\StaffReservationCancellationService;
 use App\Services\ReservationFacilityOperationService;
 use App\Services\RoomOccupantService;
@@ -80,6 +81,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public ?int $cancelReservationId = null;
     public string $cancellationReason = '';
 
+    public bool $showRefundModal = false;
+    public ?int $refundReservationId = null;
+    public string $refundAmount = '';
+    public string $refundNote = '';
+
     public ?int $detailActionId = null;
     public ?string $detailAction = null;
     public string $detailCheckInDate = '';
@@ -94,6 +100,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     {
         return [
             'reservations' => $this->reservations(),
+            'refundReservation' => $this->refundReservation(),
         ];
     }
 
@@ -108,6 +115,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'details.roomOccupants',
                 'extraGuests',
                 'payments.modeOfPayment',
+                'refundRequests.reviewedBy',
             ]);
 
         if ($this->statusFilter !== 'All') {
@@ -279,6 +287,98 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->cancelReservationId = null;
         $this->cancellationReason = '';
         session()->flash('success', 'Reservation cancelled successfully.');
+    }
+
+    /** @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?\App\Models\RefundRequest} */
+    public function refundInfo(Reservation $reservation): array
+    {
+        return app(RefundRequestWorkflowService::class)->eligibility($reservation);
+    }
+
+    public function refundReservation(): ?Reservation
+    {
+        if ($this->refundReservationId === null) {
+            return null;
+        }
+
+        return Reservation::query()
+            ->with(['guest', 'details.facility.facilityType', 'payments', 'refundRequests'])
+            ->find($this->refundReservationId);
+    }
+
+    public function beginRefundRequest(int $reservationId): void
+    {
+        $reservation = Reservation::query()
+            ->with(['payments', 'refundRequests'])
+            ->find($reservationId);
+
+        if ($reservation === null) {
+            session()->flash('error', 'This reservation is no longer available. Refresh the list.');
+
+            return;
+        }
+
+        $eligibility = $this->refundInfo($reservation);
+
+        if (! $eligibility['can_request']) {
+            session()->flash('error', (string) $eligibility['reason']);
+
+            return;
+        }
+
+        $this->refundReservationId = (int) $reservation->reservation_id;
+        $this->refundAmount = number_format((float) $eligibility['paid'], 2, '.', '');
+        $this->refundNote = '';
+        $this->resetValidation();
+        $this->showRefundModal = true;
+    }
+
+    public function closeRefundRequest(): void
+    {
+        $this->showRefundModal = false;
+        $this->refundReservationId = null;
+        $this->refundAmount = '';
+        $this->refundNote = '';
+        $this->resetValidation();
+    }
+
+    public function updatedShowRefundModal(bool $open): void
+    {
+        if (! $open) {
+            $this->closeRefundRequest();
+        }
+    }
+
+    public function submitRefundRequest(RefundRequestWorkflowService $refunds): void
+    {
+        $validated = $this->validate([
+            'refundReservationId' => ['required', 'exists:tbl_reservation,reservation_id'],
+            'refundAmount' => ['required', 'numeric', 'min:0.01'],
+            'refundNote' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'refundReservationId.required' => 'This reservation is no longer available. Refresh the list.',
+            'refundReservationId.exists' => 'This reservation is no longer available. Refresh the list.',
+            'refundAmount.required' => 'Enter the refund amount you are asking for.',
+            'refundAmount.numeric' => 'The refund amount must be a number.',
+            'refundAmount.min' => 'The refund amount must be greater than zero.',
+            'refundNote.max' => 'The note cannot be longer than :max characters.',
+        ]);
+
+        try {
+            $refunds->submit(
+                (int) $validated['refundReservationId'],
+                (string) $validated['refundAmount'],
+                $validated['refundNote'] ?? null,
+                (int) Auth::id(),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('refundRequest', $exception->getMessage());
+
+            return;
+        }
+
+        $this->closeRefundRequest();
+        session()->flash('success', 'Refund request sent to the admin.');
     }
 
     public function openDetailAction(int $reservationDetailId, string $action): void
@@ -776,6 +876,19 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                     <flux:button size="sm" variant="danger" icon="x-circle" type="button" wire:click="beginCancellation({{ $reservation->reservation_id }})">
                                         Cancel Entire Reservation
                                     </flux:button>
+                                @elseif ($reservation->status === 'Cancelled')
+                                    @php($refund = $this->refundInfo($reservation))
+                                    @if ($refund['can_request'])
+                                        <flux:button size="sm" variant="primary" icon="arrow-uturn-left" type="button" wire:click="beginRefundRequest({{ $reservation->reservation_id }})">
+                                            Request refund@if ($refund['used'] > 0) (attempt {{ $refund['next_attempt'] }} of {{ $refund['max'] }})@endif
+                                        </flux:button>
+                                    @elseif ($refund['latest'])
+                                        <flux:badge size="sm" color="{{ match ((string) $refund['latest']->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">
+                                            Refund {{ strtolower((string) $refund['latest']->status) }}
+                                        </flux:badge>
+                                    @else
+                                        <span class="text-xs text-brand-text-muted dark:text-zinc-400">No refund due</span>
+                                    @endif
                                 @else
                                     <span class="text-xs text-brand-text-muted dark:text-zinc-400">No parent action</span>
                                 @endif
@@ -839,6 +952,59 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                         <span class="text-brand-text-muted dark:text-zinc-400">No facility details</span>
                                     @endforelse
                                 </div>
+
+                                @if ($reservation->status === 'Cancelled')
+                                    @php($refund = $this->refundInfo($reservation))
+                                    <div class="mt-4 space-y-3 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                                        <div>
+                                            <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Cancellation</div>
+                                            <div class="text-brand-text dark:text-white">
+                                                {{ $reservation->cancelled_at?->format('M d, Y') }} · {{ $reservation->cancellation_reason ?: 'No reason recorded' }}
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Refund</div>
+                                                <div class="text-brand-text dark:text-white">
+                                                    Verified payments ₱{{ number_format((float) $refund['paid'], 2) }} · {{ $refund['used'] }} of {{ $refund['max'] }} requests used
+                                                </div>
+                                            </div>
+
+                                            @if ($refund['can_request'])
+                                                <flux:button size="sm" variant="primary" icon="arrow-uturn-left" type="button" wire:click="beginRefundRequest({{ $reservation->reservation_id }})">
+                                                    Request refund
+                                                </flux:button>
+                                            @else
+                                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $refund['reason'] }}</span>
+                                            @endif
+                                        </div>
+
+                                        @foreach ($reservation->refundRequests as $request)
+                                            <div wire:key="refund-{{ $request->refund_request_id }}" class="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/60">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <span class="font-medium text-brand-text dark:text-white">Attempt {{ $request->attempt_no }}</span>
+                                                    <flux:badge size="sm" color="{{ match ((string) $request->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $request->status }}</flux:badge>
+                                                    <span class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $request->created_at?->format('M d, Y h:i A') }}</span>
+                                                </div>
+                                                <div class="mt-1 text-brand-text dark:text-zinc-200">
+                                                    Requested ₱{{ number_format((float) $request->requested_amount, 2) }}
+                                                    @if ($request->status === 'Approved')
+                                                        · <span class="font-medium">Admin approved ₱{{ number_format((float) $request->approved_amount, 2) }}. Give the guest no more than this.</span>
+                                                    @endif
+                                                </div>
+                                                @if ($request->request_note)
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">Your note: {{ $request->request_note }}</div>
+                                                @endif
+                                                @if ($request->admin_note)
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                                        Admin{{ $request->reviewedBy ? ' ('.$request->reviewedBy->full_name.')' : '' }}: {{ $request->admin_note }}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
                             </td>
                         </tr>
                     </tbody>
@@ -966,5 +1132,71 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
             </div>
         </form>
+    </flux:modal>
+
+    {{-- Request a refund for a cancelled reservation --}}
+    <flux:modal wire:model="showRefundModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[36rem]">
+        @if ($refundReservation)
+            @php($refundInfo = $this->refundInfo($refundReservation))
+            <form wire:submit="submitRefundRequest" novalidate class="space-y-5">
+                <div class="pe-8">
+                    <flux:heading size="lg">Request a refund</flux:heading>
+                    <flux:text class="mt-1">
+                        The admin receives this together with the reservation details and the cancellation reason.
+                        Attempt {{ $refundInfo['next_attempt'] }} of {{ $refundInfo['max'] }}.
+                    </flux:text>
+                </div>
+
+                @error('refundRequest')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+                @error('refundReservationId')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+
+                <div class="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Reservation</span><span class="font-medium">{{ $refundReservation->r_ref_no }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Guest</span><span class="text-right font-medium">{{ $this->fullName($refundReservation->guest) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Contact</span><span>{{ $refundReservation->guest->contact_no ?: '—' }}</span></div>
+                    <div class="flex justify-between gap-4">
+                        <span class="text-zinc-500">Facilities</span>
+                        <span class="text-right">
+                            @foreach ($refundReservation->details as $detail)
+                                <span class="block">{{ $detail->facility?->facility_name ?? 'Unassigned facility' }} · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}</span>
+                            @endforeach
+                        </span>
+                    </div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Total price</span><span>₱{{ number_format((float) $refundReservation->total_price, 2) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Verified payments</span><span class="font-medium">₱{{ number_format((float) $refundInfo['paid'], 2) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Cancelled on</span><span>{{ $refundReservation->cancelled_at?->format('M d, Y') }}</span></div>
+                    <div>
+                        <div class="text-zinc-500">Cancellation reason</div>
+                        <div class="mt-0.5">{{ $refundReservation->cancellation_reason ?: 'No reason recorded' }}</div>
+                    </div>
+                </div>
+
+                <flux:field class="relative">
+                    <flux:label>Refund amount requested <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="refundAmount" type="number" step="0.01" min="0.01" max="{{ $refundInfo['paid'] }}" :invalid="$errors->has('refundAmount')" />
+                    <flux:text class="text-xs">Up to ₱{{ number_format((float) $refundInfo['paid'], 2) }} (what the guest paid).</flux:text>
+                    @if ($msg = $this->visibleError('refundAmount'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+
+                <flux:field class="relative">
+                    <flux:label>Note to the admin (optional)</flux:label>
+                    <flux:textarea wire:model="refundNote" rows="3" placeholder="Explain this case, for example why the guest should be refunded." :invalid="$errors->has('refundNote')" />
+                    @error('refundNote')
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </flux:field>
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="closeRefundRequest">Close</flux:button>
+                    <flux:button type="submit" variant="primary">Send to admin</flux:button>
+                </div>
+            </form>
+        @endif
     </flux:modal>
 </div>

@@ -6,6 +6,7 @@ use App\Models\Amenity;
 use App\Models\AmenityRequest;
 use App\Models\Booking;
 use App\Models\BookingDetail;
+use App\Models\Facility;
 use App\Models\AmenityRequestDetail;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -410,8 +411,8 @@ class AmenityRequestWorkflowService
     }
 
     /**
-     * An amenity can only be requested up to its limit (default 10, set by the
-     * admin) for one facility of a booking. Units already on other
+     * An amenity can only be requested up to its limit (set by the admin for
+     * each facility type: cottage, room, function hall) for one facility of a booking. Units already on other
      * non-cancelled requests for that facility count toward the limit.
      *
      * @param  list<array{amenity_id: int, quantity: int}>  $items
@@ -437,7 +438,7 @@ class AmenityRequestWorkflowService
             )
             ->where('tbl_amenity_request.booking_id', $bookingId)
             ->where('tbl_amenity_request_details.facility_id', $facilityId)
-            ->whereNotIn('tbl_amenity_request.amenity_request_status', ['Cancelled', 'Undelivered'])
+            ->where('tbl_amenity_request.amenity_request_status', '!=', 'Cancelled')
             ->when(
                 $excludeRequestId !== null,
                 fn ($query) => $query->where('tbl_amenity_request.amenity_request_id', '!=', $excludeRequestId),
@@ -446,6 +447,12 @@ class AmenityRequestWorkflowService
             ->groupBy('tbl_amenity_request_details.amenity_id')
             ->selectRaw('tbl_amenity_request_details.amenity_id as amenity_id, SUM(tbl_amenity_request_details.amenity_quantity) as total')
             ->pluck('total', 'amenity_id');
+
+        $facilityType = Facility::query()
+            ->with('facilityType')
+            ->find($facilityId)
+            ?->facilityType
+            ?->facility_type;
 
         $amenities = Amenity::query()
             ->with('amenityName')
@@ -460,7 +467,7 @@ class AmenityRequestWorkflowService
                 continue;
             }
 
-            $limit = max((int) ($amenity->request_limit ?? 10), 1);
+            $limit = $amenity->requestLimitFor($facilityType);
             $already = (int) ($alreadyRequested[$amenityId] ?? 0);
             $remaining = max($limit - $already, 0);
 

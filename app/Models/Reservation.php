@@ -67,6 +67,12 @@ class Reservation extends Model
         return $this->hasMany(Payment::class, 'reservation_id', 'reservation_id');
     }
 
+    public function refundRequests(): HasMany
+    {
+        return $this->hasMany(RefundRequest::class, 'reservation_id', 'reservation_id')
+            ->orderBy('attempt_no');
+    }
+
     public function booking(): HasOne
     {
         return $this->hasOne(Booking::class, 'reservation_id', 'reservation_id');

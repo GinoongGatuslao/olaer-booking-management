@@ -8,6 +8,7 @@ use App\Models\Facility;
 use App\Models\FacilityType;
 use App\Models\GuestFine;
 use App\Models\Payment;
+use App\Models\RefundRequest;
 use App\Models\Reservation;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -186,9 +187,14 @@ class ReportsService
                 'guest',
                 'user',
                 'details.facility.facilityType',
+                'payments',
+                'refundRequests',
             ])
             ->orderBy('cancelled_at')
             ->orderBy('reservation_id');
+
+        $refunds = RefundRequest::query()
+            ->whereIn('reservation_id', (clone $base)->select('tbl_reservation.reservation_id'));
 
         return [
             'rows' => $this->paginateOrGet(
@@ -198,6 +204,15 @@ class ReportsService
                 $allRows,
             ),
             'count' => $count,
+            'refund_approved_total' => round((float) (clone $refunds)
+                ->where('status', RefundRequest::STATUS_APPROVED)
+                ->sum('approved_amount'), 2),
+            'refund_approved_count' => (clone $refunds)
+                ->where('status', RefundRequest::STATUS_APPROVED)
+                ->count(),
+            'refund_pending_count' => (clone $refunds)
+                ->where('status', RefundRequest::STATUS_PENDING)
+                ->count(),
         ];
     }
 

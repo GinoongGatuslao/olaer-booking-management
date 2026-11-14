@@ -67,19 +67,6 @@ class StaffReservationCancellationService
                 );
             }
 
-            $verifiedPaymentExists = $reservation->payments()
-                ->whereRaw(
-                    'LOWER(payment_status) = ?',
-                    ['verified'],
-                )
-                ->exists();
-
-            if ($verifiedPaymentExists) {
-                throw new InvalidArgumentException(
-                    'This reservation has a verified payment and cannot be cancelled because the resort does not process refunds.',
-                );
-            }
-
             $details = ReservationDetail::query()
                 ->where('reservation_id', $reservation->reservation_id)
                 ->lockForUpdate()

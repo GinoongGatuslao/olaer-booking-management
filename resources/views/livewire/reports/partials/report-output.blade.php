@@ -264,9 +264,21 @@
     @endif
 
     @if ($reportType === 'cancellation')
-        <div class="mb-4 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-            <p class="text-xs text-zinc-500">Cancelled Reservations</p>
-            <p class="text-xl font-bold">{{ $report['count'] }}</p>
+        <div class="mb-4 grid gap-3 md:grid-cols-3 print:grid-cols-3">
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Cancelled Reservations</p>
+                <p class="text-xl font-bold">{{ $report['count'] }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Approved Refunds ({{ $report['refund_approved_count'] }})</p>
+                <p class="text-xl font-bold">{{ $this->money($report['refund_approved_total']) }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Refund Requests Pending</p>
+                <p class="text-xl font-bold">{{ $report['refund_pending_count'] }}</p>
+            </div>
         </div>
 
         <div class="overflow-x-auto print:overflow-visible">
@@ -278,11 +290,21 @@
                         <th class="p-2">Guest</th>
                         <th class="p-2">Facilities</th>
                         <th class="p-2">Reason</th>
+                        <th class="p-2 text-right">Paid</th>
+                        <th class="p-2">Refund</th>
                     </tr>
                 </thead>
 
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     @forelse ($report['rows'] as $reservation)
+                        @php
+                            $paidTotal = $reservation->payments
+                                ->filter(fn ($payment) => strtolower(trim((string) $payment->payment_status)) === 'verified')
+                                ->sum('amount_paid');
+                            $approvedRefund = $reservation->refundRequests->firstWhere('status', 'Approved');
+                            $pendingRefund = $reservation->refundRequests->firstWhere('status', 'Pending');
+                            $latestRefund = $reservation->refundRequests->last();
+                        @endphp
                         <tr>
                             <td class="p-2">{{ $reservation->cancelled_at?->format('M d, Y h:i A') }}</td>
                             <td class="p-2">{{ $reservation->r_ref_no }}</td>
@@ -295,10 +317,28 @@
                                 @endforeach
                             </td>
                             <td class="p-2">{{ $reservation->cancellation_reason }}</td>
+                            <td class="whitespace-nowrap p-2 text-right">{{ $paidTotal > 0 ? $this->money($paidTotal) : '—' }}</td>
+                            <td class="p-2">
+                                @if ($approvedRefund)
+                                    <div class="font-medium">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                    @if ($approvedRefund->admin_note)
+                                        <div class="text-xs text-zinc-500">{{ $approvedRefund->admin_note }}</div>
+                                    @endif
+                                @elseif ($pendingRefund)
+                                    <div>Pending · {{ $this->money($pendingRefund->requested_amount) }} requested</div>
+                                @elseif ($latestRefund)
+                                    <div>Rejected ({{ $reservation->refundRequests->count() }} of 3 tries)</div>
+                                    @if ($latestRefund->admin_note)
+                                        <div class="text-xs text-zinc-500">{{ $latestRefund->admin_note }}</div>
+                                    @endif
+                                @else
+                                    —
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="p-4 text-center text-zinc-500">
+                            <td colspan="7" class="p-4 text-center text-zinc-500">
                                 No cancelled reservations found.
                             </td>
                         </tr>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\RefundRequest;
 use App\Services\CashierAlertCountService;
 use App\Services\RealtimeDashboardService;
 use App\Services\SecurityDashboardService;
@@ -49,7 +50,9 @@ new class extends Component
         CashierAlertCountService $cashierAlerts,
     ): void {
         $this->counts = match ($this->roleName) {
-            'Admin' => $realtimeDashboard->admin(),
+            'Admin' => $realtimeDashboard->admin() + [
+                'pending_refunds' => RefundRequest::query()->where('status', 'Pending')->count(),
+            ],
             'Cashier' => $realtimeDashboard->cashier() + $cashierAlerts->counts(),
             'Maintenance Staff' => $realtimeDashboard->maintenance(),
             'Security Guard' => $securityDashboard->overview((int) auth()->id()),
@@ -94,6 +97,7 @@ new class extends Component
             <flux:sidebar.item icon="ticket" :href="route('admin.entrance-fees.index')" :current="request()->routeIs('admin.entrance-fees.*')" wire:navigate>Entrance Fee</flux:sidebar.item>
             <flux:sidebar.item icon="receipt-percent" :href="route('admin.discounts.index')" :current="request()->routeIs('admin.discounts.*')" wire:navigate>Discount</flux:sidebar.item>
             <flux:sidebar.item icon="exclamation-triangle" :href="route('admin.fines.index')" :current="request()->routeIs('admin.fines.*')" wire:navigate>Fine</flux:sidebar.item>
+            <flux:sidebar.item icon="arrow-uturn-left" :href="route('admin.refund-requests.index')" :current="request()->routeIs('admin.refund-requests.*')" :badge="$this->badge('pending_refunds')" wire:navigate>Refund Request</flux:sidebar.item>
 
             <flux:sidebar.group expandable icon="chart-bar" heading="Reports" :expanded="request()->routeIs('admin.reports.*', 'admin.activity-logs.*')" class="grid">
                 <flux:sidebar.item :href="route('admin.reports.index')" :current="request()->routeIs('admin.reports.*')" wire:navigate>Management Reports</flux:sidebar.item>

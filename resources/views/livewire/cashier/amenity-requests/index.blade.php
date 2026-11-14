@@ -681,6 +681,22 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             ->get();
     }
 
+    /** Request limit of an amenity for the facility picked in the form (null until one is picked). */
+    public function maxFor(\App\Models\Amenity $amenity, mixed $facilityId): ?int
+    {
+        if ($facilityId === null || $facilityId === '') {
+            return null;
+        }
+
+        $type = \App\Models\Facility::query()
+            ->with('facilityType')
+            ->find((int) $facilityId)
+            ?->facilityType
+            ?->facility_type;
+
+        return $amenity->requestLimitFor($type);
+    }
+
     private function rentableAmenities()
     {
         return Amenity::query()
@@ -815,7 +831,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
                     <flux:field class="relative">
                         <flux:label>Delivery Facility <span class="text-red-500">*</span></flux:label>
-                        <flux:select wire:model="form.facility_id" :invalid="$errors->has('form.facility_id')">
+                        <flux:select wire:model.live="form.facility_id" :invalid="$errors->has('form.facility_id')">
                         <option value="">Select facility</option>
 
                         @foreach ($selectedBookingFacilities as $detail)
@@ -862,7 +878,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                         ₱{{ number_format((float) $amenity->amenity_price, 2) }}
                                         —
                                         {{ $amenity->amenity_description }}
-                                        (max {{ (int) ($amenity->request_limit ?? 10) }})
+                                        @if (($max = $this->maxFor($amenity, $form['facility_id'])) !== null)(max {{ $max }})@endif
                                     </option>
                                 @endforeach
                             </flux:select>
@@ -933,7 +949,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
             <form wire:submit="saveEdit" novalidate class="space-y-4">
                 <flux:field class="relative">
                     <flux:label>Delivery Facility <span class="text-red-500">*</span></flux:label>
-                    <flux:select wire:model="editForm.facility_id" :invalid="$errors->has('editForm.facility_id')">
+                    <flux:select wire:model.live="editForm.facility_id" :invalid="$errors->has('editForm.facility_id')">
                     <option value="">Select facility</option>
 
                     @foreach ($editBookingFacilities as $detail)
@@ -962,7 +978,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                     {{ $amenity->amenityName?->amenity_name }}
                                     —
                                     ₱{{ number_format((float) $amenity->amenity_price, 2) }}
-                                    (max {{ (int) ($amenity->request_limit ?? 10) }})
+                                    @if (($max = $this->maxFor($amenity, $editForm['facility_id'])) !== null)(max {{ $max }})@endif
                                 </option>
                             @endforeach
                         </flux:select>
