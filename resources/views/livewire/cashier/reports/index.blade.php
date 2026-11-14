@@ -390,9 +390,11 @@ new #[Layout('layouts.app')] #[Title('Cashier Reports - Olaer Spring Resort')] c
 
 <div class="space-y-6">
     <style>
-        @page { margin: 0; }
+        /* The margin lives on the page itself so every printed page gets it.
+           (Body padding only applied to the first/last page edges.) */
+        @page { margin: 12mm; }
         @media print {
-            body { background: white !important; padding: 12mm; }
+            body { background: white !important; padding: 0 !important; margin: 0 !important; }
             tr, .rounded-lg { break-inside: avoid; }
             thead { display: table-header-group; }
             header {

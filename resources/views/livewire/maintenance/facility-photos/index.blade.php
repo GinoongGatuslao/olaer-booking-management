@@ -6,7 +6,6 @@ use App\Services\FacilityConditionPhotoService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -32,8 +31,12 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     public ?int $selectedFacilityId = null;
     public bool $showPhotoModal = false;
 
-    /** Photos picked by the staff member; saved as soon as they are chosen. */
-    public array $photos = [];
+    /**
+     * Photos picked by the staff member but NOT yet saved to the facility.
+     * They only exist as temporary uploads (with a thumbnail) until the
+     * Upload button is pressed.
+     */
+    public array $stagedPhotos = [];
 
     /** One file at a time: the bucket (S3) upload driver does not accept multiple files. */
     public $photo = null;
@@ -81,7 +84,8 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     {
         $this->selectedFacilityId = Facility::query()->whereKey($facilityId)->exists() ? $facilityId : null;
         $this->showPhotoModal = $this->selectedFacilityId !== null;
-        $this->photos = [];
+        $this->stagedPhotos = [];
+        $this->photo = null;
         $this->resetValidation();
     }
 
@@ -96,62 +100,96 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
     {
         $this->selectedFacilityId = null;
         $this->showPhotoModal = false;
-        $this->photos = [];
+        $this->stagedPhotos = [];
+        $this->photo = null;
         $this->resetValidation();
     }
 
-    public function updatedPhoto(FacilityConditionPhotoService $photoService): void
+    /** A file was picked: validate it and keep it as a temporary, not-yet-saved photo. */
+    public function updatedPhoto(): void
     {
+        $this->resetErrorBag(['photos', 'photo']);
+
         if ($this->photo === null) {
             return;
         }
 
-        $this->photos = [$this->photo];
-        $this->photo = null;
-
-        $this->updatedPhotos($photoService);
-    }
-
-    /** Max 10 photos per facility, 64 MB each; allowed only while no guest is checked in. */
-    public function updatedPhotos(FacilityConditionPhotoService $photoService): void
-    {
-        $this->resetErrorBag(['photos', 'photos.*']);
-
-        if ($this->selectedFacilityId === null || $this->photos === []) {
-            $this->photos = [];
-
-            return;
-        }
-
         try {
+            if ($this->selectedFacilityId === null) {
+                return;
+            }
+
             $this->validate([
-                'photos' => ['array', 'max:'.FacilityConditionPhotoService::MAX_PHOTOS],
-                'photos.*' => [
+                'photo' => [
                     'file',
                     'mimes:jpg,jpeg,png,webp',
                     'max:'.FacilityConditionPhotoService::MAX_KILOBYTES,
                 ],
             ], [
-                'photos.max' => 'Choose up to '.FacilityConditionPhotoService::MAX_PHOTOS.' photos at a time.',
-                'photos.*.mimes' => 'Photos must be JPG, PNG or WebP images.',
-                'photos.*.max' => 'Each photo must be 64 MB or smaller.',
-                'photos.*.file' => 'One of the chosen files could not be uploaded.',
+                'photo.mimes' => 'Photos must be JPG, PNG or WebP images.',
+                'photo.max' => 'Each photo must be 64 MB or smaller.',
+                'photo.file' => 'The chosen file could not be uploaded.',
             ]);
+
+            if ($this->remainingSlots() <= 0) {
+                $this->addError('photos', 'This facility already has the maximum of '
+                    .FacilityConditionPhotoService::MAX_PHOTOS.' photos (including those waiting to be uploaded).');
+
+                return;
+            }
+
+            $this->stagedPhotos[] = $this->photo;
+        } finally {
+            $this->photo = null;
+        }
+    }
+
+    /** Drop one temporary photo before it is uploaded. */
+    public function removeStagedPhoto(int $index): void
+    {
+        unset($this->stagedPhotos[$index]);
+        $this->stagedPhotos = array_values($this->stagedPhotos);
+        $this->resetErrorBag(['photos', 'photo']);
+    }
+
+    /** Upload button: save every staged photo to the facility. Max 10 per facility, 64 MB each; allowed only while no guest is checked in. */
+    public function uploadStagedPhotos(FacilityConditionPhotoService $photoService): void
+    {
+        $this->resetErrorBag(['photos', 'photo']);
+
+        if ($this->selectedFacilityId === null || $this->stagedPhotos === []) {
+            return;
+        }
+
+        try {
+            $count = count($this->stagedPhotos);
 
             $photoService->store(
                 $this->selectedFacilityId,
-                array_values($this->photos),
+                array_values($this->stagedPhotos),
                 (int) Auth::id(),
             );
 
-            session()->flash('success', 'Facility photo(s) uploaded.');
-        } catch (ValidationException $exception) {
-            throw $exception;
+            $this->stagedPhotos = [];
+
+            session()->flash('success', $count === 1 ? 'Facility photo uploaded.' : $count.' facility photos uploaded.');
         } catch (\Throwable $exception) {
+            // Keep the staged photos so the staff member can retry or remove some.
             $this->addError('photos', $exception->getMessage());
-        } finally {
-            $this->photos = [];
         }
+    }
+
+    /** How many more photos can still be staged for the selected facility. */
+    private function remainingSlots(): int
+    {
+        $saved = $this->selectedFacilityId === null
+            ? 0
+            : FacilityConditionPhoto::query()
+                ->where('facility_id', $this->selectedFacilityId)
+                ->whereIn('status', [FacilityConditionPhoto::CURRENT, FacilityConditionPhoto::IN_USE])
+                ->count();
+
+        return FacilityConditionPhotoService::MAX_PHOTOS - $saved - count($this->stagedPhotos);
     }
 
     public function deletePhoto(int $photoId, FacilityConditionPhotoService $photoService): void
@@ -348,7 +386,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                     A guest is checked in. These photos are the baseline for this stay and can’t be changed. After check-out they become outdated and new photos will be needed.
                 </div>
             @else
-                @if ($activePhotos->count() < \App\Services\FacilityConditionPhotoService::MAX_PHOTOS)
+                @if ($activePhotos->count() + count($stagedPhotos) < \App\Services\FacilityConditionPhotoService::MAX_PHOTOS)
                     <div class="mt-4">
                         <input
                             type="file"
@@ -357,16 +395,53 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                             class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
                         />
                         <p class="mt-1 text-xs text-zinc-500">
-                            JPG, PNG or WebP · one photo at a time · up to 64 MB each · up to {{ \App\Services\FacilityConditionPhotoService::MAX_PHOTOS }} photos per facility.
+                            JPG, PNG or WebP · choose one photo at a time · up to 64 MB each · up to {{ \App\Services\FacilityConditionPhotoService::MAX_PHOTOS }} photos per facility. Chosen photos are only saved after you press Upload.
                         </p>
-                        <p wire:loading wire:target="photo" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                        <p wire:loading wire:target="photo" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">Preparing photo…</p>
                     </div>
                 @else
                     <p class="mt-4 text-xs text-amber-700 dark:text-amber-300">Photo limit reached. Remove a photo to add another.</p>
                 @endif
 
+                @error('photo') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
                 @error('photos') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
-                @error('photos.*') <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p> @enderror
+
+                @if (count($stagedPhotos) > 0)
+                    <div class="mt-4 rounded-lg border border-dashed border-blue-300 bg-blue-50/50 p-3 dark:border-blue-800 dark:bg-blue-950/20">
+                        <p class="text-sm font-medium">
+                            {{ count($stagedPhotos) }} photo(s) ready to upload
+                            <span class="font-normal text-zinc-500">· not saved to {{ $selectedFacility->facility_name }} yet</span>
+                        </p>
+
+                        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                            @foreach ($stagedPhotos as $index => $staged)
+                                <div wire:key="staged-photo-{{ $index }}-{{ $staged->getFilename() }}" class="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                                    <img
+                                        src="{{ $staged->temporaryUrl() }}"
+                                        alt="{{ $staged->getClientOriginalName() }}"
+                                        class="aspect-square w-full object-cover"
+                                    />
+                                    <p class="truncate px-2 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ $staged->getClientOriginalName() }}</p>
+                                    <button
+                                        type="button"
+                                        wire:click="removeStagedPhoto({{ $index }})"
+                                        class="absolute right-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white hover:bg-red-600"
+                                        aria-label="Discard photo"
+                                    >
+                                        Discard
+                                    </button>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-3 flex justify-end">
+                            <flux:button type="button" variant="primary" icon="arrow-up-tray" wire:click="uploadStagedPhotos" wire:loading.attr="disabled" wire:target="uploadStagedPhotos">
+                                <span wire:loading.remove wire:target="uploadStagedPhotos">Upload {{ count($stagedPhotos) }} photo(s)</span>
+                                <span wire:loading wire:target="uploadStagedPhotos">Uploading…</span>
+                            </flux:button>
+                        </div>
+                    </div>
+                @endif
             @endif
 
             @if ($activePhotos->isNotEmpty())

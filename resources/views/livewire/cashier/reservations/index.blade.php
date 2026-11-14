@@ -880,7 +880,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                     @php($refund = $this->refundInfo($reservation))
                                     @if ($refund['can_request'])
                                         <flux:button size="sm" variant="primary" icon="arrow-uturn-left" type="button" wire:click="beginRefundRequest({{ $reservation->reservation_id }})">
-                                            Request refund@if ($refund['used'] > 0) (attempt {{ $refund['next_attempt'] }} of {{ $refund['max'] }})@endif
+                                            Request refund @if ($refund['used'] > 0)(attempt {{ $refund['next_attempt'] }} of {{ $refund['max'] }})@endif
                                         </flux:button>
                                     @elseif ($refund['latest'])
                                         <flux:badge size="sm" color="{{ match ((string) $refund['latest']->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">

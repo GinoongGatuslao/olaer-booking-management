@@ -784,7 +784,7 @@ protected function validationAttributes(): array
         </p>
 
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Send booking confirmation email' : 'Send reservation confirmation email' }}</flux:button>
+            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Send confirmation email' : 'Send confirmation email' }}</flux:button>
         </div>
     </form>
 </section>
