@@ -235,6 +235,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $this->groups[$index]['rate_code'] = '';
             }
 
+            if (\App\Support\DayRateCutoff::blocks($product->schedule_policy, (string) ($group['rate_code'] ?? ''), (string) ($group['check_in_date'] ?? ''))) {
+                $this->groups[$index]['rate_code'] = '';
+            }
+
             $checkInDate = (string) ($group['check_in_date'] ?? '');
 
             if ($checkInDate === '') {
@@ -553,11 +557,15 @@ protected function validationAttributes(): array
                                 <flux:select wire:model.live="groups.{{ $index }}.rate_code" :invalid="$errors->has('groups.'.$index.'.rate_code')">
                                 <option value="">Choose rate</option>
                                 @foreach ($selectedProduct?->productRates ?? [] as $rate)
+                                    @continue(\App\Support\DayRateCutoff::blocks($selectedProduct->schedule_policy, $rate->rate_code->value, (string) ($group['check_in_date'] ?? '')))
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
                             </flux:select>
                                 @if ($msg = $this->visibleError('groups.'.$index.'.rate_code'))
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                                @endif
+                                @if ($selectedProduct && \App\Support\DayRateCutoff::closedFor($selectedProduct->schedule_policy, (string) ($group['check_in_date'] ?? '')))
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Today's Day and Both rates close at 6:00 PM. Only the Night rate is left for today.</p>
                                 @endif
                             </flux:field>
                             <flux:field class="relative">

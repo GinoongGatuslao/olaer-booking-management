@@ -9,6 +9,7 @@ use App\Models\FacilityRequirementIntent;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\DayRateCutoff;
 use InvalidArgumentException;
 
 class FacilityRequirementService
@@ -165,6 +166,10 @@ class FacilityRequirementService
             }
         } elseif (! $checkOut->equalTo($checkIn)) {
             throw new InvalidArgumentException('Cottages and function halls must use the same start and end date.');
+        }
+
+        if (DayRateCutoff::blocks($product->schedule_policy, $rateCode->value, $checkIn->toDateString(), $checkOut->toDateString())) {
+            throw new InvalidArgumentException(DayRateCutoff::MESSAGE);
         }
 
         $this->availability->availabilityCount(
