@@ -1182,7 +1182,7 @@ new class extends Component {
                 @forelse ($occupantForm['occupants'] as $index => $occupant)
                     <div class="grid gap-3 md:grid-cols-3" wire:key="occupant-row-{{ $index }}">
                         <flux:field class="relative">
-                            <flux:label>Occupant {{ $index + 1 }} first name <span class="text-red-500">*</span></flux:label>
+                            <flux:label>First name <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model="occupantForm.occupants.{{ $index }}.first_name" :invalid="$errors->has('occupantForm.occupants.'.$index.'.first_name')" />
                             @if ($msg = $this->visibleError('occupantForm.occupants.'.$index.'.first_name'))
                                 <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>

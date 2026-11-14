@@ -12,6 +12,10 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
 {
     public int $bookingId;
 
+    public bool $showOccupantsModal = false;
+
+    public ?int $occupantsDetailId = null;
+
     public function mount(int $booking): void
     {
         $this->bookingId = $booking;
@@ -50,6 +54,30 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
     {
         return app(BookingWorkspaceService::class)
             ->actions($this->booking);
+    }
+
+    public function viewOccupants(int $bookingDetailsId): void
+    {
+        $this->occupantsDetailId = $bookingDetailsId;
+        $this->showOccupantsModal = true;
+    }
+
+    public function closeOccupants(): void
+    {
+        $this->showOccupantsModal = false;
+        $this->occupantsDetailId = null;
+    }
+
+    /** The booking facility whose occupants are being viewed (null when none is selected). */
+    #[Computed]
+    public function occupantsDetail(): ?\App\Models\BookingDetail
+    {
+        if ($this->occupantsDetailId === null) {
+            return null;
+        }
+
+        return $this->booking->details
+            ->firstWhere('booking_details_id', $this->occupantsDetailId);
     }
 
     /** Only cashiers work the booking (payments, check-in, check-out); admins just view it. */
@@ -341,6 +369,7 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
                         <th class="px-5 py-3">Discount</th>
                         <th class="px-5 py-3">Line total</th>
                         <th class="px-5 py-3">Status</th>
+                        <th class="w-12 px-5 py-3"><span class="sr-only">Actions</span></th>
                     </tr>
                 </thead>
 
@@ -380,10 +409,18 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
                                     {{ $detail->status }}
                                 </flux:badge>
                             </td>
+
+                            <td class="px-5 py-4 text-right">
+                                @if ($detail->facility?->facilityType?->facility_type === 'Room')
+                                    <x-table-actions label="Actions for facility {{ $detail->facility->facility_name }}">
+                                        <flux:menu.item icon="user-group" wire:click="viewOccupants({{ $detail->booking_details_id }})">View occupants</flux:menu.item>
+                                    </x-table-actions>
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-5 py-10 text-center text-zinc-500">
+                            <td colspan="7" class="px-5 py-10 text-center text-zinc-500">
                                 This booking has no facility details.
                             </td>
                         </tr>
@@ -548,4 +585,30 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
             </div>
         </flux:card>
     </div>
+    {{-- Room occupants (read-only) --}}
+    <flux:modal wire:model="showOccupantsModal" class="md:w-[32rem]" x-on:close="$wire.closeOccupants()">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">Room occupants</flux:heading>
+                <flux:text class="mt-1">
+                    {{ $this->booking->b_ref_no }} - {{ $this->occupantsDetail?->facility?->facility_name }}
+                </flux:text>
+            </div>
+
+            <div class="space-y-2">
+                @forelse ($this->occupantsDetail?->roomOccupants ?? [] as $occupant)
+                    <div wire:key="occupant-{{ $occupant->getKey() }}" class="flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700">
+                        <span class="w-6 text-xs text-zinc-500">{{ $loop->iteration }}.</span>
+                        <span class="font-medium">{{ collect([$occupant->first_name, $occupant->middle_name, $occupant->last_name])->filter()->implode(' ') }}</span>
+                    </div>
+                @empty
+                    <p class="text-sm text-zinc-500">No room occupants are attached to this facility.</p>
+                @endforelse
+            </div>
+
+            <div class="flex justify-end">
+                <flux:button type="button" variant="ghost" wire:click="closeOccupants">Close</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </div>

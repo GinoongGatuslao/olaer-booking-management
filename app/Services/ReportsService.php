@@ -79,6 +79,55 @@ class ReportsService
             ->orderBy('date_paid')
             ->orderBy('payment_id');
 
+        // Refunds the cashier gave back to guests in the range reduce revenue.
+        $refundBase = RefundRequest::query()
+            ->whereNotNull('tbl_refund_request.refunded_at')
+            ->whereDate('tbl_refund_request.refunded_at', '>=', $startDate)
+            ->whereDate('tbl_refund_request.refunded_at', '<=', $endDate);
+
+        if ($cashierUserId !== null) {
+            $refundBase->where('tbl_refund_request.refunded_by_user_id', $cashierUserId);
+        }
+
+        $needle = trim($search);
+
+        if ($needle !== '') {
+            $like = '%'.$needle.'%';
+
+            $refundBase->whereHas('reservation', function (Builder $reservation) use ($like): void {
+                $reservation->where('r_ref_no', 'like', $like)
+                    ->orWhereHas('guest', function (Builder $guest) use ($like): void {
+                        $guest->where('first_name', 'like', $like)
+                            ->orWhere('last_name', 'like', $like)
+                            ->orWhere('contact_no', 'like', $like);
+                    });
+            });
+        }
+
+        $refundTotal = round((float) (clone $refundBase)->sum('tbl_refund_request.refunded_amount'), 2);
+        $refundCount = (clone $refundBase)->count();
+
+        $refundsByMode = (clone $refundBase)
+            ->leftJoin(
+                'tbl_mode_of_payment',
+                'tbl_mode_of_payment.mode_of_payment_id',
+                '=',
+                'tbl_refund_request.refund_mode_of_payment_id',
+            )
+            ->selectRaw("COALESCE(tbl_mode_of_payment.mode_of_payment, 'Unknown') as payment_mode")
+            ->selectRaw('SUM(tbl_refund_request.refunded_amount) as total_amount')
+            ->groupBy('tbl_mode_of_payment.mode_of_payment')
+            ->pluck('total_amount', 'payment_mode');
+
+        foreach ($refundsByMode as $mode => $amount) {
+            $byMode->put($mode, round((float) ($byMode[$mode] ?? 0) - (float) $amount, 2));
+        }
+
+        $refundRows = (clone $refundBase)
+            ->with(['reservation.guest', 'refundModeOfPayment', 'refundedBy'])
+            ->orderBy('tbl_refund_request.refunded_at')
+            ->get();
+
         $financialMetrics =
             $this->financialMetrics->summary(
                 $startDate,
@@ -102,7 +151,12 @@ class ReportsService
                 $allRows,
             ),
             'total' => $total,
-            'by_mode' => $byMode,
+            'gross_total' => $total,
+            'refund_total' => $refundTotal,
+            'refund_count' => $refundCount,
+            'net_total' => round($total - $refundTotal, 2),
+            'refund_rows' => $refundRows,
+            'by_mode' => $byMode->sortKeys(),
             'count' => $count,
             'financial_metrics' =>
                 $financialMetrics,

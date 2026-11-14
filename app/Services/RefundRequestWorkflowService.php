@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ModeOfPayment;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
 use App\Models\User;
@@ -177,6 +178,91 @@ class RefundRequestWorkflowService
             ]);
 
             return $request->fresh(['reservation', 'requestedBy', 'reviewedBy']);
+        });
+    }
+
+    /**
+     * The cashier gives an approved refund back to the guest and records how.
+     * GCash needs the reference number and a proof image; cash needs neither.
+     * The refund reduces revenue from the day it is given.
+     */
+    public function release(
+        int $refundRequestId,
+        int $modeOfPaymentId,
+        ?string $amount,
+        ?string $referenceNumber,
+        ?string $proofPath,
+        int $cashierUserId,
+    ): RefundRequest {
+        $this->guardRole($cashierUserId, 'Cashier', 'give refunds to guests');
+
+        $mode = ModeOfPayment::query()->find($modeOfPaymentId);
+
+        if ($mode === null) {
+            throw new InvalidArgumentException('Choose how the refund is given to the guest.');
+        }
+
+        $isGcash = strtolower(trim((string) $mode->mode_of_payment)) === 'gcash';
+        $referenceNumber = trim((string) $referenceNumber);
+
+        if ($isGcash) {
+            if ($referenceNumber === '') {
+                throw new InvalidArgumentException('Enter the GCash reference number of the refund.');
+            }
+
+            if (mb_strlen($referenceNumber) > 50) {
+                throw new InvalidArgumentException('The GCash reference number must not exceed 50 characters.');
+            }
+
+            if (blank($proofPath)) {
+                throw new InvalidArgumentException('Upload the GCash proof image of the refund.');
+            }
+        } else {
+            $referenceNumber = '';
+            $proofPath = null;
+        }
+
+        return DB::transaction(function () use ($refundRequestId, $mode, $isGcash, $referenceNumber, $proofPath, $amount, $cashierUserId): RefundRequest {
+            $request = RefundRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($refundRequestId);
+
+            if ((string) $request->status !== RefundRequest::STATUS_APPROVED) {
+                throw new InvalidArgumentException('Only an approved refund can be given to the guest.');
+            }
+
+            if ($request->refunded_at !== null) {
+                throw new InvalidArgumentException('This refund was already given to the guest.');
+            }
+
+            $approved = $this->money->normalize((string) $request->approved_amount);
+            $given = ($amount === null || trim($amount) === '')
+                ? $approved
+                : $this->parseAmount($amount, 'The refund amount');
+
+            if ($this->money->compare($given, $approved) > 0) {
+                throw new InvalidArgumentException(
+                    'The refund cannot be more than the amount the admin approved (₱'.number_format((float) $approved, 2).').',
+                );
+            }
+
+            if ($isGcash && RefundRequest::query()
+                ->where('refund_reference_number', $referenceNumber)
+                ->where('refund_request_id', '!=', $request->refund_request_id)
+                ->exists()) {
+                throw new InvalidArgumentException('This GCash reference number was already used for another refund.');
+            }
+
+            $request->update([
+                'refunded_amount' => $given,
+                'refund_mode_of_payment_id' => $mode->mode_of_payment_id,
+                'refund_reference_number' => $referenceNumber === '' ? null : $referenceNumber,
+                'refund_proof_path' => $proofPath,
+                'refunded_at' => Carbon::now(),
+                'refunded_by_user_id' => $cashierUserId,
+            ]);
+
+            return $request->fresh(['reservation', 'refundModeOfPayment', 'refundedBy']);
         });
     }
 

@@ -282,6 +282,11 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                             <td class="whitespace-nowrap px-4 py-4 text-right font-medium">{{ $refund->approved_amount !== null ? '₱'.number_format((float) $refund->approved_amount, 2) : '—' }}</td>
                             <td class="px-4 py-4">
                                 <flux:badge size="sm" color="{{ match ((string) $refund->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $refund->status }}</flux:badge>
+                                @if ($refund->refunded_at)
+                                    <flux:badge size="sm" color="zinc">Given to guest</flux:badge>
+                                @elseif ($refund->status === 'Approved')
+                                    <flux:badge size="sm" color="amber">Waiting for cashier</flux:badge>
+                                @endif
                             </td>
                             <td class="px-4 py-4 text-right">
                                 <flux:button size="sm" variant="{{ $refund->status === 'Pending' ? 'primary' : 'ghost' }}" wire:click="openReview({{ $refund->refund_request_id }})">

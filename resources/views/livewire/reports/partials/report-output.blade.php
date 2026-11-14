@@ -39,10 +39,11 @@
 
         <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5 print:grid-cols-5">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
-                <p class="text-xs text-zinc-500">Verified Revenue</p>
+                <p class="text-xs text-zinc-500">Net Revenue</p>
                 <p class="text-xl font-bold">
-                    {{ $this->money($metrics['verified_revenue'] ?? $report['total']) }}
+                    {{ $this->money($metrics['verified_revenue'] ?? $report['net_total']) }}
                 </p>
+                <p class="mt-1 text-[11px] text-zinc-500">After refunds given to guests</p>
             </div>
 
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
@@ -70,6 +71,31 @@
                 <p class="text-xs text-zinc-500">Entrance Revenue</p>
                 <p class="text-xl font-bold">
                     {{ $this->money($metrics['entrance_revenue'] ?? 0) }}
+                </p>
+            </div>
+        </div>
+
+        <div class="mb-4 grid gap-3 md:grid-cols-3 print:grid-cols-3">
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Gross Payments</p>
+                <p class="text-lg font-semibold">
+                    {{ $this->money($metrics['gross_revenue'] ?? $report['gross_total']) }}
+                </p>
+            </div>
+
+            <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
+                <p class="text-xs text-red-700 dark:text-red-300">
+                    Refunded ({{ $metrics['refund_count'] ?? $report['refund_count'] }})
+                </p>
+                <p class="text-lg font-semibold">
+                    − {{ $this->money($metrics['refunded_total'] ?? $report['refund_total']) }}
+                </p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Net Revenue</p>
+                <p class="text-lg font-semibold">
+                    {{ $this->money($metrics['verified_revenue'] ?? $report['net_total']) }}
                 </p>
             </div>
         </div>
@@ -181,6 +207,45 @@
                         <tr>
                             <td colspan="7" class="p-4 text-center text-zinc-500">
                                 No verified payments found.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="mb-2 mt-6 text-sm font-semibold">Refunds given to guests</h3>
+        <p class="mb-2 text-xs text-zinc-500">These reduce revenue on the date the refund was given.</p>
+
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
+                <thead class="border-b text-xs uppercase text-zinc-500">
+                    <tr>
+                        <th class="p-2">Date</th>
+                        <th class="p-2">Reservation</th>
+                        <th class="p-2">Guest</th>
+                        <th class="p-2">Mode</th>
+                        <th class="p-2">Reference</th>
+                        <th class="p-2">Handled By</th>
+                        <th class="p-2 text-right">Amount</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    @forelse (($report['refund_rows'] ?? []) as $refund)
+                        <tr>
+                            <td class="p-2">{{ $refund->refunded_at?->format('M d, Y') }}</td>
+                            <td class="p-2">{{ $refund->reservation?->r_ref_no }}</td>
+                            <td class="p-2">{{ $this->guestName($refund->reservation?->guest) }}</td>
+                            <td class="p-2">{{ $refund->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}</td>
+                            <td class="p-2">{{ $refund->refund_reference_number ?: '—' }}</td>
+                            <td class="p-2">{{ $this->staffName($refund->refundedBy, 'Unknown') }}</td>
+                            <td class="p-2 text-right text-red-600 dark:text-red-400">− {{ $this->money($refund->refunded_amount) }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="7" class="p-4 text-center text-zinc-500">
+                                No refunds were given in this date range.
                             </td>
                         </tr>
                     @endforelse

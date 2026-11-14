@@ -28,6 +28,12 @@ class RefundRequest extends Model
         'reviewed_at',
         'approved_amount',
         'admin_note',
+        'refunded_amount',
+        'refund_mode_of_payment_id',
+        'refund_reference_number',
+        'refund_proof_path',
+        'refunded_at',
+        'refunded_by_user_id',
     ];
 
     protected function casts(): array
@@ -37,6 +43,8 @@ class RefundRequest extends Model
             'requested_amount' => 'decimal:2',
             'approved_amount' => 'decimal:2',
             'reviewed_at' => 'datetime',
+            'refunded_amount' => 'decimal:2',
+            'refunded_at' => 'datetime',
         ];
     }
 
@@ -48,6 +56,28 @@ class RefundRequest extends Model
     public function requestedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requested_by_user_id', 'user_id');
+    }
+
+    /** Approved by the admin and already given back to the guest by the cashier. */
+    public function isGivenToGuest(): bool
+    {
+        return $this->refunded_at !== null;
+    }
+
+    /** Approved by the admin, waiting for the cashier to give the money back. */
+    public function isWaitingForRelease(): bool
+    {
+        return (string) $this->status === self::STATUS_APPROVED && $this->refunded_at === null;
+    }
+
+    public function refundModeOfPayment(): BelongsTo
+    {
+        return $this->belongsTo(ModeOfPayment::class, 'refund_mode_of_payment_id', 'mode_of_payment_id');
+    }
+
+    public function refundedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refunded_by_user_id', 'user_id');
     }
 
     public function reviewedBy(): BelongsTo

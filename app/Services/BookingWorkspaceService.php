@@ -21,6 +21,7 @@ class BookingWorkspaceService
                 'reservation.payments.verifier',
                 'entranceSlip',
                 'details.facility.facilityType',
+                'details.roomOccupants',
                 'details.discount',
                 'extraGuests',
                 'amenityRequests.details.amenity.amenityName',

@@ -5,6 +5,7 @@ use App\Http\Controllers\FacilityConditionPhotoController;
 use App\Http\Controllers\FacilityInspectionPhotoController;
 use App\Http\Controllers\GcashProofController;
 use App\Http\Controllers\PrintDocumentController;
+use App\Http\Controllers\RefundProofController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -226,6 +227,19 @@ Route::get(
         'role:Admin,Cashier',
     ])
     ->name('payments.gcash-proof');
+
+// secure refund proof (GCash refund screenshot attached by the cashier)
+Route::get(
+    '/secure/refund-proofs/{refundRequest}',
+    RefundProofController::class,
+)
+    ->whereNumber('refundRequest')
+    ->middleware([
+        'auth',
+        'active',
+        'role:Admin,Cashier',
+    ])
+    ->name('refunds.proof');
 
 // secure photo routes (inspection damage, facility condition, amenity delivery proof)
 Route::middleware(['auth', 'active', 'role:Admin,Cashier,Maintenance Staff'])->group(function () {

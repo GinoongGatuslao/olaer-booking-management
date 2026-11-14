@@ -15,7 +15,10 @@ class FinancialReportMetricsService
      *   cashier_user_id:?int,
      *   date_from:?string,
      *   date_to:?string,
-     *   verified_revenue:float,
+     *   verified_revenue:float,       net of refunds given in the range
+     *   gross_revenue:float,          verified payments before refunds
+     *   refunded_total:float,
+     *   refund_count:int,
      *   verified_payment_count:int,
      *   booking_revenue:float,
      *   reservation_revenue:float,
@@ -45,9 +48,25 @@ class FinancialReportMetricsService
             $cashierUserId,
         );
 
-        $verifiedRevenue = $this->sumAmount(
+        $grossRevenue = $this->sumAmount(
             clone $payments,
         );
+
+        // Refunds given back to guests in the range reduce revenue (all of
+        // them belong to reservations).
+        $refunds = $this->refundsQuery($from, $to, $cashierUserId);
+        $refundedTotal = $this->sumRefunds(clone $refunds);
+        $refundCount = (int) (clone $refunds)->count('rr.refund_request_id');
+        $cashRefunds = $this->sumRefunds((clone $refunds)->whereRaw(
+            'LOWER(COALESCE(rm.mode_of_payment, ?)) = ?',
+            ['', 'cash'],
+        ));
+        $gcashRefunds = $this->sumRefunds((clone $refunds)->whereRaw(
+            'LOWER(COALESCE(rm.mode_of_payment, ?)) = ?',
+            ['', 'gcash'],
+        ));
+
+        $verifiedRevenue = round($grossRevenue - $refundedTotal, 2);
 
         $bookingRevenue = $this->sumAmount(
             (clone $payments)->whereNotNull(
@@ -55,11 +74,11 @@ class FinancialReportMetricsService
             ),
         );
 
-        $reservationRevenue = $this->sumAmount(
+        $reservationRevenue = round($this->sumAmount(
             (clone $payments)->whereNotNull(
                 'p.reservation_id',
             ),
-        );
+        ) - $refundedTotal, 2);
 
         $entranceRevenue = $this->sumAmount(
             (clone $payments)->whereNotNull(
@@ -67,19 +86,19 @@ class FinancialReportMetricsService
             ),
         );
 
-        $cashRevenue = $this->sumAmount(
+        $cashRevenue = round($this->sumAmount(
             (clone $payments)->whereRaw(
                 'LOWER(COALESCE(m.mode_of_payment, ?)) = ?',
                 ['', 'cash'],
             ),
-        );
+        ) - $cashRefunds, 2);
 
-        $gcashRevenue = $this->sumAmount(
+        $gcashRevenue = round($this->sumAmount(
             (clone $payments)->whereRaw(
                 'LOWER(COALESCE(m.mode_of_payment, ?)) = ?',
                 ['', 'gcash'],
             ),
-        );
+        ) - $gcashRefunds, 2);
 
         $outstandingBooking = $this->sumOutstanding(
             DB::table('tbl_booking')
@@ -111,6 +130,9 @@ class FinancialReportMetricsService
             'date_from' => $from,
             'date_to' => $to,
             'verified_revenue' => $verifiedRevenue,
+            'gross_revenue' => $grossRevenue,
+            'refunded_total' => $refundedTotal,
+            'refund_count' => $refundCount,
             'verified_payment_count' => (int) (
                 clone $payments
             )->count('p.payment_id'),
@@ -158,7 +180,7 @@ class FinancialReportMetricsService
             $dateTo,
         );
 
-        return $this->verifiedPaymentsQuery(
+        $days = $this->verifiedPaymentsQuery(
             $from,
             $to,
             $cashierUserId,
@@ -173,20 +195,83 @@ class FinancialReportMetricsService
                 'SUM(p.amount_paid) as revenue',
             )
             ->groupBy('p.date_paid')
-            ->orderBy('p.date_paid')
             ->get()
-            ->map(
+            ->mapWithKeys(
                 fn (object $row): array => [
-                    'date' => (string) $row->revenue_date,
-                    'payment_count' =>
-                        (int) $row->payment_count,
-                    'revenue' => round(
-                        (float) $row->revenue,
-                        2,
-                    ),
+                    (string) $row->revenue_date => [
+                        'date' => (string) $row->revenue_date,
+                        'payment_count' => (int) $row->payment_count,
+                        'gross' => (float) $row->revenue,
+                        'refunded' => 0.0,
+                    ],
                 ],
             )
             ->all();
+
+        // Refunds reduce the revenue of the day they were given.
+        $refundDays = $this->refundsQuery($from, $to, $cashierUserId)
+            ->selectRaw('DATE(rr.refunded_at) as refund_date')
+            ->selectRaw('SUM(rr.refunded_amount) as refunded')
+            ->groupBy(DB::raw('DATE(rr.refunded_at)'))
+            ->get();
+
+        foreach ($refundDays as $row) {
+            $date = (string) $row->refund_date;
+
+            $days[$date] ??= [
+                'date' => $date,
+                'payment_count' => 0,
+                'gross' => 0.0,
+                'refunded' => 0.0,
+            ];
+            $days[$date]['refunded'] = (float) $row->refunded;
+        }
+
+        ksort($days);
+
+        return array_values(array_map(
+            fn (array $day): array => [
+                'date' => $day['date'],
+                'payment_count' => $day['payment_count'],
+                'revenue' => round($day['gross'] - $day['refunded'], 2),
+                'gross' => round($day['gross'], 2),
+                'refunded' => round($day['refunded'], 2),
+            ],
+            $days,
+        ));
+    }
+
+    /** Refunds given back to guests (cashier released them) within the range. */
+    private function refundsQuery(
+        ?string $dateFrom,
+        ?string $dateTo,
+        ?int $cashierUserId,
+    ): Builder {
+        return DB::table('tbl_refund_request as rr')
+            ->leftJoin(
+                'tbl_mode_of_payment as rm',
+                'rm.mode_of_payment_id',
+                '=',
+                'rr.refund_mode_of_payment_id',
+            )
+            ->whereNotNull('rr.refunded_at')
+            ->when(
+                $cashierUserId !== null,
+                fn (Builder $query): Builder => $query->where('rr.refunded_by_user_id', $cashierUserId),
+            )
+            ->when(
+                $dateFrom !== null,
+                fn (Builder $query): Builder => $query->whereDate('rr.refunded_at', '>=', $dateFrom),
+            )
+            ->when(
+                $dateTo !== null,
+                fn (Builder $query): Builder => $query->whereDate('rr.refunded_at', '<=', $dateTo),
+            );
+    }
+
+    private function sumRefunds(Builder $query): float
+    {
+        return round((float) $query->sum('rr.refunded_amount'), 2);
     }
 
     private function verifiedPaymentsQuery(
