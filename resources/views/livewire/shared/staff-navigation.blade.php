@@ -105,6 +105,8 @@ new class extends Component
             </flux:sidebar.group>
         @elseif ($roleName === 'Cashier')
             <flux:sidebar.item icon="home" :href="route('cashier.dashboard')" :current="request()->routeIs('cashier.dashboard')" wire:navigate>Dashboard</flux:sidebar.item>
+            <flux:sidebar.item :href="route('cashier.notifications.index')" :current="request()->routeIs('cashier.notifications.*')" :badge="$this->cashierWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
+            <flux:sidebar.item :href="route('cashier.action-center')" :current="request()->routeIs('cashier.action-center')" :badge="$this->cashierWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
             <flux:sidebar.item icon="ticket" :href="route('cashier.entrance-slips.index')" :current="request()->routeIs('cashier.entrance-slips.*')" wire:navigate>Entrance Slip</flux:sidebar.item>
 
             <flux:sidebar.group expandable icon="calendar-days" heading="Reservation" :expanded="request()->routeIs('cashier.reservations.*', 'cashier.reservation-conversions.*')" class="grid">
@@ -126,19 +128,18 @@ new class extends Component
 
             <flux:sidebar.item icon="document-text" :href="route('cashier.billings.index')" :current="request()->routeIs('cashier.billings.*')" wire:navigate>Billing Statement</flux:sidebar.item>
 
-            <flux:sidebar.group expandable icon="chart-bar-square" heading="Reports & Work" :expanded="request()->routeIs('cashier.reports.*', 'cashier.notifications.*', 'cashier.action-center')" class="grid">
-                <flux:sidebar.item :href="route('cashier.reports.index')" :current="request()->routeIs('cashier.reports.*')" wire:navigate>Reports</flux:sidebar.item>
-                <flux:sidebar.item :href="route('cashier.notifications.index')" :current="request()->routeIs('cashier.notifications.*')" :badge="$this->cashierWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
-                <flux:sidebar.item :href="route('cashier.action-center')" :current="request()->routeIs('cashier.action-center')" :badge="$this->cashierWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
+            <flux:sidebar.item icon="chart-bar" :href="route('cashier.reports.index')" :current="request()->routeIs('cashier.reports.*')" wire:navigate>Reports</flux:sidebar.item>
+                
             </flux:sidebar.group>
         @elseif ($roleName === 'Maintenance Staff')
+            <flux:sidebar.item icon="bell" :href="route('maintenance.notifications.index')" :current="request()->routeIs('maintenance.notifications.*')" :badge="$this->maintenanceWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
+            <flux:sidebar.item icon="bolt" :href="route('maintenance.action-center')" :current="request()->routeIs('maintenance.action-center')" :badge="$this->maintenanceWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
             <flux:sidebar.item icon="sparkles" :href="route('maintenance.amenity-requests.index')" :current="request()->routeIs('maintenance.amenity-requests.*')" :badge="$this->badge('amenity_requests')" wire:navigate>Amenity Requests</flux:sidebar.item>
             <flux:sidebar.group expandable icon="clipboard-document-check" heading="Facility Inspection" :expanded="request()->routeIs('maintenance.facility-inspections.*', 'maintenance.facility-photos.*')" class="grid">
                 <flux:sidebar.item :href="route('maintenance.facility-inspections.index')" :current="request()->routeIs('maintenance.facility-inspections.*')" :badge="$this->badge('inspection_requests')" wire:navigate>Facility Checklist</flux:sidebar.item>
                 <flux:sidebar.item :href="route('maintenance.facility-photos.index')" :current="request()->routeIs('maintenance.facility-photos.*')" wire:navigate>Facility Readiness</flux:sidebar.item>
             </flux:sidebar.group>
-            <flux:sidebar.item icon="bell" :href="route('maintenance.notifications.index')" :current="request()->routeIs('maintenance.notifications.*')" :badge="$this->maintenanceWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
-            <flux:sidebar.item icon="bolt" :href="route('maintenance.action-center')" :current="request()->routeIs('maintenance.action-center')" :badge="$this->maintenanceWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
+            
         @elseif ($roleName === 'Security Guard')
             <flux:sidebar.item icon="ticket" :href="route('security.entrance-slips.create')" :current="request()->routeIs('security.entrance-slips.*')" :badge="$this->badge('my_unpaid_slips_today')" wire:navigate>Entrance Slip</flux:sidebar.item>
         @else
