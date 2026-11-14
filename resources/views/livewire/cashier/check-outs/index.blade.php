@@ -1,13 +1,17 @@
 <?php
 
+use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\FacilityInspection;
 use App\Models\FacilityConditionPhoto;
 use App\Models\FacilityInspectionPhoto;
 use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
+use App\Models\ModeOfPayment;
 use App\Services\CheckOutWorkflowService;
 use App\Services\CheckOutInspectionRequestService;
+use App\Services\OutstandingBreakdownService;
+use App\Services\PaymentWorkflowService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -48,6 +52,13 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
     public string $selectedLabel = '';
     public float $selectedBookingAmountDue = 0.00;
     public bool $showCheckOutPanel = false;
+
+    public bool $showSettleModal = false;
+    public string $settleAmount = '';
+    public string $settleModeId = '';
+    public string $settleReference = '';
+    public string $settleCashPaid = '';
+    public ?int $settledPaymentId = null;
     // Inline "are you sure" step inside the check-out modal (no nested modal).
     public bool $showCheckOutDialog = false;
 
@@ -88,6 +99,10 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             'selectedInspectionRequest' => $this->selectedInspectionRequest(),
             'inspectionPhotos' => $this->inspectionPhotos(),
             'conditionPhotos' => $this->conditionPhotos(),
+            'settleModes' => $this->showSettleModal
+                ? ModeOfPayment::query()->orderBy('mode_of_payment')->get()
+                : collect(),
+            'settleBreakdown' => $this->settleBreakdown(),
         ];
     }
 
@@ -212,12 +227,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
         $this->selectedBookingAmountDue = (float) $detail->booking->amount_due;
         $this->selectedLabel = $detail->booking->b_ref_no . ' - ' . $guest->first_name . ' ' . $guest->last_name . ' - ' . $facilityName;
         $this->resetErrorBag('checkOut');
+        $this->settledPaymentId = null;
         $this->showCheckOutDialog = false;
         $this->showCheckOutPanel = true;
     }
 
     public function cancelSelection(): void
     {
+        $this->closeSettlePayment();
+        $this->settledPaymentId = null;
         $this->showCheckOutPanel = false;
         $this->showCheckOutDialog = false;
         $this->selectedBookingDetailsId = null;
@@ -242,6 +260,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             $this->refreshSelectedState();
 
             session()->flash('success', 'Inspection request sent to maintenance.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->addError('checkOut', (string) collect($exception->errors())->flatten()->first());
         } catch (\InvalidArgumentException $exception) {
             $this->addError('checkOut', $exception->getMessage());
         } catch (\Throwable $exception) {
@@ -275,11 +295,124 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             $this->cancelSelection();
             $this->resetPage();
             session()->flash('success', 'Guest checked out successfully. Facility is now available.');
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->addError('checkOut', (string) collect($exception->errors())->flatten()->first());
         } catch (\InvalidArgumentException $exception) {
             $this->addError('checkOut', $exception->getMessage());
         } catch (\Throwable $exception) {
             report($exception);
             $this->addError('checkOut', 'Check-out could not be completed. Refresh the list and try again.');
+        }
+    }
+
+    /** Unpaid parts of the booking (facility, amenities, fines and other bills). */
+    public function settleBreakdown(): ?array
+    {
+        if (! $this->showSettleModal || $this->selectedBookingId === null) {
+            return null;
+        }
+
+        try {
+            return app(OutstandingBreakdownService::class)->for('booking', $this->selectedBookingId);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
+    }
+
+    public function openSettlePayment(): void
+    {
+        $booking = $this->selectedBookingId !== null
+            ? Booking::query()->find($this->selectedBookingId)
+            : null;
+
+        if ($booking === null || (float) $booking->amount_due <= 0) {
+            $this->refreshSelectedState();
+            $this->addError('checkOut', 'This booking has no unpaid balance.');
+
+            return;
+        }
+
+        $this->settleAmount = number_format((float) $booking->amount_due, 2, '.', '');
+        $this->settleModeId = (string) (ModeOfPayment::query()->orderBy('mode_of_payment_id')->value('mode_of_payment_id') ?? '');
+        $this->settleReference = '';
+        $this->settleCashPaid = '';
+        $this->settledPaymentId = null;
+        $this->resetValidation();
+        $this->showSettleModal = true;
+    }
+
+    public function closeSettlePayment(): void
+    {
+        $this->showSettleModal = false;
+        $this->settleAmount = '';
+        $this->settleModeId = '';
+        $this->settleReference = '';
+        $this->settleCashPaid = '';
+        $this->resetValidation();
+    }
+
+    public function updatedShowSettleModal(bool $open): void
+    {
+        if (! $open) {
+            $this->closeSettlePayment();
+        }
+    }
+
+    public function settleModeName(): string
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->settleModeId)
+            ->value('mode_of_payment')));
+    }
+
+    public function updatedSettleModeId(): void
+    {
+        // Cash received only belongs to a cash payment.
+        $this->settleCashPaid = '';
+    }
+
+    public function recordSettlePayment(PaymentWorkflowService $paymentWorkflow): void
+    {
+        $isCash = $this->settleModeName() === 'cash';
+
+        $validated = $this->validate([
+            'selectedBookingId' => ['required', 'integer', 'min:1'],
+            'settleAmount' => ['required', 'numeric', 'gt:0'],
+            'settleModeId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
+            'settleReference' => ['nullable', 'string', 'max:50'],
+            'settleCashPaid' => [$isCash ? 'required' : 'nullable', 'numeric', 'gte:settleAmount'],
+        ], [
+            'selectedBookingId.required' => 'This booking is no longer selected. Close this window and try again.',
+            'settleAmount.required' => 'Enter the amount to pay.',
+            'settleAmount.numeric' => 'The amount to pay must be a number.',
+            'settleAmount.gt' => 'The amount to pay must be greater than zero.',
+            'settleModeId.required' => 'Choose a mode of payment.',
+            'settleCashPaid.required' => 'Enter the cash received.',
+            'settleCashPaid.numeric' => 'Cash paid must be a number.',
+            'settleCashPaid.gte' => 'Cash paid must be at least the amount to pay.',
+        ]);
+
+        try {
+            $payment = $paymentWorkflow->recordCashierPayment([
+                'target_type' => 'booking',
+                'target_id' => (int) $validated['selectedBookingId'],
+                'amount_paid' => $validated['settleAmount'],
+                'mode_of_payment_id' => (int) $validated['settleModeId'],
+                'reference_number' => $validated['settleReference'] ?? null,
+                'cash_paid' => $isCash ? ($validated['settleCashPaid'] ?? null) : null,
+                'user_id' => (int) Auth::id(),
+            ]);
+
+            $this->settledPaymentId = (int) $payment->payment_id;
+            $this->closeSettlePayment();
+            $this->refreshSelectedState();
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('settlePayment', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('settlePayment', 'The payment could not be recorded. Please close this window and try again.');
         }
     }
 
@@ -541,17 +674,15 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             ->get();
     }
 
-    /** Damage photos maintenance attached to the latest inspection request (read-only here). */
+    /** Damage photos maintenance attached to any inspection request of this stay (read-only here). */
     private function inspectionPhotos(): \Illuminate\Support\Collection
     {
-        $request = $this->selectedInspectionRequest();
-
-        if ($request === null) {
+        if ($this->selectedBookingDetailsId === null) {
             return collect();
         }
 
         return FacilityInspectionPhoto::query()
-            ->where('facility_inspection_request_id', $request->facility_inspection_request_id)
+            ->where('booking_details_id', $this->selectedBookingDetailsId)
             ->orderBy('facility_inspection_photo_id')
             ->get();
     }
@@ -790,6 +921,20 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                 <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
             @enderror
 
+            @if ($settledPaymentId !== null && ! $showCheckOutDialog)
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+                    <span>
+                        Payment recorded.
+                        @if ($selectedBookingAmountDue > 0)
+                            Remaining balance: ₱{{ number_format($selectedBookingAmountDue, 2) }}.
+                        @else
+                            The balance is fully paid.
+                        @endif
+                    </span>
+                    <a href="{{ route('print.payment', $settledPaymentId) }}" target="_blank" rel="noopener" class="font-semibold underline">Print receipt</a>
+                </div>
+            @endif
+
             @if ($showCheckOutDialog)
                 <flux:text>
                     {{ $selectedLabel }} will be checked out and the physical facility will be released for future availability.
@@ -831,32 +976,35 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             <p class="text-xs text-zinc-600 dark:text-zinc-300">Remarks: {{ $selectedInspection->remarks }}</p>
                         @endif
 
-                        @if ($inspectionPhotos->isNotEmpty())
-                            <div>
-                                <p class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                                    Damage photos ({{ $inspectionPhotos->count() }})
-                                </p>
-                                <div class="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                                    @foreach ($inspectionPhotos as $photo)
-                                        <a
-                                            wire:key="checkout-photo-{{ $photo->facility_inspection_photo_id }}"
-                                            href="{{ route('facility-inspection-photos.show', $photo) }}"
-                                            target="_blank"
-                                            rel="noopener"
-                                            class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
-                                        >
-                                            <img
-                                                src="{{ route('facility-inspection-photos.show', $photo) }}"
-                                                alt="{{ $photo->original_name ?? 'Damage photo' }}"
-                                                loading="lazy"
-                                                class="aspect-square w-full object-cover"
-                                            />
-                                            <span class="block px-1.5 py-1 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</span>
-                                        </a>
-                                    @endforeach
-                                </div>
+                    @endif
+
+                    @if ($inspectionPhotos->isNotEmpty())
+                        <div>
+                            <p class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                                Damage photos from maintenance ({{ $inspectionPhotos->count() }})
+                            </p>
+                            <div class="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                                @foreach ($inspectionPhotos as $photo)
+                                    <a
+                                        wire:key="checkout-photo-{{ $photo->facility_inspection_photo_id }}"
+                                        href="{{ route('facility-inspection-photos.show', $photo) }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                                    >
+                                        <img
+                                            src="{{ route('facility-inspection-photos.show', $photo) }}"
+                                            alt="{{ $photo->original_name ?? 'Damage photo' }}"
+                                            loading="lazy"
+                                            class="aspect-square w-full object-cover"
+                                        />
+                                        <span class="block px-1.5 py-1 text-[10px] leading-tight text-zinc-500 dark:text-zinc-400">{{ $photo->created_at?->format('M d, h:i A') }}@if ($photo->uploadedBy)<br>by {{ $photo->uploadedBy->full_name }}@endif</span>
+                                    </a>
+                                @endforeach
                             </div>
-                        @endif
+                        </div>
+                    @elseif ($selectedInspectionRequest !== null)
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400">Maintenance has not attached any damage photos.</p>
                     @endif
 
                     @if ($conditionPhotos->isNotEmpty())
@@ -887,7 +1035,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                     @endif
 
                     @if ($selectedBookingAmountDue > 0)
-                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">Balance includes any inspection fines. Settle it in the Payment module to complete check-out.</p>
+                        <p class="text-xs font-semibold text-red-700 dark:text-red-300">Balance includes any inspection fines and other unpaid bills. Use Settle Payment to pay it and complete check-out.</p>
                     @endif
                 </div>
 
@@ -932,16 +1080,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         </flux:button>
                     @endif
 
-                    @if (
-                        $selectedBookingId !== null
-                        && $selectedBookingAmountDue > 0
-                        && Route::has('cashier.payments.index')
-                    )
-                        <flux:button
-                            href="{{ route('cashier.payments.index', ['booking' => $selectedBookingId]) }}"
-                            wire:navigate
-                            variant="primary"
-                        >
+                    @if ($selectedBookingId !== null && $selectedBookingAmountDue > 0)
+                        <flux:button type="button" variant="primary" wire:click="openSettlePayment">
                             Settle Payment
                         </flux:button>
                     @endif
@@ -976,6 +1116,94 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                     </flux:button>
                 </div>
             @endif
+
+            {{-- Pays the booking's unpaid record (facility, amenities, fines and other bills) without leaving check-out --}}
+            <flux:modal wire:model="showSettleModal" class="md:w-[32rem]">
+                <form wire:submit.prevent="recordSettlePayment" novalidate class="space-y-5">
+                    <div>
+                        <flux:heading size="lg">Settle payment</flux:heading>
+                        <flux:text class="mt-1">{{ $selectedLabel }}</flux:text>
+                    </div>
+
+                    @if ($settleBreakdown && count($settleBreakdown['lines']) > 0)
+                        <div class="rounded-xl border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Unpaid breakdown</p>
+                            <div class="space-y-2">
+                                @foreach ($settleBreakdown['lines'] as $line)
+                                    <div class="flex items-start justify-between gap-3" wire:key="settle-line-{{ $loop->index }}">
+                                        <div>
+                                            <p class="font-medium">{{ $line['label'] }}</p>
+                                            <p class="text-xs text-zinc-500">
+                                                {{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif
+                                                @if ((float) $line['paid'] > 0) · ₱{{ number_format((float) $line['paid'], 2) }} of ₱{{ number_format((float) $line['amount'], 2) }} paid @endif
+                                            </p>
+                                        </div>
+                                        <span class="whitespace-nowrap font-semibold">₱{{ number_format((float) $line['remaining'], 2) }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                            <div class="mt-3 flex justify-between border-t border-zinc-200 pt-2 font-semibold dark:border-zinc-700">
+                                <span>Total unpaid</span>
+                                <span>₱{{ number_format((float) $settleBreakdown['balance'], 2) }}</span>
+                            </div>
+                        </div>
+                    @endif
+
+                    @error('settlePayment')
+                        <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
+                    @enderror
+                    @error('selectedBookingId')
+                        <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
+                    @enderror
+
+                    <flux:field class="relative">
+                        <flux:label>Amount to pay <span class="text-red-500">*</span></flux:label>
+                        <flux:input wire:model="settleAmount" type="number" min="0.01" step="0.01" :invalid="$errors->has('settleAmount')" />
+                        @error('settleAmount')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </flux:field>
+
+                    <flux:field class="relative">
+                        <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                        <flux:select wire:model.live="settleModeId" :invalid="$errors->has('settleModeId')">
+                            @foreach ($settleModes as $mode)
+                                <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
+                            @endforeach
+                        </flux:select>
+                        @error('settleModeId')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </flux:field>
+
+                    @if ($this->settleModeName() === 'gcash')
+                        <flux:input wire:model="settleReference" label="GCash reference number" placeholder="Required for GCash" />
+                    @endif
+
+                    @error('settleReference')
+                        <p class="text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+
+                    @if ($this->settleModeName() === 'cash')
+                        <flux:field class="relative">
+                            <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                            <flux:input wire:model.live.debounce.300ms="settleCashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('settleCashPaid')" />
+                            @error('settleCashPaid')
+                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+                        </flux:field>
+                        <div class="flex justify-between rounded-xl bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900">
+                            <span>Change</span>
+                            <span>₱{{ number_format(is_numeric($settleCashPaid) && is_numeric($settleAmount) ? max(0, (float) $settleCashPaid - (float) $settleAmount) : 0, 2) }}</span>
+                        </div>
+                    @endif
+
+                    <div class="flex justify-end gap-3">
+                        <flux:button type="button" variant="ghost" wire:click="closeSettlePayment">Cancel</flux:button>
+                        <flux:button type="submit" variant="primary">Record Payment</flux:button>
+                    </div>
+                </form>
+            </flux:modal>
         </div>
     </flux:modal>
 </div>

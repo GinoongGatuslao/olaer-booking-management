@@ -236,6 +236,13 @@ select:focus[data-flux-control] {
 /* Reserve room for the floating message only while an error message is actually shown.
    A field that is merely highlighted red (an empty required field has no message)
    must not add any space. */
-[data-flux-field]:has(.field-error, [data-flux-error]) {
+[data-flux-field]:has(.field-error, [data-flux-error]:not(:empty)) {
     margin-bottom: 1.5rem;
+}
+
+/* Filter / toolbar rows never show an error message, so their fields must not reserve
+   any (the empty error slot of a labelled field was pushing the Clear Filters button
+   down and adding blank space under the inputs). */
+.grid.border-b [data-flux-field] {
+    margin-bottom: 0;
 }

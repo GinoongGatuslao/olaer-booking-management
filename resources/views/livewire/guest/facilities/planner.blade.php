@@ -566,7 +566,7 @@ protected function validationAttributes(): array
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                                 @if ($selectedProduct && \App\Support\DayRateCutoff::closedFor($selectedProduct->schedule_policy, (string) ($group['check_in_date'] ?? '')))
-                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Today's Day and Both rates close at 6:00 PM. Only the Night rate is left for today.</p>
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Only the Night rate is available currently.</p>
                                 @endif
                             </flux:field>
                             <flux:field class="relative">

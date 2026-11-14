@@ -143,6 +143,30 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     public function updatedSelectedChecklistKey(): void
     {
         $this->fineId = null;
+
+        // Keep the quantity inside the new item's limit.
+        $this->fineQuantity = min(
+            max($this->fineQuantity, 1),
+            $this->fineQuantityLimit($this->selectedChecklistItems()),
+        );
+    }
+
+    /**
+     * Most units one fine can cover: what the selected checklist item expects
+     * (the facility's inclusive amount, or what was delivered for a request).
+     * Situational fines have no item, so they keep the general limit.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    public function fineQuantityLimit(array $items): int
+    {
+        if (trim($this->selectedChecklistKey) === '') {
+            return 100;
+        }
+
+        $selected = collect($items)->firstWhere('key', $this->selectedChecklistKey);
+
+        return $selected === null ? 100 : max((int) $selected['expected_quantity'], 1);
     }
 
     public function clearFilters(): void
@@ -386,6 +410,8 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     public function addFine(
         FacilityInspectionWorkflowService $inspectionWorkflow,
     ): void {
+        $quantityLimit = $this->fineQuantityLimit($this->selectedChecklistItems());
+
         $validated = $this->validate([
             'selectedBookingDetailsId' => [
                 'required',
@@ -406,13 +432,18 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                 'required',
                 'integer',
                 'min:1',
-                'max:100',
+                'max:'.$quantityLimit,
             ],
             'remarks' => [
                 'nullable',
                 'string',
                 'max:1000',
             ],
+        ], [
+            'fineQuantity.required' => 'Enter the quantity.',
+            'fineQuantity.integer' => 'The quantity must be a whole number.',
+            'fineQuantity.min' => 'The quantity must be at least 1.',
+            'fineQuantity.max' => "The quantity cannot be more than {$quantityLimit} for this item.",
         ]);
 
         try {
@@ -1406,21 +1437,21 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                     </h3>
 
                     <div class="mt-4 grid gap-3 lg:grid-cols-4 lg:items-end">
-                        <flux:select
-                            label="Checklist item"
-                            wire:model.live="selectedChecklistKey"
-                        >
-                            <option value="">
-                                No specific item / situational fine
-                            </option>
-
-                            @foreach ($selectedChecklistItems as $item)
-                                <option value="{{ $item['key'] }}">
-                                    {{ $item['amenity_name'] }}
-                                    — {{ $item['source_label'] }}
+                        <flux:field class="relative">
+                            <flux:label>Checklist item</flux:label>
+                            <flux:select wire:model.live="selectedChecklistKey">
+                                <option value="">
+                                    No specific item / situational fine
                                 </option>
-                            @endforeach
-                        </flux:select>
+
+                                @foreach ($selectedChecklistItems as $item)
+                                    <option value="{{ $item['key'] }}">
+                                        {{ $item['amenity_name'] }}
+                                        — {{ $item['source_label'] }}
+                                    </option>
+                                @endforeach
+                            </flux:select>
+                        </flux:field>
 
                         <flux:field class="relative">
                             <flux:label>Fine <span class="text-red-500">*</span></flux:label>
@@ -1438,9 +1469,57 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                             @endif
                         </flux:field>
 
+                        @php($quantityLimit = $this->fineQuantityLimit($selectedChecklistItems))
                         <flux:field class="relative">
                             <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
-                            <flux:input type="number" min="1" wire:model="fineQuantity" :invalid="$errors->has('fineQuantity')" />
+
+                            {{-- Whole numbers only: 1 up to what the selected item has in the facility / was delivered --}}
+                            <div
+                                class="flex items-center gap-2"
+                                data-max="{{ $quantityLimit }}"
+                                x-data="{
+                                    qty: $wire.$entangle('fineQuantity'),
+                                    get max() { return parseInt($root.dataset.max) || 1 },
+                                    set(value) {
+                                        value = parseInt(value)
+                                        this.qty = Math.min(this.max, Math.max(1, isNaN(value) ? 1 : value))
+                                    },
+                                }"
+                            >
+                                <flux:button
+                                    type="button"
+                                    icon="minus"
+                                    aria-label="Decrease quantity"
+                                    x-on:click="set(qty - 1)"
+                                    x-bind:disabled="qty <= 1"
+                                />
+
+                                <div class="min-w-0 flex-1">
+                                    <flux:input
+                                        type="text"
+                                        inputmode="numeric"
+                                        pattern="[0-9]*"
+                                        class="text-center"
+                                        :invalid="$errors->has('fineQuantity')"
+                                        x-bind:value="qty"
+                                        x-on:input="$event.target.value = $event.target.value.replace(/\D/g, '')"
+                                        x-on:change="set($event.target.value)"
+                                        x-on:blur="set($event.target.value)"
+                                    />
+                                </div>
+
+                                <flux:button
+                                    type="button"
+                                    icon="plus"
+                                    aria-label="Increase quantity"
+                                    x-on:click="set(qty + 1)"
+                                    x-bind:disabled="qty >= max"
+                                />
+                            </div>
+
+                            @if ($selectedChecklistKey !== '')
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400">Up to {{ $quantityLimit }} for this item.</p>
+                            @endif
                             @if ($msg = $this->visibleError('fineQuantity'))
                                 <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                             @endif
