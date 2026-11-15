@@ -208,6 +208,63 @@ class OutstandingBreakdownService
         ];
     }
 
+    /**
+     * How each verified payment of a booking was split across the booking's charges
+     * (facility, delivered amenities, fines, adjustments), applying payments in the
+     * order they were made. Same rule as forPayment(), worked out once per booking.
+     *
+     * @return array<int, array<string, string>>  payment_id => [charge group => amount applied]
+     */
+    public function bookingPaymentGroups(int $bookingId): array
+    {
+        [$charges] = $this->chargesWithAdjustments('booking', $bookingId);
+
+        $reservationId = Booking::query()->whereKey($bookingId)->first()?->reservation?->reservation_id;
+
+        $payments = Payment::query()
+            ->whereRaw('LOWER(payment_status) = ?', ['verified'])
+            ->where(function ($query) use ($bookingId, $reservationId): void {
+                $query->where('booking_id', $bookingId);
+
+                if ($reservationId !== null) {
+                    $query->orWhere('reservation_id', $reservationId);
+                }
+            })
+            ->orderBy('payment_id')
+            ->get(['payment_id', 'amount_paid']);
+
+        $open = array_map(fn (array $charge): string => $charge['amount'], $charges);
+        $result = [];
+
+        foreach ($payments as $payment) {
+            $remaining = $this->money->normalize((string) $payment->amount_paid);
+            $groups = [];
+
+            foreach ($charges as $index => $charge) {
+                if ($this->money->compare($remaining, '0.00') !== 1) {
+                    break;
+                }
+
+                if ($this->money->compare($open[$index], '0.00') !== 1) {
+                    continue;
+                }
+
+                $applied = $this->money->compare($remaining, $open[$index]) >= 0 ? $open[$index] : $remaining;
+                $open[$index] = $this->money->subtract($open[$index], $applied);
+                $remaining = $this->money->subtract($remaining, $applied);
+                $groups[$charge['group']] = $this->money->add($groups[$charge['group']] ?? '0.00', $applied);
+            }
+
+            if ($this->money->compare($remaining, '0.00') === 1) {
+                $groups['Other'] = $this->money->add($groups['Other'] ?? '0.00', $remaining);
+            }
+
+            $result[(int) $payment->payment_id] = $groups;
+        }
+
+        return $result;
+    }
+
     /** @return list<array{group: string, label: string, detail: string, amount: string}> */
     private function bookingCharges(int $bookingId): array
     {

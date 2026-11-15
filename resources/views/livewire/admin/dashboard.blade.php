@@ -1,13 +1,145 @@
 <?php
 
+use App\Services\AdminChartsService;
 use App\Services\AdminDashboardService;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] class extends Component
 {
+    #[Url(as: 'range', except: '30d')]
+    public string $range = '30d';
+
+    #[Computed]
+    public function charts(): array
+    {
+        return app(AdminChartsService::class)->charts($this->range);
+    }
+
+    /** Column chart: bookings by status. */
+    public function statusOptions(): array
+    {
+        $data = $this->charts['status'];
+
+        return [
+            'chart' => ['type' => 'bar'],
+            'series' => [['name' => 'Bookings', 'data' => $data['values']]],
+            'xaxis' => ['categories' => $data['labels']],
+            'yaxis' => ['min' => 0, 'forceNiceScale' => true],
+            'yFormats' => ['int'],
+            'plotOptions' => ['bar' => ['columnWidth' => '45%', 'borderRadius' => 6, 'distributed' => true]],
+            'colors' => ['#b7791f', '#247e79', '#174f3b'],
+            'dataLabels' => ['enabled' => true],
+            'legend' => ['show' => false],
+            'noData' => ['text' => 'No bookings in this period'],
+        ];
+    }
+
+    /** Bars + lines: total bookings, occupancy rate and average daily rate. */
+    public function trendOptions(): array
+    {
+        $trend = $this->charts['trend'];
+
+        return [
+            'chart' => ['type' => 'line'],
+            'series' => [
+                ['name' => 'Total bookings', 'type' => 'column', 'data' => $trend['bookings']],
+                ['name' => 'Occupancy rate', 'type' => 'line', 'data' => $trend['occupancy']],
+                ['name' => 'Average daily rate (ADR)', 'type' => 'line', 'data' => $trend['adr']],
+            ],
+            'stroke' => ['width' => [0, 3, 3], 'curve' => 'smooth'],
+            'xaxis' => ['categories' => $this->charts['labels'], 'tickAmount' => min(12, count($this->charts['labels']))],
+            'yaxis' => [
+                ['title' => ['text' => 'Bookings'], 'min' => 0, 'forceNiceScale' => true],
+                ['opposite' => true, 'title' => ['text' => 'Occupancy'], 'min' => 0, 'max' => 100],
+                ['opposite' => true, 'show' => false, 'min' => 0],
+            ],
+            'yFormats' => ['int', 'percent', 'peso'],
+            'tooltipFormats' => ['int', 'percent', 'peso'],
+            'plotOptions' => ['bar' => ['columnWidth' => '55%', 'borderRadius' => 4]],
+            'colors' => ['#174f3b', '#b7791f', '#2c7a8b'],
+            'markers' => ['size' => [0, 4, 4]],
+            'legend' => ['position' => 'top'],
+        ];
+    }
+
+    /** Stacked bars: verified revenue by category. */
+    public function revenueOptions(): array
+    {
+        $series = [];
+
+        foreach (AdminChartsService::REVENUE_CATEGORIES as $category) {
+            $series[] = ['name' => $category, 'data' => $this->charts['revenue'][$category]];
+        }
+
+        return [
+            'chart' => ['type' => 'bar', 'stacked' => true],
+            'series' => $series,
+            'xaxis' => ['categories' => $this->charts['labels'], 'tickAmount' => min(12, count($this->charts['labels']))],
+            'yaxis' => ['min' => 0],
+            'yFormats' => ['peso'],
+            'tooltipFormats' => ['peso'],
+            'plotOptions' => ['bar' => ['columnWidth' => '60%', 'borderRadius' => 2]],
+            'colors' => ['#174f3b', '#2c7a8b', '#b7791f', '#247e79', '#b93b3b'],
+            'dataLabels' => ['enabled' => false],
+            'legend' => ['position' => 'top'],
+        ];
+    }
+
+    /** Multi-line: bookings and reservations made on the website against by the cashier. */
+    public function sourceOptions(): array
+    {
+        $series = [];
+
+        foreach ($this->charts['sources'] as $name => $data) {
+            $series[] = ['name' => $name, 'data' => $data];
+        }
+
+        return [
+            'chart' => ['type' => 'line'],
+            'series' => $series,
+            'stroke' => ['width' => 3, 'curve' => 'smooth'],
+            'xaxis' => ['categories' => $this->charts['labels'], 'tickAmount' => min(12, count($this->charts['labels']))],
+            'yaxis' => ['min' => 0, 'forceNiceScale' => true],
+            'yFormats' => ['int'],
+            'tooltipFormats' => ['int'],
+            'colors' => ['#174f3b', '#b7791f', '#2c7a8b', '#b93b3b'],
+            'markers' => ['size' => 4],
+            'legend' => ['position' => 'top'],
+        ];
+    }
+
+    /** Heatmap: rooms and cottages by the day of the week a stay starts. */
+    public function demandOptions(): array
+    {
+        $demand = $this->charts['demand'];
+        $series = [];
+
+        // Heatmap rows are drawn bottom to top, so Cottage is listed last to sit on top.
+        foreach (['Room', 'Cottage'] as $type) {
+            $series[] = [
+                'name' => $type,
+                'data' => array_map(
+                    fn (string $day, int $count): array => ['x' => $day, 'y' => $count],
+                    $demand['days'],
+                    $demand[$type],
+                ),
+            ];
+        }
+
+        return [
+            'chart' => ['type' => 'heatmap'],
+            'series' => $series,
+            'plotOptions' => ['heatmap' => ['radius' => 6, 'enableShades' => true, 'shadeIntensity' => 0.6]],
+            'colors' => ['#174f3b'],
+            'dataLabels' => ['enabled' => true],
+            'legend' => ['show' => false],
+        ];
+    }
+
     #[Computed]
     public function overview(): array
     {
@@ -99,6 +231,75 @@ new #[Layout('layouts.app')] #[Title('Admin Dashboard - Olaer Spring Resort')] c
             description="Master-data count only; warehouse stock is outside this system."
             tone="secondary"
         />
+    </div>
+
+    @assets
+        <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+    @endassets
+
+    <div class="space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h2 class="text-lg font-semibold">Performance analytics</h2>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">Bookings, occupancy, revenue and demand for the chosen period.</p>
+            </div>
+
+            <div class="w-full sm:w-64">
+                <flux:select wire:model.live="range" aria-label="Period">
+                    @foreach (\App\Services\AdminChartsService::RANGES as $value => $label)
+                        <option value="{{ $value }}">{{ $label }}</option>
+                    @endforeach
+                </flux:select>
+            </div>
+        </div>
+
+        <div class="grid gap-6 xl:grid-cols-3">
+            <flux:card>
+                <div class="mb-3">
+                    <h3 class="font-semibold">Booking status</h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">Bookings made in the period, by where they stand now.</p>
+                </div>
+                <x-admin-chart id="status" :options="$this->statusOptions()" :height="300" />
+            </flux:card>
+
+            <flux:card class="xl:col-span-2">
+                <div class="mb-3">
+                    <h3 class="font-semibold">Bookings, occupancy rate and average daily rate</h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                        Bars: bookings made (cancelled left out). Lines: share of facilities occupied, and revenue per occupied facility-day.
+                    </p>
+                </div>
+                <x-admin-chart id="trend" :options="$this->trendOptions()" :height="300" />
+            </flux:card>
+
+            <flux:card class="xl:col-span-2">
+                <div class="mb-3">
+                    <h3 class="font-semibold">Revenue by category</h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                        Verified payments by what they paid for. Booking payments are split into facility, amenity and fines; refunds reduce Reservation.
+                    </p>
+                </div>
+                <x-admin-chart id="revenue" :options="$this->revenueOptions()" :height="320" />
+            </flux:card>
+
+            <flux:card>
+                <div class="mb-3">
+                    <h3 class="font-semibold">Room and cottage demand</h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">Bookings and reservations by the day of the week the stay starts.</p>
+                </div>
+                <x-admin-chart id="demand" :options="$this->demandOptions()" :height="320" />
+            </flux:card>
+
+            <flux:card class="xl:col-span-3">
+                <div class="mb-3">
+                    <h3 class="font-semibold">Website and cashier bookings and reservations</h3>
+                    <p class="text-sm text-zinc-500 dark:text-zinc-400">
+                        Made by guests on the website against made by the cashier. Bookings converted from a reservation are counted once, as the reservation.
+                    </p>
+                </div>
+                <x-admin-chart id="sources" :options="$this->sourceOptions()" :height="320" />
+            </flux:card>
+        </div>
     </div>
 
     <div class="grid gap-6 xl:grid-cols-3">
