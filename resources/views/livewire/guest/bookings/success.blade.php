@@ -42,7 +42,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
 
     <div class="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         @if ($booking)
-            @php($detail = $booking->details->first())
+            @php($details = $booking->details)
             @php($payment = $booking->payments->first())
 
             <div class="overflow-hidden rounded-3xl bg-white text-zinc-950 shadow-2xl shadow-black/20 dark:bg-zinc-900 dark:text-white">
@@ -76,18 +76,30 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                                 <dd class="mt-1 font-semibold">{{ $booking->guest?->full_name }}</dd>
                                 <dd class="mt-1 text-zinc-600 dark:text-zinc-300">{{ $booking->guest?->email }}</dd>
                             </div>
-                            <div class="bg-white p-5 dark:bg-zinc-900">
-                                <dt class="text-zinc-500 dark:text-zinc-400">Facility</dt>
-                                <dd class="mt-1 font-semibold">{{ $detail?->facility?->facility_name }}</dd>
-                                <dd class="mt-1 text-zinc-600 dark:text-zinc-300">
-                                    {{ $detail?->facility?->facilityType?->facility_type }} · {{ $detail?->rate_type }}
-                                </dd>
-                            </div>
-                            <div class="bg-white p-5 dark:bg-zinc-900">
-                                <dt class="text-zinc-500 dark:text-zinc-400">Schedule</dt>
-                                <dd class="mt-1 font-semibold">{{ optional($detail?->check_in_date)->format('M d, Y') }}</dd>
-                                <dd class="mt-1 text-zinc-600 dark:text-zinc-300">
-                                    Until {{ optional($detail?->check_out_date)->format('M d, Y') }}
+                            <div class="bg-white p-5 dark:bg-zinc-900 sm:col-span-2">
+                                <dt class="text-zinc-500 dark:text-zinc-400">
+                                    {{ \Illuminate\Support\Str::plural('Facility', $details->count()) }}
+                                    @if ($details->count() > 1)
+                                        <span class="ml-1 text-xs">({{ $details->count() }} reserved)</span>
+                                    @endif
+                                </dt>
+                                <dd class="mt-2 divide-y divide-zinc-100 dark:divide-zinc-800">
+                                    @forelse ($details as $detail)
+                                        <div class="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-2 sm:gap-6" wire:key="facility-detail-{{ $loop->index }}">
+                                            <div>
+                                                <p class="font-semibold">{{ $detail->facility?->facility_name ?? 'Facility' }}</p>
+                                                <p class="text-zinc-600 dark:text-zinc-300">
+                                                    {{ $detail->facility?->facilityType?->facility_type }} · {{ $detail->rate_type }}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p class="font-semibold">{{ optional($detail->check_in_date)->format('M d, Y') }}</p>
+                                                <p class="text-zinc-600 dark:text-zinc-300">Until {{ optional($detail->check_out_date)->format('M d, Y') }}</p>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <p class="text-zinc-600 dark:text-zinc-300">No facility details available.</p>
+                                    @endforelse
                                 </dd>
                             </div>
                             <div class="bg-white p-5 dark:bg-zinc-900">
