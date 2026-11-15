@@ -51,7 +51,14 @@ new class extends Component
     ): void {
         $this->counts = match ($this->roleName) {
             'Admin' => $realtimeDashboard->admin() + [
-                'pending_refunds' => RefundRequest::query()->where('status', 'Pending')->count(),
+                'pending_refunds' => RefundRequest::query()
+                    ->where(fn ($query) => $query
+                        ->where('status', 'Pending')
+                        ->orWhere(fn ($gcash) => $gcash
+                            ->where('status', 'Approved')
+                            ->whereNull('refunded_at')
+                            ->whereNotNull('gcash_handoff_at')))
+                    ->count(),
             ],
             'Cashier' => $realtimeDashboard->cashier() + $cashierAlerts->counts(),
             'Maintenance Staff' => $realtimeDashboard->maintenance(),

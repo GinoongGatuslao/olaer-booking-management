@@ -3,6 +3,7 @@
 use App\Models\Guest;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
+use App\Services\GcashProofStorageService;
 use App\Services\RefundRequestWorkflowService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -10,10 +11,12 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] class extends Component
 {
+    use WithFileUploads;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -29,6 +32,11 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     public ?int $reviewRequestId = null;
     public string $approvedAmount = '';
     public string $adminNote = '';
+
+    // Completing a GCash refund the cashier sent back to the admin
+    public string $completeAmount = '';
+    public string $completeReference = '';
+    public $completeProof = null;
 
     public function with(): array
     {
@@ -47,6 +55,13 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             ->when(
                 in_array($this->statusFilter, ['Pending', 'Approved', 'Rejected'], true),
                 fn ($query) => $query->where('status', $this->statusFilter),
+            )
+            ->when(
+                $this->statusFilter === 'GcashToSend',
+                fn ($query) => $query
+                    ->where('status', 'Approved')
+                    ->whereNull('refunded_at')
+                    ->whereNotNull('gcash_handoff_at'),
             )
             ->when($search !== '', function ($query) use ($search): void {
                 $query->whereHas('reservation', function ($reservation) use ($search): void {
@@ -77,6 +92,9 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 'reservation.refundRequests',
                 'requestedBy',
                 'reviewedBy',
+                'gcashHandoffBy',
+                'refundModeOfPayment',
+                'refundedBy',
             ])
             ->find($this->reviewRequestId);
     }
@@ -131,6 +149,11 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         $this->reviewRequestId = (int) $request->refund_request_id;
         $this->approvedAmount = number_format((float) $request->requested_amount, 2, '.', '');
         $this->adminNote = '';
+        $this->completeAmount = $request->gcash_handoff_amount !== null
+            ? number_format((float) $request->gcash_handoff_amount, 2, '.', '')
+            : number_format((float) $request->approved_amount, 2, '.', '');
+        $this->completeReference = '';
+        $this->completeProof = null;
         $this->resetValidation();
         $this->showReviewModal = true;
     }
@@ -141,6 +164,9 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         $this->reviewRequestId = null;
         $this->approvedAmount = '';
         $this->adminNote = '';
+        $this->completeAmount = '';
+        $this->completeReference = '';
+        $this->completeProof = null;
         $this->resetValidation();
     }
 
@@ -159,6 +185,74 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     public function reject(RefundRequestWorkflowService $refunds): void
     {
         $this->respond($refunds, 'reject');
+    }
+
+    public function refundProofUrl(RefundRequest $refund): ?string
+    {
+        if (blank($refund->refund_proof_path) || ! \Illuminate\Support\Facades\Route::has('refunds.proof')) {
+            return null;
+        }
+
+        return route('refunds.proof', $refund);
+    }
+
+    /** Admin sent the GCash money: record the reference number and proof to complete the refund. */
+    public function completeGcashRefund(
+        RefundRequestWorkflowService $refunds,
+        GcashProofStorageService $proofStorage,
+    ): void {
+        $validated = $this->validate([
+            'reviewRequestId' => ['required', 'exists:tbl_refund_request,refund_request_id'],
+            'completeAmount' => ['required', 'numeric', 'min:0.01'],
+            'completeReference' => ['required', 'string', 'max:50'],
+            'completeProof' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ], [
+            'reviewRequestId.required' => 'This refund request is no longer available. Refresh the list.',
+            'reviewRequestId.exists' => 'This refund request is no longer available. Refresh the list.',
+            'completeAmount.required' => 'Enter the amount you sent through GCash.',
+            'completeAmount.numeric' => 'The amount must be a number.',
+            'completeAmount.min' => 'The amount must be greater than zero.',
+            'completeReference.required' => 'Enter the GCash reference number.',
+            'completeReference.max' => 'The reference number must not exceed :max characters.',
+            'completeProof.required' => 'Upload the GCash proof image.',
+            'completeProof.image' => 'The proof must be an image.',
+            'completeProof.mimes' => 'The proof must be a JPG, PNG or WebP image.',
+            'completeProof.max' => 'The proof image must be 5 MB or smaller.',
+        ]);
+
+        $proofPath = null;
+
+        try {
+            $proofPath = $proofStorage->store($this->completeProof);
+
+            $refunds->completeGcashRefund(
+                (int) $validated['reviewRequestId'],
+                (string) $validated['completeAmount'],
+                (string) $validated['completeReference'],
+                $proofPath,
+                (int) Auth::id(),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
+            $this->addError('reviewRequest', $exception->getMessage());
+
+            return;
+        } catch (\Throwable $exception) {
+            if ($proofPath !== null) {
+                $proofStorage->deletePrivate($proofPath);
+            }
+
+            report($exception);
+            $this->addError('reviewRequest', 'The refund could not be completed. Please refresh and try again.');
+
+            return;
+        }
+
+        $this->closeReview();
+        session()->flash('success', 'GCash refund completed. The cashier can now see the reference number and proof.');
     }
 
     private function respond(RefundRequestWorkflowService $refunds, string $decision): void
@@ -212,7 +306,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     <x-staff-page-header
         eyebrow="Admin"
         title="Refund Requests"
-        description="Cashiers send refund requests for cancelled reservations. Approve to set the most they may refund, or reject, and leave a note either way."
+        description="Cashiers send refund requests for cancelled reservations. Approve to set the most they may refund, or reject, and leave a note either way. GCash refunds come back here for you to send and record."
     >
         <x-slot:actions>
             <flux:button :href="route('admin.dashboard')" wire:navigate variant="ghost">Back to dashboard</flux:button>
@@ -236,6 +330,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 <option value="Pending">Pending</option>
                 <option value="Approved">Approved</option>
                 <option value="Rejected">Rejected</option>
+                <option value="GcashToSend">GCash to send</option>
             </flux:select>
 
             <flux:select wire:model.live="perPage" label="Rows">
@@ -284,13 +379,15 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                                 <flux:badge size="sm" color="{{ match ((string) $refund->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $refund->status }}</flux:badge>
                                 @if ($refund->refunded_at)
                                     <flux:badge size="sm" color="zinc">Given to guest</flux:badge>
+                                @elseif ($refund->isAwaitingAdminGcash())
+                                    <flux:badge size="sm" color="amber">GCash: needs you</flux:badge>
                                 @elseif ($refund->status === 'Approved')
                                     <flux:badge size="sm" color="amber">Waiting for cashier</flux:badge>
                                 @endif
                             </td>
                             <td class="px-4 py-4 text-right">
-                                <flux:button size="sm" variant="{{ $refund->status === 'Pending' ? 'primary' : 'ghost' }}" wire:click="openReview({{ $refund->refund_request_id }})">
-                                    {{ $refund->status === 'Pending' ? 'Review' : 'View' }}
+                                <flux:button size="sm" variant="{{ $refund->status === 'Pending' || $refund->isAwaitingAdminGcash() ? 'primary' : 'ghost' }}" wire:click="openReview({{ $refund->refund_request_id }})">
+                                    {{ $refund->status === 'Pending' ? 'Review' : ($refund->isAwaitingAdminGcash() ? 'Complete' : 'View') }}
                                 </flux:button>
                             </td>
                         </tr>
@@ -314,6 +411,8 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 $reservation = $selected->reservation;
                 $paid = $this->amountPaid($reservation);
                 $isPending = (string) $selected->status === 'Pending';
+                $awaitingGcash = $selected->isAwaitingAdminGcash();
+                $proofLink = $this->refundProofUrl($selected);
                 $others = $reservation->refundRequests->where('refund_request_id', '!=', $selected->refund_request_id);
             @endphp
 
@@ -422,8 +521,88 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                         <div class="mt-0.5">{{ $selected->admin_note }}</div>
                     </div>
 
-                    <div class="flex justify-end">
+                    @if ($selected->gcash_handoff_at)
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                            <div class="text-xs font-semibold uppercase tracking-wide">Sent back by the cashier for GCash</div>
+                            <div class="mt-1">
+                                ₱{{ number_format((float) $selected->gcash_handoff_amount, 2) }} · {{ $selected->gcash_handoff_at?->format('M d, Y h:i A') }}
+                                @if ($selected->gcashHandoffBy) by {{ $selected->gcashHandoffBy->full_name }} @endif
+                            </div>
+                            @if ($selected->gcash_handoff_note)
+                                <div class="mt-2 text-xs">Cashier's note</div>
+                                <div class="mt-0.5">{{ $selected->gcash_handoff_note }}</div>
+                            @endif
+                        </div>
+                    @endif
+
+                    @if ($awaitingGcash)
+                        <div class="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+                            <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Complete the GCash refund</div>
+                            <flux:text class="text-xs">Send the money through GCash first, then enter the reference number and upload the proof. The cashier will see both.</flux:text>
+
+                            <flux:field class="relative">
+                                <flux:label>Amount sent <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model="completeAmount" type="number" step="0.01" min="0.01" max="{{ $selected->approved_amount }}" :invalid="$errors->has('completeAmount')" />
+                                <flux:text class="text-xs">Up to ₱{{ number_format((float) $selected->approved_amount, 2) }} (the amount you approved).</flux:text>
+                                @error('completeAmount')
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </flux:field>
+
+                            <flux:field class="relative">
+                                <flux:label>GCash reference number <span class="text-red-500">*</span></flux:label>
+                                <flux:input wire:model="completeReference" placeholder="Reference number of the GCash refund" :invalid="$errors->has('completeReference')" />
+                                @error('completeReference')
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </flux:field>
+
+                            <flux:field class="relative">
+                                <flux:label>GCash proof image <span class="text-red-500">*</span></flux:label>
+                                <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    wire:model="completeProof"
+                                    class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
+                                />
+                                <flux:text class="text-xs">Screenshot of the GCash refund. JPG, PNG or WebP, up to 5 MB.</flux:text>
+                                <p wire:loading wire:target="completeProof" class="text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
+                                @error('completeProof')
+                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </flux:field>
+
+                            @if ($completeProof && ! $errors->has('completeProof'))
+                                @php($proofPreview = rescue(fn () => $completeProof->temporaryUrl(), null, false))
+                                @if ($proofPreview)
+                                    <img src="{{ $proofPreview }}" alt="GCash proof preview" class="max-h-56 w-full rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
+                                @endif
+                            @endif
+                        </div>
+                    @elseif ($selected->refunded_at)
+                        <div class="space-y-2 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-900 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-100">
+                            <div class="text-xs font-semibold uppercase tracking-wide">Refund given</div>
+                            <div>
+                                ₱{{ number_format((float) $selected->refunded_amount, 2) }} via {{ $selected->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}
+                                · {{ $selected->refunded_at?->format('M d, Y h:i A') }}
+                                @if ($selected->refundedBy) by {{ $selected->refundedBy->full_name }} @endif
+                            </div>
+                            @if ($selected->refund_reference_number)
+                                <div>GCash reference: <span class="font-medium">{{ $selected->refund_reference_number }}</span></div>
+                            @endif
+                            @if ($proofLink)
+                                <a href="{{ $proofLink }}" target="_blank" rel="noopener" class="block w-fit">
+                                    <img src="{{ $proofLink }}" alt="GCash refund proof" loading="lazy" class="max-h-56 rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
+                                </a>
+                            @endif
+                        </div>
+                    @endif
+
+                    <div class="flex justify-end gap-3">
                         <flux:button type="button" variant="ghost" wire:click="closeReview">Close</flux:button>
+                        @if ($awaitingGcash)
+                            <flux:button type="button" variant="primary" wire:click="completeGcashRefund" wire:loading.attr="disabled" wire:target="completeGcashRefund,completeProof">Complete refund</flux:button>
+                        @endif
                     </div>
                 @endif
             </div>

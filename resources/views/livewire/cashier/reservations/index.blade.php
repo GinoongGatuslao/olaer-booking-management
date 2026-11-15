@@ -8,7 +8,6 @@ use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\FacilityProduct;
 use App\Services\DecimalMoneyService;
-use App\Services\GcashProofStorageService;
 use App\Services\FacilityAvailabilityService;
 use App\Services\RefundRequestWorkflowService;
 use App\Services\StaffReservationCancellationService;
@@ -23,7 +22,6 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
-use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Resort')] class extends Component
@@ -56,7 +54,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         return $value === null || $value === '' || $value === [] ? null : $message;
     }
-    use WithFileUploads;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -96,8 +93,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public ?int $releaseRequestId = null;
     public string $releaseAmount = '';
     public string $releaseModeId = '';
-    public string $releaseReference = '';
-    public $releaseProof = null;
+    public string $releaseNote = '';
 
     public ?int $detailActionId = null;
     public ?string $detailAction = null;
@@ -133,6 +129,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 'refundRequests.reviewedBy',
                 'refundRequests.refundModeOfPayment',
                 'refundRequests.refundedBy',
+                'refundRequests.gcashHandoffBy',
             ]);
 
         if ($this->statusFilter !== 'All') {
@@ -341,8 +338,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->releaseModeId = (string) (ModeOfPayment::query()
             ->whereRaw('LOWER(mode_of_payment) = ?', ['cash'])
             ->value('mode_of_payment_id') ?? '');
-        $this->releaseReference = '';
-        $this->releaseProof = null;
+        $this->releaseNote = '';
         $this->resetValidation();
         $this->showReleaseModal = true;
     }
@@ -353,8 +349,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->releaseRequestId = null;
         $this->releaseAmount = '';
         $this->releaseModeId = '';
-        $this->releaseReference = '';
-        $this->releaseProof = null;
+        $this->releaseNote = '';
         $this->resetValidation();
     }
 
@@ -374,68 +369,61 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public function updatedReleaseModeId(): void
     {
-        // Reference number and proof only belong to a GCash refund.
+        // The note only belongs to a GCash refund (it goes to the admin).
         if (! $this->isGcashRelease()) {
-            $this->releaseReference = '';
-            $this->releaseProof = null;
+            $this->releaseNote = '';
         }
 
-        $this->resetValidation(['releaseReference', 'releaseProof']);
+        $this->resetValidation(['releaseNote']);
     }
 
-    public function releaseRefund(
-        RefundRequestWorkflowService $refunds,
-        GcashProofStorageService $proofStorage,
-    ): void {
+    /**
+     * Cash (or any non-GCash mode): the cashier gives the money and it is recorded now.
+     * GCash: the refund goes back to the admin with the cashier's note; the admin sends
+     * the money and records the reference number and proof.
+     */
+    public function releaseRefund(RefundRequestWorkflowService $refunds): void
+    {
         $isGcash = $this->isGcashRelease();
 
         $validated = $this->validate([
             'releaseRequestId' => ['required', 'integer'],
             'releaseAmount' => ['required', 'numeric', 'min:0.01'],
             'releaseModeId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
-            'releaseReference' => [$isGcash ? 'required' : 'nullable', 'string', 'max:50'],
-            'releaseProof' => [$isGcash ? 'required' : 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'releaseNote' => ['nullable', 'string', 'max:1000'],
         ], [
             'releaseRequestId.required' => 'This refund is no longer available. Refresh the list.',
-            'releaseAmount.required' => 'Enter the amount given to the guest.',
+            'releaseAmount.required' => $isGcash ? 'Enter the amount to refund through GCash.' : 'Enter the amount given to the guest.',
             'releaseAmount.numeric' => 'The amount must be a number.',
             'releaseAmount.min' => 'The amount must be greater than zero.',
             'releaseModeId.required' => 'Choose how the refund is given.',
             'releaseModeId.exists' => 'Choose a valid mode of payment.',
-            'releaseReference.max' => 'The reference number must not exceed :max characters.',
-            'releaseProof.image' => 'The proof must be an image.',
-            'releaseProof.mimes' => 'The proof must be a JPG, PNG or WebP image.',
-            'releaseProof.max' => 'The proof image must be 5 MB or smaller.',
+            'releaseNote.max' => 'The note cannot be longer than :max characters.',
         ]);
 
-        $proofPath = null;
-
         try {
-            if ($isGcash && $this->releaseProof !== null) {
-                $proofPath = $proofStorage->store($this->releaseProof);
+            if ($isGcash) {
+                $refunds->sendGcashToAdmin(
+                    (int) $validated['releaseRequestId'],
+                    (string) $validated['releaseAmount'],
+                    $validated['releaseNote'] ?? null,
+                    (int) Auth::id(),
+                );
+            } else {
+                $refunds->release(
+                    (int) $validated['releaseRequestId'],
+                    (int) $validated['releaseModeId'],
+                    (string) $validated['releaseAmount'],
+                    null,
+                    null,
+                    (int) Auth::id(),
+                );
             }
-
-            $refunds->release(
-                (int) $validated['releaseRequestId'],
-                (int) $validated['releaseModeId'],
-                (string) $validated['releaseAmount'],
-                $isGcash ? (string) ($validated['releaseReference'] ?? '') : null,
-                $proofPath,
-                (int) Auth::id(),
-            );
         } catch (\InvalidArgumentException $exception) {
-            if ($proofPath !== null) {
-                $proofStorage->deletePrivate($proofPath);
-            }
-
             $this->addError('releaseRefund', $exception->getMessage());
 
             return;
         } catch (\Throwable $exception) {
-            if ($proofPath !== null) {
-                $proofStorage->deletePrivate($proofPath);
-            }
-
             report($exception);
             $this->addError('releaseRefund', 'The refund could not be recorded. Please refresh and try again.');
 
@@ -443,7 +431,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         }
 
         $this->closeRefundRelease();
-        session()->flash('success', 'Refund recorded. It now reduces revenue.');
+        session()->flash(
+            'success',
+            $isGcash
+                ? 'GCash refund sent to the admin. They will send it and record the reference number and proof.'
+                : 'Refund recorded. It now reduces revenue.',
+        );
     }
 
     /** @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?\App\Models\RefundRequest} */
@@ -1043,6 +1036,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                         <flux:button size="sm" variant="primary" icon="banknotes" type="button" wire:click="beginRefundRelease({{ $refund['latest']->refund_request_id }})">
                                             Give refund
                                         </flux:button>
+                                    @elseif ($refund['latest'] && $refund['latest']->isAwaitingAdminGcash())
+                                        <flux:badge size="sm" color="amber">GCash refund with admin</flux:badge>
                                     @elseif ($refund['latest'] && $refund['latest']->isGivenToGuest())
                                         <flux:badge size="sm" color="green">Refunded</flux:badge>
                                     @elseif ($refund['latest'])
@@ -1163,7 +1158,21 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                             Give refund to guest
                                                         </flux:button>
                                                     </div>
+                                                @elseif ($request->isAwaitingAdminGcash())
+                                                    <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                                                        <span class="font-medium">Sent to admin for GCash</span>
+                                                        · ₱{{ number_format((float) $request->gcash_handoff_amount, 2) }}
+                                                        · {{ $request->gcash_handoff_at?->format('M d, Y h:i A') }}
+                                                        @if ($request->gcashHandoffBy)
+                                                            by {{ $request->gcashHandoffBy->full_name }}
+                                                        @endif
+                                                        <div class="text-xs">Waiting for the admin to send the money and add the reference number and proof.</div>
+                                                        @if ($request->gcash_handoff_note)
+                                                            <div class="mt-1 text-xs">Your note: {{ $request->gcash_handoff_note }}</div>
+                                                        @endif
+                                                    </div>
                                                 @elseif ($request->isGivenToGuest())
+                                                    @php($proofLink = $this->refundProofUrl($request))
                                                     <div class="mt-1 text-sm text-brand-text dark:text-zinc-200">
                                                         <span class="font-medium">Refunded ₱{{ number_format((float) $request->refunded_amount, 2) }}</span>
                                                         via {{ $request->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}
@@ -1174,10 +1183,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                         @if ($request->refund_reference_number)
                                                             · Ref {{ $request->refund_reference_number }}
                                                         @endif
-                                                        @if ($proofLink = $this->refundProofUrl($request))
+                                                        @if ($proofLink)
                                                             · <a href="{{ $proofLink }}" target="_blank" rel="noopener" class="font-medium underline">View proof</a>
                                                         @endif
                                                     </div>
+                                                    @if ($proofLink)
+                                                        <a href="{{ $proofLink }}" target="_blank" rel="noopener" class="mt-2 block w-fit">
+                                                            <img src="{{ $proofLink }}" alt="GCash refund proof" loading="lazy" class="max-h-40 rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
+                                                        </a>
+                                                    @endif
+                                                    @if ($request->gcash_handoff_note)
+                                                        <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">Your note to the admin: {{ $request->gcash_handoff_note }}</div>
+                                                    @endif
                                                 @endif
                                                 @if ($request->request_note)
                                                     <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">Your note: {{ $request->request_note }}</div>
@@ -1392,7 +1409,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <div class="pe-8">
                     <flux:heading size="lg">Give refund to guest</flux:heading>
                     <flux:text class="mt-1">
-                        Record how the approved refund is given back. It reduces revenue from today.
+                        @if ($this->isGcashRelease())
+                            GCash refunds are sent by the admin. Add a note and send it back; the admin will send the money and add the reference number and proof.
+                        @else
+                            Record how the approved refund is given back. It reduces revenue from today.
+                        @endif
                     </flux:text>
                 </div>
 
@@ -1410,7 +1431,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 </div>
 
                 <flux:field class="relative">
-                    <flux:label>Amount given <span class="text-red-500">*</span></flux:label>
+                    <flux:label>{{ $this->isGcashRelease() ? 'Amount to refund through GCash' : 'Amount given' }} <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="releaseAmount" type="number" step="0.01" min="0.01" max="{{ $releaseRequest->approved_amount }}" :invalid="$errors->has('releaseAmount')" />
                     <flux:text class="text-xs">Up to ₱{{ number_format((float) $releaseRequest->approved_amount, 2) }}.</flux:text>
                     @if ($msg = $this->visibleError('releaseAmount'))
@@ -1432,39 +1453,17 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
                 @if ($this->isGcashRelease())
                     <flux:field class="relative">
-                        <flux:label>GCash reference number <span class="text-red-500">*</span></flux:label>
-                        <flux:input wire:model="releaseReference" placeholder="Reference number of the GCash refund" :invalid="$errors->has('releaseReference')" />
-                        @if ($msg = $this->visibleError('releaseReference'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
+                        <flux:label>Note to admin</flux:label>
+                        <flux:textarea wire:model="releaseNote" rows="3" placeholder="Optional. For example the guest's GCash number or name." :invalid="$errors->has('releaseNote')" />
+                        @error('releaseNote')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
                     </flux:field>
-
-                    <flux:field class="relative">
-                        <flux:label>GCash proof image <span class="text-red-500">*</span></flux:label>
-                        <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            wire:model="releaseProof"
-                            class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
-                        />
-                        <flux:text class="text-xs">Screenshot of the GCash refund. JPG, PNG or WebP, up to 5 MB.</flux:text>
-                        <p wire:loading wire:target="releaseProof" class="text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
-                        @if ($msg = $this->visibleError('releaseProof'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
-                    </flux:field>
-
-                    @if ($releaseProof && ! $errors->has('releaseProof'))
-                        @php($proofPreview = rescue(fn () => $releaseProof->temporaryUrl(), null, false))
-                        @if ($proofPreview)
-                            <img src="{{ $proofPreview }}" alt="GCash proof preview" class="max-h-56 w-full rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
-                        @endif
-                    @endif
                 @endif
 
                 <div class="flex justify-end gap-3">
                     <flux:button type="button" variant="ghost" wire:click="closeRefundRelease">Close</flux:button>
-                    <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="releaseRefund,releaseProof">Record refund</flux:button>
+                    <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="releaseRefund">{{ $this->isGcashRelease() ? 'Send to admin' : 'Record refund' }}</flux:button>
                 </div>
             </form>
         @endif

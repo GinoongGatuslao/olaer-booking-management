@@ -183,8 +183,9 @@ class RefundRequestWorkflowService
     }
 
     /**
-     * The cashier gives an approved refund back to the guest and records how.
-     * GCash needs the reference number and a proof image; cash needs neither.
+     * The cashier gives an approved refund back to the guest (cash and any other
+     * non-GCash mode) and records how. GCash refunds go through sendGcashToAdmin()
+     * and completeGcashRefund() instead: the admin sends the money.
      * The refund reduces revenue from the day it is given.
      */
     public function release(
@@ -218,27 +219,13 @@ class RefundRequestWorkflowService
             throw new InvalidArgumentException('Choose how the refund is given to the guest.');
         }
 
-        $isGcash = strtolower(trim((string) $mode->mode_of_payment)) === 'gcash';
-        $referenceNumber = trim((string) $referenceNumber);
-
-        if ($isGcash) {
-            if ($referenceNumber === '') {
-                throw new InvalidArgumentException('Enter the GCash reference number of the refund.');
-            }
-
-            if (mb_strlen($referenceNumber) > 50) {
-                throw new InvalidArgumentException('The GCash reference number must not exceed 50 characters.');
-            }
-
-            if (blank($proofPath)) {
-                throw new InvalidArgumentException('Upload the GCash proof image of the refund.');
-            }
-        } else {
-            $referenceNumber = '';
-            $proofPath = null;
+        if (strtolower(trim((string) $mode->mode_of_payment)) === 'gcash') {
+            throw new InvalidArgumentException(
+                'GCash refunds are sent to the admin, who sends the money and records the reference number and proof.',
+            );
         }
 
-        return DB::transaction(function () use ($refundRequestId, $mode, $isGcash, $referenceNumber, $proofPath, $amount, $cashierUserId): RefundRequest {
+        return DB::transaction(function () use ($refundRequestId, $mode, $amount, $cashierUserId): RefundRequest {
             $request = RefundRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($refundRequestId);
@@ -249,6 +236,10 @@ class RefundRequestWorkflowService
 
             if ($request->refunded_at !== null) {
                 throw new InvalidArgumentException('This refund was already given to the guest.');
+            }
+
+            if ($request->gcash_handoff_at !== null) {
+                throw new InvalidArgumentException('This refund was already sent to the admin as a GCash refund.');
             }
 
             $approved = $this->money->normalize((string) $request->approved_amount);
@@ -266,7 +257,155 @@ class RefundRequestWorkflowService
                 );
             }
 
-            if ($isGcash && RefundRequest::query()
+            $request->update([
+                'refunded_amount' => $given,
+                'refund_mode_of_payment_id' => $mode->mode_of_payment_id,
+                'refund_reference_number' => null,
+                'refund_proof_path' => null,
+                'refunded_at' => Carbon::now(),
+                'refunded_by_user_id' => $cashierUserId,
+            ]);
+
+            return $request->fresh(['reservation', 'refundModeOfPayment', 'refundedBy']);
+        });
+    }
+
+    /**
+     * GCash refund, step 1: the cashier sends an approved refund back to the admin with
+     * an optional note and the amount to send. Nothing is refunded yet, so revenue is
+     * unchanged until the admin completes it.
+     */
+    public function sendGcashToAdmin(
+        int $refundRequestId,
+        ?string $amount,
+        ?string $note,
+        int $cashierUserId,
+    ): RefundRequest {
+        $this->guardRole($cashierUserId, 'Cashier', 'send GCash refunds to the admin');
+        $this->assertColumns(['gcash_handoff_amount', 'gcash_handoff_note', 'gcash_handoff_at', 'gcash_handoff_by_user_id']);
+
+        $note = trim((string) $note);
+
+        if (mb_strlen($note) > 1000) {
+            throw new InvalidArgumentException('The note must not exceed 1000 characters.');
+        }
+
+        if ($amount === null || trim($amount) === '') {
+            throw new InvalidArgumentException('Enter the amount to refund through GCash.');
+        }
+
+        return DB::transaction(function () use ($refundRequestId, $amount, $note, $cashierUserId): RefundRequest {
+            $request = RefundRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($refundRequestId);
+
+            if ((string) $request->status !== RefundRequest::STATUS_APPROVED) {
+                throw new InvalidArgumentException('Only an approved refund can be sent to the admin for GCash.');
+            }
+
+            if ($request->refunded_at !== null) {
+                throw new InvalidArgumentException('This refund was already given to the guest.');
+            }
+
+            if ($request->gcash_handoff_at !== null) {
+                throw new InvalidArgumentException('This refund was already sent to the admin.');
+            }
+
+            $approved = $this->money->normalize((string) $request->approved_amount);
+            $toSend = $this->parseAmount($amount, 'The GCash refund amount');
+
+            if ($this->money->compare($toSend, $approved) > 0) {
+                throw new InvalidArgumentException(
+                    'The refund cannot be more than the amount the admin approved (₱'.number_format((float) $approved, 2).').',
+                );
+            }
+
+            $request->update([
+                'gcash_handoff_amount' => $toSend,
+                'gcash_handoff_note' => $note === '' ? null : $note,
+                'gcash_handoff_at' => Carbon::now(),
+                'gcash_handoff_by_user_id' => $cashierUserId,
+            ]);
+
+            return $request->fresh(['reservation', 'requestedBy', 'gcashHandoffBy']);
+        });
+    }
+
+    /**
+     * GCash refund, step 2: the admin has sent the money and records the GCash reference
+     * number and proof image. This completes the refund; it reduces revenue from today.
+     */
+    public function completeGcashRefund(
+        int $refundRequestId,
+        ?string $amount,
+        ?string $referenceNumber,
+        ?string $proofPath,
+        int $adminUserId,
+    ): RefundRequest {
+        $this->guardRole($adminUserId, 'Admin', 'complete GCash refunds');
+        $this->assertColumns([
+            'refunded_amount',
+            'refund_mode_of_payment_id',
+            'refund_reference_number',
+            'refund_proof_path',
+            'refunded_at',
+            'refunded_by_user_id',
+            'gcash_handoff_at',
+        ]);
+
+        $mode = ModeOfPayment::query()
+            ->whereRaw('LOWER(TRIM(mode_of_payment)) = ?', ['gcash'])
+            ->first();
+
+        if ($mode === null) {
+            throw new InvalidArgumentException('The GCash mode of payment does not exist. Add it before completing GCash refunds.');
+        }
+
+        $referenceNumber = trim((string) $referenceNumber);
+
+        if ($referenceNumber === '') {
+            throw new InvalidArgumentException('Enter the GCash reference number of the refund.');
+        }
+
+        if (mb_strlen($referenceNumber) > 50) {
+            throw new InvalidArgumentException('The GCash reference number must not exceed 50 characters.');
+        }
+
+        if (blank($proofPath)) {
+            throw new InvalidArgumentException('Upload the GCash proof image of the refund.');
+        }
+
+        if ($amount === null || trim($amount) === '') {
+            throw new InvalidArgumentException('Enter the amount you sent through GCash.');
+        }
+
+        return DB::transaction(function () use ($refundRequestId, $mode, $referenceNumber, $proofPath, $amount, $adminUserId): RefundRequest {
+            $request = RefundRequest::query()
+                ->lockForUpdate()
+                ->findOrFail($refundRequestId);
+
+            if ((string) $request->status !== RefundRequest::STATUS_APPROVED) {
+                throw new InvalidArgumentException('Only an approved refund can be completed.');
+            }
+
+            if ($request->refunded_at !== null) {
+                throw new InvalidArgumentException('This refund was already completed.');
+            }
+
+            if ($request->gcash_handoff_at === null) {
+                throw new InvalidArgumentException('The cashier has not sent this refund to you for GCash yet.');
+            }
+
+            $approved = $this->money->normalize((string) $request->approved_amount);
+            $sent = $this->parseAmount($amount, 'The amount sent');
+
+            if ($this->money->compare($sent, $approved) > 0) {
+                throw new InvalidArgumentException(
+                    'The refund cannot be more than the amount approved (₱'.number_format((float) $approved, 2).').',
+                );
+            }
+
+            if (RefundRequest::query()
                 ->where('refund_reference_number', $referenceNumber)
                 ->where('refund_request_id', '!=', $request->refund_request_id)
                 ->exists()) {
@@ -274,16 +413,26 @@ class RefundRequestWorkflowService
             }
 
             $request->update([
-                'refunded_amount' => $given,
+                'refunded_amount' => $sent,
                 'refund_mode_of_payment_id' => $mode->mode_of_payment_id,
-                'refund_reference_number' => $referenceNumber === '' ? null : $referenceNumber,
+                'refund_reference_number' => $referenceNumber,
                 'refund_proof_path' => $proofPath,
                 'refunded_at' => Carbon::now(),
-                'refunded_by_user_id' => $cashierUserId,
+                'refunded_by_user_id' => $adminUserId,
             ]);
 
             return $request->fresh(['reservation', 'refundModeOfPayment', 'refundedBy']);
         });
+    }
+
+    /** @param  list<string>  $columns */
+    private function assertColumns(array $columns): void
+    {
+        if (! Schema::hasColumns('tbl_refund_request', $columns)) {
+            throw new InvalidArgumentException(
+                'Refund recording is not set up yet: the database is missing refund columns. Ask the developer to run "php artisan migrate".',
+            );
+        }
     }
 
     private function parseAmount(string $amount, string $label): string

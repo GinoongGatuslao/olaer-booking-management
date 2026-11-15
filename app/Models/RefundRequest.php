@@ -34,6 +34,10 @@ class RefundRequest extends Model
         'refund_proof_path',
         'refunded_at',
         'refunded_by_user_id',
+        'gcash_handoff_amount',
+        'gcash_handoff_note',
+        'gcash_handoff_at',
+        'gcash_handoff_by_user_id',
     ];
 
     protected function casts(): array
@@ -45,6 +49,8 @@ class RefundRequest extends Model
             'reviewed_at' => 'datetime',
             'refunded_amount' => 'decimal:2',
             'refunded_at' => 'datetime',
+            'gcash_handoff_amount' => 'decimal:2',
+            'gcash_handoff_at' => 'datetime',
         ];
     }
 
@@ -64,10 +70,28 @@ class RefundRequest extends Model
         return $this->refunded_at !== null;
     }
 
-    /** Approved by the admin, waiting for the cashier to give the money back. */
+    /**
+     * Approved by the admin, waiting for the cashier to give the money back.
+     * GCash refunds the cashier already handed to the admin are not the cashier's to give.
+     */
     public function isWaitingForRelease(): bool
     {
-        return (string) $this->status === self::STATUS_APPROVED && $this->refunded_at === null;
+        return (string) $this->status === self::STATUS_APPROVED
+            && $this->refunded_at === null
+            && $this->gcash_handoff_at === null;
+    }
+
+    /** A GCash refund the cashier sent back to the admin, who still has to send it and record the proof. */
+    public function isAwaitingAdminGcash(): bool
+    {
+        return (string) $this->status === self::STATUS_APPROVED
+            && $this->refunded_at === null
+            && $this->gcash_handoff_at !== null;
+    }
+
+    public function gcashHandoffBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'gcash_handoff_by_user_id', 'user_id');
     }
 
     public function refundModeOfPayment(): BelongsTo
