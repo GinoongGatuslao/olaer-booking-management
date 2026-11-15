@@ -18,6 +18,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
 
     use \App\Concerns\HasPhilippineLocations;
 
+    // The guest must read the Booking, Cancellation, and Refund Policy before the email is sent.
+    public bool $showPolicyModal = false;
+    public bool $acceptedPolicy = false;
+
     /**
      * Messages for the error summary. An empty required field is only highlighted
      * on the field itself, so it is left out of the summary.
@@ -52,6 +56,10 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         foreach ($this->getErrorBag()->messages() as $key => $list) {
             $value = data_get($this, $key);
             $blank = $value === null || $value === '' || $value === [];
+            if ($key === 'acceptedPolicy') {
+                continue; // shown inside the policy modal
+            }
+
             $isRequiredField = collect($requiredFields)->contains(
                 fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, $key),
             );
@@ -301,6 +309,26 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
     }
 
+    /** Step 1: check the form, then show the policy. Nothing is sent yet. */
+    public function reviewPolicy(): void
+    {
+        $this->errorToastTick++;
+        $this->validate($this->rules());
+
+        $this->acceptedPolicy = false;
+        $this->resetErrorBag('acceptedPolicy');
+        $this->showPolicyModal = true;
+    }
+
+    public function updatedShowPolicyModal(bool $open): void
+    {
+        if (! $open) {
+            $this->acceptedPolicy = false;
+            $this->resetErrorBag('acceptedPolicy');
+        }
+    }
+
+    /** Step 2: the guest accepted the policy in the modal, so send the confirmation email. */
     public function submit(
         FacilityRequirementService $requirements,
         FacilityAssignmentService $assignments,
@@ -308,7 +336,20 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         GuestSubmissionConfirmationService $confirmations,
     ): void {
         $this->errorToastTick++;
-        $this->validate($this->rules());
+
+        if (! $this->acceptedPolicy) {
+            $this->addError('acceptedPolicy', 'Please confirm that you have read the Booking, Cancellation, and Refund Policy.');
+
+            return;
+        }
+
+        try {
+            $this->validate($this->rules());
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $this->showPolicyModal = false; // let the guest see what needs fixing
+
+            throw $exception;
+        }
 
         $proofPath = null;
 
@@ -364,6 +405,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $proofStorage->deletePrivate($proofPath);
             }
 
+            $this->showPolicyModal = false;
             $this->addError('plan', $exception->getMessage());
         } catch (\Throwable $exception) {
             if ($proofPath !== null) {
@@ -371,6 +413,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             }
 
             report($exception);
+            $this->showPolicyModal = false;
             $this->addError('plan', 'Your request could not be submitted. Please try again or contact the resort.');
         }
     }
@@ -524,7 +567,7 @@ protected function validationAttributes(): array
 
     <x-toast :message="session('success')" fresh />
 
-    <form wire:submit="submit" novalidate class="mt-8 space-y-6">
+    <form wire:submit="reviewPolicy" novalidate class="mt-8 space-y-6">
         <flux:card>
             <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-end">
                 <div>
@@ -801,11 +844,54 @@ protected function validationAttributes(): array
         @endif
 
         <p class="text-sm text-zinc-600 dark:text-zinc-300">
-            We will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).
+            After you review the Booking, Cancellation, and Refund Policy, we will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).
         </p>
 
         <div class="flex justify-end">
-            <flux:button type="submit" variant="primary">{{ $bookingMode ? 'Send confirmation email' : 'Send confirmation email' }}</flux:button>
+            <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="reviewPolicy">Review policy and continue</flux:button>
         </div>
     </form>
+
+    {{-- The confirmation email is only sent from this modal, after the guest ticks the checkbox. --}}
+    <flux:modal wire:model="showPolicyModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[40rem]">
+        <div class="space-y-5">
+            <div class="pe-8">
+                <flux:heading size="lg">Booking, Cancellation, and Refund Policy</flux:heading>
+                <flux:text class="mt-1">Please read this policy. We will email your confirmation link after you accept it.</flux:text>
+            </div>
+
+            <div class="max-h-[45vh] overflow-y-auto rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+                <x-booking-policy-content />
+            </div>
+
+            <div>
+                <label class="flex items-start gap-3 text-sm text-zinc-800 dark:text-zinc-200">
+                    <input
+                        type="checkbox"
+                        wire:model.live="acceptedPolicy"
+                        class="mt-0.5 size-4 shrink-0 rounded border-zinc-300 text-emerald-700 focus:ring-emerald-600 dark:border-zinc-600"
+                    />
+                    <span>I have read the Booking, Cancellation, and Refund Policy of the Olaer Spring Resort <span class="text-red-500">*</span></span>
+                </label>
+                @error('acceptedPolicy')
+                    <p class="mt-2 text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="$set('showPolicyModal', false)">Back</flux:button>
+                <flux:button
+                    type="button"
+                    variant="primary"
+                    wire:click="submit"
+                    wire:loading.attr="disabled"
+                    wire:target="submit"
+                    :disabled="! $acceptedPolicy"
+                >
+                    <span wire:loading.remove wire:target="submit">Send confirmation email</span>
+                    <span wire:loading wire:target="submit">Sending…</span>
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </section>

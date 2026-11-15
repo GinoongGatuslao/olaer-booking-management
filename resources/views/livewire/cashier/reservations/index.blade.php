@@ -870,6 +870,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             <flux:button href="{{ route('cashier.reservations.create') }}" variant="primary" wire:navigate>
                 New reservation
             </flux:button>
+            <flux:modal.trigger name="booking-policy">
+                <flux:button type="button" variant="ghost" icon="document-text">
+                    Booking, Cancellation &amp; Refund Policy
+                </flux:button>
+            </flux:modal.trigger>
             <flux:button
                 :href="route('cashier.dashboard')"
                 wire:navigate
@@ -1395,6 +1400,11 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     @enderror
                 </flux:field>
 
+                <details class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                    <summary class="cursor-pointer font-medium">Booking, Cancellation, and Refund Policy</summary>
+                    <x-booking-policy-content class="mt-3 max-h-64 overflow-y-auto pr-1" />
+                </details>
+
                 <div class="flex justify-end gap-3">
                     <flux:button type="button" variant="ghost" wire:click="closeRefundRequest">Close</flux:button>
                     <flux:button type="submit" variant="primary">Send to admin</flux:button>
@@ -1461,11 +1471,33 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     </flux:field>
                 @endif
 
+                <details class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                    <summary class="cursor-pointer font-medium">Booking, Cancellation, and Refund Policy</summary>
+                    <x-booking-policy-content class="mt-3 max-h-64 overflow-y-auto pr-1" />
+                </details>
+
                 <div class="flex justify-end gap-3">
                     <flux:button type="button" variant="ghost" wire:click="closeRefundRelease">Close</flux:button>
                     <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="releaseRefund">{{ $this->isGcashRelease() ? 'Send to admin' : 'Record refund' }}</flux:button>
                 </div>
             </form>
         @endif
+    </flux:modal>
+    {{-- Booking, Cancellation, and Refund Policy (the cashier handles refunds here) --}}
+    <flux:modal name="booking-policy" class="w-full max-h-[90vh] overflow-y-auto md:w-[40rem]">
+        <div class="space-y-5">
+            <div class="pe-8">
+                <flux:heading size="lg">Booking, Cancellation, and Refund Policy</flux:heading>
+                <flux:text class="mt-1">Olaer Spring Resort. Use this when handling cancellations and refund requests.</flux:text>
+            </div>
+
+            <x-booking-policy-content />
+
+            <div class="flex justify-end">
+                <flux:modal.close>
+                    <flux:button type="button" variant="ghost">Close</flux:button>
+                </flux:modal.close>
+            </div>
+        </div>
     </flux:modal>
 </div>
