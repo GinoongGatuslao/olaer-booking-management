@@ -105,8 +105,8 @@ new class extends Component
             </flux:sidebar.group>
         @elseif ($roleName === 'Cashier')
             <flux:sidebar.item icon="home" :href="route('cashier.dashboard')" :current="request()->routeIs('cashier.dashboard')" wire:navigate>Dashboard</flux:sidebar.item>
-            <flux:sidebar.item :href="route('cashier.notifications.index')" :current="request()->routeIs('cashier.notifications.*')" :badge="$this->cashierWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
-            <flux:sidebar.item :href="route('cashier.action-center')" :current="request()->routeIs('cashier.action-center')" :badge="$this->cashierWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
+            <flux:sidebar.item icon="bell" :href="route('cashier.notifications.index')" :current="request()->routeIs('cashier.notifications.*')" :badge="$this->cashierWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
+            <flux:sidebar.item icon="bolt" :href="route('cashier.action-center')" :current="request()->routeIs('cashier.action-center')" :badge="$this->cashierWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
             <flux:sidebar.item icon="ticket" :href="route('cashier.entrance-slips.index')" :current="request()->routeIs('cashier.entrance-slips.*')" wire:navigate>Entrance Slip</flux:sidebar.item>
 
             <flux:sidebar.group expandable icon="calendar-days" heading="Reservation" :expanded="request()->routeIs('cashier.reservations.*', 'cashier.reservation-conversions.*')" class="grid">

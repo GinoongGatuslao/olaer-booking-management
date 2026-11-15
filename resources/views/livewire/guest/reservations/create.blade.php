@@ -281,7 +281,10 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                             <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                         @endif
                     </flux:field>
-                    <flux:input wire:model="middle_name" label="Middle name" />
+                    <flux:field class="relative">
+                        <flux:label>Middle name</flux:label>
+                        <flux:input wire:model="middle_name" />
+                    </flux:field>
                     <flux:field class="relative">
                         <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model="last_name" :invalid="$errors->has('last_name')" />
@@ -311,7 +314,10 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                     <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
                     <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
                     <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
-                    <flux:input wire:model="purok" label="Purok/Street" />
+                    <flux:field class="relative">
+                        <flux:label>Purok/Street</flux:label>
+                        <flux:input wire:model="purok" />
+                    </flux:field>
                 </div>
             </div>
 
