@@ -23,8 +23,8 @@
         <h3 class="font-semibold text-zinc-900 dark:text-white">3. Cancellations and Rescheduling</h3>
         <ul class="list-disc space-y-2 pl-5">
             <li><strong>3.1 Advance Cancellations (30 Days or More):</strong> Cancellations submitted at least thirty (30) days prior to the scheduled check-in date are eligible for a full refund (less any applicable payment processing fees), subject to management verification.</li>
-            <li><strong>3.2 Mid-Term Cancellations (8 to 29 Days Prior):</strong> Cancellations made between 8 and 29 days before the scheduled date are non-refundable, but guests may request a rescheduling at no extra fee.</li>
-            <li><strong>3.3 Short-Notice Cancellations (7 Days or Less):</strong> Cancellations made within seven (7) days of the reservation date are strictly non-refundable. Rescheduling requests within this window are not guaranteed and will only be considered on a case-by-case basis for valid emergencies.</li>
+            <li><strong>3.2 Mid-Term Cancellations (8 to 29 Days Prior):</strong> Cancellations made between 8 and 29 days before the scheduled date are refundable but not a full refund, but guests can request a rescheduling with no extra fees.</li>
+            <li><strong>3.3 Short-Notice Cancellations (7 Days or Less):</strong> Cancellations made within seven (7) days of the reservation date are strictly non-refundable unless force majeure conditions applies, but guests can request a rescheduling with no extra fees. </li>
             <li><strong>3.4 Rescheduling Terms:</strong> All date modifications must be requested prior to the original check-in date and are subject to room or facility availability and prevailing rate adjustments.</li>
         </ul>
     </section>
