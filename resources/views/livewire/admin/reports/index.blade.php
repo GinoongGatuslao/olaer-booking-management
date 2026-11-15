@@ -469,7 +469,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
 
     @if (! $printAll)
         <flux:card class="print:hidden">
-            <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="compact-fields grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <flux:field class="relative">
                     <flux:label>Report Type <span class="text-red-500">*</span></flux:label>
                     <flux:select wire:model.live="reportType" :invalid="$errors->has('reportType')">
@@ -498,19 +498,16 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                     <flux:field>
                         <flux:label class="flex items-center gap-2">Year <span wire:loading.inline-flex wire:target="year" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
                         <flux:input wire:model.live="year" type="number" min="2000" max="2100" :loading="false" />
-                        <flux:error name="year" />
                     </flux:field>
                 @else
                     <flux:field>
                         <flux:label class="flex items-center gap-2">Start Date <span wire:loading.inline-flex wire:target="startDate" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
                         <flux:input wire:model.live="startDate" type="date" :loading="false" />
-                        <flux:error name="startDate" />
                     </flux:field>
 
                     <flux:field>
                         <flux:label class="flex items-center gap-2">End Date <span wire:loading.inline-flex wire:target="endDate" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
                         <flux:input wire:model.live="endDate" type="date" :loading="false" />
-                        <flux:error name="endDate" />
                     </flux:field>
                 @endif
 
@@ -571,7 +568,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
     @else
         @if (! $printAll)
             <flux:card class="print:hidden">
-                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="compact-fields grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <flux:field class="xl:col-span-2">
                         <flux:label class="flex items-center gap-2">Search generated report <span wire:loading.inline-flex wire:target="reportSearch" class="hidden items-center"><flux:icon.loading class="size-4" /></span></flux:label>
                         <flux:input
@@ -590,16 +587,19 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                         <option value="100">100</option>
                     </flux:select>
 
-                    <div class="flex items-end">
+                    {{-- Same field structure as the inputs beside it (invisible label spacer), so the button
+                         lines up with them whatever space the fields reserve for errors. --}}
+                    <flux:field>
+                        <flux:label class="invisible" aria-hidden="true">Print</flux:label>
                         <flux:button
                             href="{{ $this->printUrl() }}"
                             target="_blank"
                             variant="ghost"
-                            class="w-full"
+                            class="h-11! w-full"
                         >
                             Open Full Print View
                         </flux:button>
-                    </div>
+                    </flux:field>
                 </div>
             </flux:card>
         @endif

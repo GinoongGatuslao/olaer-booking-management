@@ -2,13 +2,11 @@
 
 use App\Models\Facility;
 use App\Models\Guest;
-use App\Models\ModeOfPayment;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use App\Models\FacilityProduct;
 use App\Services\DecimalMoneyService;
-use App\Services\GcashProofStorageService;
 use App\Services\FacilityAvailabilityService;
 use App\Services\RefundRequestWorkflowService;
 use App\Services\StaffReservationCancellationService;
@@ -23,7 +21,6 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
-use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Resort')] class extends Component
@@ -56,7 +53,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
         return $value === null || $value === '' || $value === [] ? null : $message;
     }
-    use WithFileUploads;
     use WithPagination;
 
     #[Url(as: 'q', except: '')]
@@ -91,14 +87,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public string $refundAmount = '';
     public string $refundNote = '';
 
-    // Giving an approved refund back to the guest
-    public bool $showReleaseModal = false;
-    public ?int $releaseRequestId = null;
-    public string $releaseAmount = '';
-    public string $releaseModeId = '';
-    public string $releaseReference = '';
-    public $releaseProof = null;
-
     public ?int $detailActionId = null;
     public ?string $detailAction = null;
     public string $detailCheckInDate = '';
@@ -114,8 +102,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         return [
             'reservations' => $this->reservations(),
             'refundReservation' => $this->refundReservation(),
-            'releaseRequest' => $this->releaseRequest(),
-            'refundModes' => ModeOfPayment::query()->orderBy('mode_of_payment_id')->get(),
         ];
     }
 
@@ -306,17 +292,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         session()->flash('success', 'Reservation cancelled successfully.');
     }
 
-    public function releaseRequest(): ?RefundRequest
-    {
-        if ($this->releaseRequestId === null) {
-            return null;
-        }
-
-        return RefundRequest::query()
-            ->with(['reservation.guest'])
-            ->find($this->releaseRequestId);
-    }
-
     public function refundProofUrl(RefundRequest $refund): ?string
     {
         if (blank($refund->refund_proof_path) || ! \Illuminate\Support\Facades\Route::has('refunds.proof')) {
@@ -324,126 +299,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         }
 
         return route('refunds.proof', $refund);
-    }
-
-    public function beginRefundRelease(int $refundRequestId): void
-    {
-        $request = RefundRequest::query()->find($refundRequestId);
-
-        if ($request === null || ! $request->isWaitingForRelease()) {
-            session()->flash('error', 'This refund is no longer waiting to be given to the guest. Refresh the list.');
-
-            return;
-        }
-
-        $this->releaseRequestId = (int) $request->refund_request_id;
-        $this->releaseAmount = number_format((float) $request->approved_amount, 2, '.', '');
-        $this->releaseModeId = (string) (ModeOfPayment::query()
-            ->whereRaw('LOWER(mode_of_payment) = ?', ['cash'])
-            ->value('mode_of_payment_id') ?? '');
-        $this->releaseReference = '';
-        $this->releaseProof = null;
-        $this->resetValidation();
-        $this->showReleaseModal = true;
-    }
-
-    public function closeRefundRelease(): void
-    {
-        $this->showReleaseModal = false;
-        $this->releaseRequestId = null;
-        $this->releaseAmount = '';
-        $this->releaseModeId = '';
-        $this->releaseReference = '';
-        $this->releaseProof = null;
-        $this->resetValidation();
-    }
-
-    public function updatedShowReleaseModal(bool $open): void
-    {
-        if (! $open) {
-            $this->closeRefundRelease();
-        }
-    }
-
-    public function isGcashRelease(): bool
-    {
-        return strtolower(trim((string) ModeOfPayment::query()
-            ->whereKey((int) $this->releaseModeId)
-            ->value('mode_of_payment'))) === 'gcash';
-    }
-
-    public function updatedReleaseModeId(): void
-    {
-        // Reference number and proof only belong to a GCash refund.
-        if (! $this->isGcashRelease()) {
-            $this->releaseReference = '';
-            $this->releaseProof = null;
-        }
-
-        $this->resetValidation(['releaseReference', 'releaseProof']);
-    }
-
-    public function releaseRefund(
-        RefundRequestWorkflowService $refunds,
-        GcashProofStorageService $proofStorage,
-    ): void {
-        $isGcash = $this->isGcashRelease();
-
-        $validated = $this->validate([
-            'releaseRequestId' => ['required', 'integer'],
-            'releaseAmount' => ['required', 'numeric', 'min:0.01'],
-            'releaseModeId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
-            'releaseReference' => [$isGcash ? 'required' : 'nullable', 'string', 'max:50'],
-            'releaseProof' => [$isGcash ? 'required' : 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-        ], [
-            'releaseRequestId.required' => 'This refund is no longer available. Refresh the list.',
-            'releaseAmount.required' => 'Enter the amount given to the guest.',
-            'releaseAmount.numeric' => 'The amount must be a number.',
-            'releaseAmount.min' => 'The amount must be greater than zero.',
-            'releaseModeId.required' => 'Choose how the refund is given.',
-            'releaseModeId.exists' => 'Choose a valid mode of payment.',
-            'releaseReference.max' => 'The reference number must not exceed :max characters.',
-            'releaseProof.image' => 'The proof must be an image.',
-            'releaseProof.mimes' => 'The proof must be a JPG, PNG or WebP image.',
-            'releaseProof.max' => 'The proof image must be 5 MB or smaller.',
-        ]);
-
-        $proofPath = null;
-
-        try {
-            if ($isGcash && $this->releaseProof !== null) {
-                $proofPath = $proofStorage->store($this->releaseProof);
-            }
-
-            $refunds->release(
-                (int) $validated['releaseRequestId'],
-                (int) $validated['releaseModeId'],
-                (string) $validated['releaseAmount'],
-                $isGcash ? (string) ($validated['releaseReference'] ?? '') : null,
-                $proofPath,
-                (int) Auth::id(),
-            );
-        } catch (\InvalidArgumentException $exception) {
-            if ($proofPath !== null) {
-                $proofStorage->deletePrivate($proofPath);
-            }
-
-            $this->addError('releaseRefund', $exception->getMessage());
-
-            return;
-        } catch (\Throwable $exception) {
-            if ($proofPath !== null) {
-                $proofStorage->deletePrivate($proofPath);
-            }
-
-            report($exception);
-            $this->addError('releaseRefund', 'The refund could not be recorded. Please refresh and try again.');
-
-            return;
-        }
-
-        $this->closeRefundRelease();
-        session()->flash('success', 'Refund recorded. It now reduces revenue.');
     }
 
     /** @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?\App\Models\RefundRequest} */
@@ -1040,9 +895,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                             Request refund @if ($refund['used'] > 0)(attempt {{ $refund['next_attempt'] }} of {{ $refund['max'] }})@endif
                                         </flux:button>
                                     @elseif ($refund['latest'] && $refund['latest']->isWaitingForRelease())
-                                        <flux:button size="sm" variant="primary" icon="banknotes" type="button" wire:click="beginRefundRelease({{ $refund['latest']->refund_request_id }})">
-                                            Give refund
-                                        </flux:button>
+                                        <flux:badge size="sm" color="amber">Refund approved</flux:badge>
                                     @elseif ($refund['latest'] && $refund['latest']->isGivenToGuest())
                                         <flux:badge size="sm" color="green">Refunded</flux:badge>
                                     @elseif ($refund['latest'])
@@ -1157,11 +1010,8 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                     @endif
                                                 </div>
                                                 @if ($request->isWaitingForRelease())
-                                                    <div class="mt-2 flex flex-wrap items-center gap-3">
-                                                        <span class="text-xs text-brand-text-muted dark:text-zinc-400">Give the guest the money, then record how you paid it.</span>
-                                                        <flux:button size="sm" variant="primary" icon="banknotes" type="button" wire:click="beginRefundRelease({{ $request->refund_request_id }})">
-                                                            Give refund to guest
-                                                        </flux:button>
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                                        Approved. The admin gives the refund and records how it was paid.
                                                     </div>
                                                 @elseif ($request->isGivenToGuest())
                                                     <div class="mt-1 text-sm text-brand-text dark:text-zinc-200">
@@ -1381,90 +1231,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                 <div class="flex justify-end gap-3">
                     <flux:button type="button" variant="ghost" wire:click="closeRefundRequest">Close</flux:button>
                     <flux:button type="submit" variant="primary">Send to admin</flux:button>
-                </div>
-            </form>
-        @endif
-    </flux:modal>
-    {{-- Give an approved refund back to the guest --}}
-    <flux:modal wire:model="showReleaseModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[34rem]">
-        @if ($releaseRequest)
-            <form wire:submit="releaseRefund" novalidate class="space-y-5">
-                <div class="pe-8">
-                    <flux:heading size="lg">Give refund to guest</flux:heading>
-                    <flux:text class="mt-1">
-                        Record how the approved refund is given back. It reduces revenue from today.
-                    </flux:text>
-                </div>
-
-                @error('releaseRefund')
-                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
-                @enderror
-                @error('releaseRequestId')
-                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
-                @enderror
-
-                <div class="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
-                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Reservation</span><span class="font-medium">{{ $releaseRequest->reservation?->r_ref_no }}</span></div>
-                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Guest</span><span class="text-right font-medium">{{ $releaseRequest->reservation?->guest ? $this->fullName($releaseRequest->reservation->guest) : '—' }}</span></div>
-                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Approved by admin</span><span class="font-medium">₱{{ number_format((float) $releaseRequest->approved_amount, 2) }}</span></div>
-                </div>
-
-                <flux:field class="relative">
-                    <flux:label>Amount given <span class="text-red-500">*</span></flux:label>
-                    <flux:input wire:model="releaseAmount" type="number" step="0.01" min="0.01" max="{{ $releaseRequest->approved_amount }}" :invalid="$errors->has('releaseAmount')" />
-                    <flux:text class="text-xs">Up to ₱{{ number_format((float) $releaseRequest->approved_amount, 2) }}.</flux:text>
-                    @if ($msg = $this->visibleError('releaseAmount'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-
-                <flux:field class="relative">
-                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
-                    <flux:select wire:model.live="releaseModeId" :invalid="$errors->has('releaseModeId')">
-                        @foreach ($refundModes as $mode)
-                            <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
-                        @endforeach
-                    </flux:select>
-                    @if ($msg = $this->visibleError('releaseModeId'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
-
-                @if ($this->isGcashRelease())
-                    <flux:field class="relative">
-                        <flux:label>GCash reference number <span class="text-red-500">*</span></flux:label>
-                        <flux:input wire:model="releaseReference" placeholder="Reference number of the GCash refund" :invalid="$errors->has('releaseReference')" />
-                        @if ($msg = $this->visibleError('releaseReference'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
-                    </flux:field>
-
-                    <flux:field class="relative">
-                        <flux:label>GCash proof image <span class="text-red-500">*</span></flux:label>
-                        <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            wire:model="releaseProof"
-                            class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-800"
-                        />
-                        <flux:text class="text-xs">Screenshot of the GCash refund. JPG, PNG or WebP, up to 5 MB.</flux:text>
-                        <p wire:loading wire:target="releaseProof" class="text-xs font-medium text-blue-600 dark:text-blue-400">Uploading…</p>
-                        @if ($msg = $this->visibleError('releaseProof'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
-                    </flux:field>
-
-                    @if ($releaseProof && ! $errors->has('releaseProof'))
-                        @php($proofPreview = rescue(fn () => $releaseProof->temporaryUrl(), null, false))
-                        @if ($proofPreview)
-                            <img src="{{ $proofPreview }}" alt="GCash proof preview" class="max-h-56 w-full rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
-                        @endif
-                    @endif
-                @endif
-
-                <div class="flex justify-end gap-3">
-                    <flux:button type="button" variant="ghost" wire:click="closeRefundRelease">Close</flux:button>
-                    <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="releaseRefund,releaseProof">Record refund</flux:button>
                 </div>
             </form>
         @endif

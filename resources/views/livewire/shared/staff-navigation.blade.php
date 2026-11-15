@@ -130,7 +130,6 @@ new class extends Component
 
             <flux:sidebar.item icon="chart-bar" :href="route('cashier.reports.index')" :current="request()->routeIs('cashier.reports.*')" wire:navigate>Reports</flux:sidebar.item>
                 
-            </flux:sidebar.group>
         @elseif ($roleName === 'Maintenance Staff')
             <flux:sidebar.item icon="bell" :href="route('maintenance.notifications.index')" :current="request()->routeIs('maintenance.notifications.*')" :badge="$this->maintenanceWorkCount()" wire:navigate>Notifications</flux:sidebar.item>
             <flux:sidebar.item icon="bolt" :href="route('maintenance.action-center')" :current="request()->routeIs('maintenance.action-center')" :badge="$this->maintenanceWorkCount()" wire:navigate>Action Center</flux:sidebar.item>
