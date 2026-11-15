@@ -675,7 +675,7 @@ protected function validationAttributes(): array
                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                     @endif
                 </flux:field>
-                <flux:field class="relative">
+                <flux:field class="relative md:col-span-2">
                     <flux:label>Email <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
                     @if ($msg = $this->visibleError('email'))
@@ -690,12 +690,12 @@ protected function validationAttributes(): array
                     @endif
                 </flux:field>
             </div>
-            <div class="mt-4 grid gap-4 md:grid-cols-3">
+            <div class="mt-4 grid gap-4 md:grid-cols-3 md:items-start">
                 <x-ph-region-select :options="$this->regionOptions()" />
                 <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
                 <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
                 <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
-                <flux:field class="relative">
+                <flux:field class="relative md:col-span-2">
                     <flux:label>Purok/Street</flux:label>
                     <flux:input wire:model="purok" />
                 </flux:field>
@@ -716,7 +716,7 @@ protected function validationAttributes(): array
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
                     <div wire:key="cashier-booking-group-{{ $index }}" class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                        <div class="grid gap-4 lg:grid-cols-5">
+                        <div class="grid gap-4 lg:grid-cols-5 lg:items-start">
                             <flux:field class="relative" >
                                 <flux:label>Facility name <span class="text-red-500">*</span></flux:label>
                                 <flux:select wire:model.live="groups.{{ $index }}.facility_product_id" :invalid="$errors->has('groups.'.$index.'.facility_product_id')">
@@ -759,9 +759,11 @@ protected function validationAttributes(): array
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif
                             </flux:field>
-                            <div class="flex items-end">
+                            {{-- An invisible label keeps the button level with the inputs, with or without a hint under Schedule. --}}
+                            <flux:field class="relative">
+                                <flux:label class="invisible" aria-hidden="true">Remove</flux:label>
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
-                            </div>
+                            </flux:field>
                         </div>
                         <div class="mt-4 grid gap-4 md:grid-cols-2">
                             <flux:field class="relative">

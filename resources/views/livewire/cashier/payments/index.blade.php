@@ -285,6 +285,23 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         $this->resetValidation();
     }
 
+    /** Down-payment info for the selected reservation (null for bookings and entrance slips). */
+    public function selectedMinimum(): ?array
+    {
+        if (! $this->showPaymentModal || $this->selectedTargetId === null || $this->targetType !== 'reservation') {
+            return null;
+        }
+
+        try {
+            return app(PaymentWorkflowService::class)
+                ->reservationMinimumPayment('reservation', $this->selectedTargetId);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
+    }
+
     public function isCashMode(): bool
     {
         return strtolower(trim((string) ModeOfPayment::query()
@@ -1452,6 +1469,13 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             <flux:field class="relative">
                 <flux:label>Amount to pay <span class="text-red-500">*</span></flux:label>
                 <flux:input wire:model="amountPaid" type="number" min="0.01" step="0.01" :invalid="$errors->has('amountPaid')" />
+                @php($downPayment = $this->selectedMinimum())
+                @if ($downPayment && (float) $downPayment['minimum'] > 0)
+                    <p class="text-xs text-amber-700 dark:text-amber-400">
+                        Minimum payment: ₱{{ number_format((float) $downPayment['minimum'], 2) }}.
+                        A reservation needs a 50% down payment (₱{{ number_format((float) $downPayment['down_payment'], 2) }}) first.
+                    </p>
+                @endif
                 @if ($msg = $this->visibleError('amountPaid'))
                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                 @endif

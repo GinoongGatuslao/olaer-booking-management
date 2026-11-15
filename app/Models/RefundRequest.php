@@ -36,6 +36,7 @@ class RefundRequest extends Model
         'refunded_by_user_id',
         'gcash_handoff_amount',
         'gcash_handoff_note',
+        'gcash_handoff_contact_number',
         'gcash_handoff_at',
         'gcash_handoff_by_user_id',
     ];

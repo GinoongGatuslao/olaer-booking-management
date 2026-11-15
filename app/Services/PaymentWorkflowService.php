@@ -119,6 +119,11 @@ class PaymentWorkflowService
                 $amountPaid,
             );
 
+            // Reservations only: the first payment(s) must reach the 50% down payment.
+            if ($targetType === 'reservation') {
+                $this->guardReservationDownPayment($ledger, $amountPaid);
+            }
+
             $newAmountDue = $this->money->subtract($amountDue, $amountPaid);
 
             $paymentPayload = [
@@ -220,6 +225,67 @@ class PaymentWorkflowService
                 'Invalid payment target.',
             ),
         };
+    }
+
+    /** A reservation needs a down payment of this share of its total before it is held. */
+    public const RESERVATION_DOWN_PAYMENT_RATE = '0.50';
+
+    /**
+     * The least a cashier may record right now for a reservation, or null for other targets.
+     * Until 50% of the total is paid, a payment must bring the paid amount up to 50%.
+     * Once 50% is paid, there is no minimum (any amount up to the balance is accepted).
+     *
+     * @return array{total: string, down_payment: string, paid: string, minimum: string}|null
+     */
+    public function reservationMinimumPayment(string $targetType, int $targetId): ?array
+    {
+        if ($targetType !== 'reservation') {
+            return null;
+        }
+
+        return $this->downPaymentFromLedger($this->ledger->summaryFor('reservation', $targetId));
+    }
+
+    /**
+     * @param  array{total: string, applied_credits: string, verified_payments: string, balance: string}  $ledger
+     * @return array{total: string, down_payment: string, paid: string, minimum: string}
+     */
+    private function downPaymentFromLedger(array $ledger): array
+    {
+        $downPayment = $this->money->percentage($ledger['total'], self::RESERVATION_DOWN_PAYMENT_RATE);
+        $paid = $this->money->add($ledger['verified_payments'], $ledger['applied_credits']);
+        $minimum = $this->money->maxZero($this->money->subtract($downPayment, $paid));
+
+        // Never ask for more than what is still owed.
+        if ($this->money->compare($minimum, $ledger['balance']) === 1) {
+            $minimum = $this->money->normalize($ledger['balance']);
+        }
+
+        return [
+            'total' => $this->money->normalize($ledger['total']),
+            'down_payment' => $downPayment,
+            'paid' => $paid,
+            'minimum' => $minimum,
+        ];
+    }
+
+    /** @param  array{total: string, applied_credits: string, verified_payments: string, balance: string}  $ledger */
+    private function guardReservationDownPayment(array $ledger, string $amountPaid): void
+    {
+        $down = $this->downPaymentFromLedger($ledger);
+
+        if ($this->money->compare($amountPaid, $down['minimum']) !== -1) {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            'A reservation needs a 50% down payment (₱'.number_format((float) $down['down_payment'], 2)
+            .' of ₱'.number_format((float) $down['total'], 2).'). '
+            .($this->money->compare($down['paid'], '0.00') === 1
+                ? 'The guest has paid ₱'.number_format((float) $down['paid'], 2).' so far, so this payment must be at least '
+                : 'The first payment must be at least ')
+            .'₱'.number_format((float) $down['minimum'], 2).'. After that, any amount is accepted.',
+        );
     }
 
     private function guardTargetIsPayable(

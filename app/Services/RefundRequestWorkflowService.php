@@ -69,9 +69,13 @@ class RefundRequestWorkflowService
         ];
     }
 
+    /**
+     * The cashier asks the admin for a refund. The cashier does not choose an amount:
+     * the request is for everything the guest paid (verified), and the admin decides
+     * how much to approve. A note explaining the case is required.
+     */
     public function submit(
         int $reservationId,
-        string $amount,
         ?string $note,
         int $cashierUserId,
     ): RefundRequest {
@@ -79,11 +83,15 @@ class RefundRequestWorkflowService
 
         $note = trim((string) $note);
 
+        if ($note === '') {
+            throw new InvalidArgumentException('Add a note to the admin explaining why this refund is needed.');
+        }
+
         if (mb_strlen($note) > 1000) {
             throw new InvalidArgumentException('The note must not exceed 1000 characters.');
         }
 
-        return DB::transaction(function () use ($reservationId, $amount, $note, $cashierUserId): RefundRequest {
+        return DB::transaction(function () use ($reservationId, $note, $cashierUserId): RefundRequest {
             $reservation = Reservation::query()
                 ->lockForUpdate()
                 ->findOrFail($reservationId);
@@ -96,20 +104,14 @@ class RefundRequestWorkflowService
                 throw new InvalidArgumentException((string) $eligibility['reason']);
             }
 
-            $amount = $this->parseAmount($amount, 'The refund amount');
-
-            if ($this->money->compare($amount, $eligibility['paid']) > 0) {
-                throw new InvalidArgumentException(
-                    'The refund amount cannot be more than the verified payments (₱'.number_format((float) $eligibility['paid'], 2).').',
-                );
-            }
+            $amount = $this->money->normalize($eligibility['paid']);
 
             return RefundRequest::query()->create([
                 'reservation_id' => $reservation->reservation_id,
                 'attempt_no' => $eligibility['next_attempt'],
                 'requested_by_user_id' => $cashierUserId,
                 'requested_amount' => $amount,
-                'request_note' => $note === '' ? null : $note,
+                'request_note' => $note,
                 'status' => RefundRequest::STATUS_PENDING,
             ]);
         });
@@ -122,7 +124,7 @@ class RefundRequestWorkflowService
     public function review(
         int $refundRequestId,
         string $decision,
-        string $note,
+        ?string $note,
         ?string $approvedAmount,
         int $adminUserId,
     ): RefundRequest {
@@ -132,11 +134,8 @@ class RefundRequestWorkflowService
             throw new InvalidArgumentException('Choose whether to approve or reject the request.');
         }
 
-        $note = trim($note);
-
-        if ($note === '') {
-            throw new InvalidArgumentException('Add a note explaining your decision.');
-        }
+        // The admin's note is optional.
+        $note = trim((string) $note);
 
         if (mb_strlen($note) > 1000) {
             throw new InvalidArgumentException('The note must not exceed 1000 characters.');
@@ -173,7 +172,7 @@ class RefundRequestWorkflowService
                     ? RefundRequest::STATUS_APPROVED
                     : RefundRequest::STATUS_REJECTED,
                 'approved_amount' => $approved,
-                'admin_note' => $note,
+                'admin_note' => $note === '' ? null : $note,
                 'reviewed_by_user_id' => $adminUserId,
                 'reviewed_at' => Carbon::now(),
             ]);
@@ -272,29 +271,50 @@ class RefundRequestWorkflowService
 
     /**
      * GCash refund, step 1: the cashier sends an approved refund back to the admin with
-     * an optional note and the amount to send. Nothing is refunded yet, so revenue is
+     * a note, the guest's GCash contact number and the amount to send. Nothing is refunded yet, so revenue is
      * unchanged until the admin completes it.
      */
     public function sendGcashToAdmin(
         int $refundRequestId,
         ?string $amount,
         ?string $note,
+        ?string $contactNumber,
         int $cashierUserId,
     ): RefundRequest {
         $this->guardRole($cashierUserId, 'Cashier', 'send GCash refunds to the admin');
-        $this->assertColumns(['gcash_handoff_amount', 'gcash_handoff_note', 'gcash_handoff_at', 'gcash_handoff_by_user_id']);
+        $this->assertColumns([
+            'gcash_handoff_amount',
+            'gcash_handoff_note',
+            'gcash_handoff_contact_number',
+            'gcash_handoff_at',
+            'gcash_handoff_by_user_id',
+        ]);
 
         $note = trim((string) $note);
 
+        if ($note === '') {
+            throw new InvalidArgumentException('Add a note to the admin about this GCash refund.');
+        }
+
         if (mb_strlen($note) > 1000) {
             throw new InvalidArgumentException('The note must not exceed 1000 characters.');
+        }
+
+        $contactNumber = trim((string) $contactNumber);
+
+        if ($contactNumber === '') {
+            throw new InvalidArgumentException('Enter the guest\'s GCash contact number.');
+        }
+
+        if (! preg_match('/^\d{11}$/', $contactNumber)) {
+            throw new InvalidArgumentException('The GCash contact number must be 11 digits, numbers only.');
         }
 
         if ($amount === null || trim($amount) === '') {
             throw new InvalidArgumentException('Enter the amount to refund through GCash.');
         }
 
-        return DB::transaction(function () use ($refundRequestId, $amount, $note, $cashierUserId): RefundRequest {
+        return DB::transaction(function () use ($refundRequestId, $amount, $note, $contactNumber, $cashierUserId): RefundRequest {
             $request = RefundRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($refundRequestId);
@@ -322,7 +342,8 @@ class RefundRequestWorkflowService
 
             $request->update([
                 'gcash_handoff_amount' => $toSend,
-                'gcash_handoff_note' => $note === '' ? null : $note,
+                'gcash_handoff_note' => $note,
+                'gcash_handoff_contact_number' => $contactNumber,
                 'gcash_handoff_at' => Carbon::now(),
                 'gcash_handoff_by_user_id' => $cashierUserId,
             ]);

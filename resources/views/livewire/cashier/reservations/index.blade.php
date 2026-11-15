@@ -85,7 +85,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public bool $showRefundModal = false;
     public ?int $refundReservationId = null;
-    public string $refundAmount = '';
     public string $refundNote = '';
 
     // Giving an approved refund back to the guest
@@ -94,6 +93,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     public string $releaseAmount = '';
     public string $releaseModeId = '';
     public string $releaseNote = '';
+    public string $releaseContact = '';
 
     public ?int $detailActionId = null;
     public ?string $detailAction = null;
@@ -339,6 +339,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             ->whereRaw('LOWER(mode_of_payment) = ?', ['cash'])
             ->value('mode_of_payment_id') ?? '');
         $this->releaseNote = '';
+        $this->releaseContact = '';
         $this->resetValidation();
         $this->showReleaseModal = true;
     }
@@ -350,6 +351,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         $this->releaseAmount = '';
         $this->releaseModeId = '';
         $this->releaseNote = '';
+        $this->releaseContact = '';
         $this->resetValidation();
     }
 
@@ -369,12 +371,13 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
     public function updatedReleaseModeId(): void
     {
-        // The note only belongs to a GCash refund (it goes to the admin).
+        // The note and contact number only belong to a GCash refund (they go to the admin).
         if (! $this->isGcashRelease()) {
             $this->releaseNote = '';
+            $this->releaseContact = '';
         }
 
-        $this->resetValidation(['releaseNote']);
+        $this->resetValidation(['releaseNote', 'releaseContact']);
     }
 
     /**
@@ -390,7 +393,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'releaseRequestId' => ['required', 'integer'],
             'releaseAmount' => ['required', 'numeric', 'min:0.01'],
             'releaseModeId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
-            'releaseNote' => ['nullable', 'string', 'max:1000'],
+            // GCash: the note and the guest's GCash contact number are both required.
+            'releaseNote' => [$isGcash ? 'required' : 'nullable', 'string', 'max:1000'],
+            'releaseContact' => [$isGcash ? 'required' : 'nullable', 'regex:/^\d{11}$/'],
         ], [
             'releaseRequestId.required' => 'This refund is no longer available. Refresh the list.',
             'releaseAmount.required' => $isGcash ? 'Enter the amount to refund through GCash.' : 'Enter the amount given to the guest.',
@@ -398,7 +403,10 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
             'releaseAmount.min' => 'The amount must be greater than zero.',
             'releaseModeId.required' => 'Choose how the refund is given.',
             'releaseModeId.exists' => 'Choose a valid mode of payment.',
+            'releaseNote.required' => 'Add a note to the admin about this GCash refund.',
             'releaseNote.max' => 'The note cannot be longer than :max characters.',
+            'releaseContact.required' => 'Enter the guest\'s GCash contact number.',
+            'releaseContact.regex' => 'The contact number must be 11 digits, numbers only.',
         ]);
 
         try {
@@ -407,6 +415,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     (int) $validated['releaseRequestId'],
                     (string) $validated['releaseAmount'],
                     $validated['releaseNote'] ?? null,
+                    $validated['releaseContact'] ?? null,
                     (int) Auth::id(),
                 );
             } else {
@@ -477,7 +486,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
         }
 
         $this->refundReservationId = (int) $reservation->reservation_id;
-        $this->refundAmount = number_format((float) $eligibility['paid'], 2, '.', '');
         $this->refundNote = '';
         $this->resetValidation();
         $this->showRefundModal = true;
@@ -487,7 +495,6 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     {
         $this->showRefundModal = false;
         $this->refundReservationId = null;
-        $this->refundAmount = '';
         $this->refundNote = '';
         $this->resetValidation();
     }
@@ -503,22 +510,18 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     {
         $validated = $this->validate([
             'refundReservationId' => ['required', 'exists:tbl_reservation,reservation_id'],
-            'refundAmount' => ['required', 'numeric', 'min:0.01'],
-            'refundNote' => ['nullable', 'string', 'max:1000'],
+            'refundNote' => ['required', 'string', 'max:1000'],
         ], [
             'refundReservationId.required' => 'This reservation is no longer available. Refresh the list.',
             'refundReservationId.exists' => 'This reservation is no longer available. Refresh the list.',
-            'refundAmount.required' => 'Enter the refund amount you are asking for.',
-            'refundAmount.numeric' => 'The refund amount must be a number.',
-            'refundAmount.min' => 'The refund amount must be greater than zero.',
+            'refundNote.required' => 'Add a note to the admin explaining why this refund is needed.',
             'refundNote.max' => 'The note cannot be longer than :max characters.',
         ]);
 
         try {
             $refunds->submit(
                 (int) $validated['refundReservationId'],
-                (string) $validated['refundAmount'],
-                $validated['refundNote'] ?? null,
+                $validated['refundNote'],
                 (int) Auth::id(),
             );
         } catch (\InvalidArgumentException $exception) {
@@ -1172,6 +1175,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                                             by {{ $request->gcashHandoffBy->full_name }}
                                                         @endif
                                                         <div class="text-xs">Waiting for the admin to send the money and add the reference number and proof.</div>
+                                                        @if ($request->gcash_handoff_contact_number)
+                                                            <div class="mt-1 text-xs">GCash number: {{ $request->gcash_handoff_contact_number }}</div>
+                                                        @endif
                                                         @if ($request->gcash_handoff_note)
                                                             <div class="mt-1 text-xs">Your note: {{ $request->gcash_handoff_note }}</div>
                                                         @endif
@@ -1383,17 +1389,12 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                     </div>
                 </div>
 
-                <flux:field class="relative">
-                    <flux:label>Refund amount requested <span class="text-red-500">*</span></flux:label>
-                    <flux:input wire:model="refundAmount" type="number" step="0.01" min="0.01" max="{{ $refundInfo['paid'] }}" :invalid="$errors->has('refundAmount')" />
-                    <flux:text class="text-xs">Up to ₱{{ number_format((float) $refundInfo['paid'], 2) }} (what the guest paid).</flux:text>
-                    @if ($msg = $this->visibleError('refundAmount'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
-                </flux:field>
+                <flux:text class="text-sm">
+                    The request covers what the guest paid (₱{{ number_format((float) $refundInfo['paid'], 2) }}). The admin decides how much to approve.
+                </flux:text>
 
                 <flux:field class="relative">
-                    <flux:label>Note to the admin (optional)</flux:label>
+                    <flux:label>Note to the admin <span class="text-red-500">*</span></flux:label>
                     <flux:textarea wire:model="refundNote" rows="3" placeholder="Explain this case, for example why the guest should be refunded." :invalid="$errors->has('refundNote')" />
                     @error('refundNote')
                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
@@ -1463,8 +1464,26 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
                 @if ($this->isGcashRelease())
                     <flux:field class="relative">
-                        <flux:label>Note to admin</flux:label>
-                        <flux:textarea wire:model="releaseNote" rows="3" placeholder="Optional. For example the guest's GCash number or name." :invalid="$errors->has('releaseNote')" />
+                        <flux:label>GCash contact number <span class="text-red-500">*</span></flux:label>
+                        <flux:input
+                            wire:model="releaseContact"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            maxlength="11"
+                            placeholder="09XXXXXXXXX"
+                            x-on:input="$el.value = $el.value.replace(/\D/g, '')"
+                            :invalid="$errors->has('releaseContact')"
+                        />
+                        <flux:text class="text-xs">The guest's GCash number the admin will send the refund to. Numbers only.</flux:text>
+                        @error('releaseContact')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </flux:field>
+
+                    <flux:field class="relative">
+                        <flux:label>Note to admin <span class="text-red-500">*</span></flux:label>
+                        <flux:textarea wire:model="releaseNote" rows="3" placeholder="Explain this GCash refund to the admin." :invalid="$errors->has('releaseNote')" />
                         @error('releaseNote')
                             <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
                         @enderror

@@ -259,7 +259,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     {
         $rules = [
             'reviewRequestId' => ['required', 'exists:tbl_refund_request,refund_request_id'],
-            'adminNote' => ['required', 'string', 'max:1000'],
+            'adminNote' => ['nullable', 'string', 'max:1000'],
         ];
 
         if ($decision === 'approve') {
@@ -269,7 +269,6 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         $validated = $this->validate($rules, [
             'reviewRequestId.required' => 'This refund request is no longer available. Refresh the list.',
             'reviewRequestId.exists' => 'This refund request is no longer available. Refresh the list.',
-            'adminNote.required' => 'Add a note explaining your decision.',
             'adminNote.max' => 'The note cannot be longer than :max characters.',
             'approvedAmount.required' => 'Enter the most the cashier may refund.',
             'approvedAmount.numeric' => 'The refund amount must be a number.',
@@ -280,7 +279,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             $refunds->review(
                 (int) $validated['reviewRequestId'],
                 $decision,
-                (string) $validated['adminNote'],
+                $validated['adminNote'] ?? null,
                 $decision === 'approve' ? (string) $validated['approvedAmount'] : null,
                 (int) Auth::id(),
             );
@@ -306,7 +305,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     <x-staff-page-header
         eyebrow="Admin"
         title="Refund Requests"
-        description="Cashiers send refund requests for cancelled reservations. Approve to set the most they may refund, or reject, and leave a note either way. GCash refunds come back here for you to send and record."
+        description="Cashiers send refund requests for cancelled reservations. Approve to set the most they may refund, or reject. A note is optional. GCash refunds come back here for you to send and record."
     >
         <x-slot:actions>
             <flux:button :href="route('admin.dashboard')" wire:navigate variant="ghost">Back to dashboard</flux:button>
@@ -493,8 +492,8 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                     </flux:field>
 
                     <flux:field class="relative">
-                        <flux:label>Note <span class="text-red-500">*</span></flux:label>
-                        <flux:textarea wire:model="adminNote" rows="3" placeholder="Explain your decision, for example why this amount or why it is rejected." :invalid="$errors->has('adminNote')" />
+                        <flux:label>Note (optional)</flux:label>
+                        <flux:textarea wire:model="adminNote" rows="3" placeholder="Optional. Explain your decision, for example why this amount or why it is rejected." :invalid="$errors->has('adminNote')" />
                         @error('adminNote')
                             <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
                         @enderror
@@ -517,8 +516,10 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                                 <span class="font-semibold">₱{{ number_format((float) $selected->approved_amount, 2) }}</span>
                             </div>
                         @endif
-                        <div class="mt-2 text-xs text-zinc-500">Admin note</div>
-                        <div class="mt-0.5">{{ $selected->admin_note }}</div>
+                        @if ($selected->admin_note)
+                            <div class="mt-2 text-xs text-zinc-500">Admin note</div>
+                            <div class="mt-0.5">{{ $selected->admin_note }}</div>
+                        @endif
                     </div>
 
                     @if ($selected->gcash_handoff_at)
@@ -528,6 +529,10 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                                 ₱{{ number_format((float) $selected->gcash_handoff_amount, 2) }} · {{ $selected->gcash_handoff_at?->format('M d, Y h:i A') }}
                                 @if ($selected->gcashHandoffBy) by {{ $selected->gcashHandoffBy->full_name }} @endif
                             </div>
+                            @if ($selected->gcash_handoff_contact_number)
+                                <div class="mt-2 text-xs">Guest's GCash number</div>
+                                <div class="mt-0.5 font-semibold tracking-wide">{{ $selected->gcash_handoff_contact_number }}</div>
+                            @endif
                             @if ($selected->gcash_handoff_note)
                                 <div class="mt-2 text-xs">Cashier's note</div>
                                 <div class="mt-0.5">{{ $selected->gcash_handoff_note }}</div>
