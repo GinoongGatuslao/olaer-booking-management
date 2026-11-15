@@ -259,8 +259,10 @@ class FinancialReportMetricsService
                 'rr.refund_mode_of_payment_id',
             )
             ->whereNotNull('rr.refunded_at')
-            // Refunds are not limited to one cashier: whoever requested or gave them
-            // (this cashier, another cashier or the admin), every cashier sees them.
+            ->when(
+                $cashierUserId !== null,
+                fn (Builder $query): Builder => $query->where('rr.refunded_by_user_id', $cashierUserId),
+            )
             ->when(
                 $dateFrom !== null,
                 fn (Builder $query): Builder => $query->whereDate('rr.refunded_at', '>=', $dateFrom),

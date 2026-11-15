@@ -85,8 +85,9 @@ class ReportsService
             ->whereDate('tbl_refund_request.refunded_at', '>=', $startDate)
             ->whereDate('tbl_refund_request.refunded_at', '<=', $endDate);
 
-        // Refunds are not limited to one cashier: whoever requested or gave them
-        // (this cashier, another cashier or the admin), every cashier sees them.
+        if ($cashierUserId !== null) {
+            $refundBase->where('tbl_refund_request.refunded_by_user_id', $cashierUserId);
+        }
 
         $needle = trim($search);
 
