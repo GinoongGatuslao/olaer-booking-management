@@ -59,7 +59,7 @@ class AdminChartsService
     /** @return array{0: Carbon, 1: Carbon, 2: list<array{start: Carbon, end: Carbon, label: string}>} */
     private function window(string $range): array
     {
-        $to = today();
+        $to = Carbon::today();
 
         [$from, $step] = match ($range) {
             '7d' => [$to->copy()->subDays(6), 'day'],

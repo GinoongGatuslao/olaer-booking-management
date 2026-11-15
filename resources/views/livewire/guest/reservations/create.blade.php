@@ -11,6 +11,8 @@ use Livewire\Volt\Component;
 new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resort')] class extends Component
 {
 
+    use \App\Concerns\HasPhilippineLocations;
+
     public function updated(string $property): void
     {
         // Clear the red highlight of a field as soon as the user edits it.
@@ -304,22 +306,11 @@ new #[Layout('layouts.public')] #[Title('Create Reservation - Olaer Spring Resor
                         @endif
                     </flux:field>
                 </div>
-                <div class="mt-4 grid gap-4 md:grid-cols-4">
-                    <flux:field class="relative">
-                        <flux:label>Province <span class="text-red-500">*</span></flux:label>
-                        <flux:input wire:model="province" :invalid="$errors->has('province')" />
-                        @if ($msg = $this->visibleError('province'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
-                    </flux:field>
-                    <flux:field class="relative">
-                        <flux:label>City/Municipality <span class="text-red-500">*</span></flux:label>
-                        <flux:input wire:model="city" :invalid="$errors->has('city')" />
-                        @if ($msg = $this->visibleError('city'))
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                        @endif
-                    </flux:field>
-                    <flux:input wire:model="barangay" label="Barangay" />
+                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                    <x-ph-region-select :options="$this->regionOptions()" />
+                    <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
+                    <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
+                    <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
                     <flux:input wire:model="purok" label="Purok/Street" />
                 </div>
             </div>

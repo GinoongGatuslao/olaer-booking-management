@@ -16,6 +16,8 @@ use Livewire\WithPagination;
 
 new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] class extends Component
 {
+
+    use \App\Concerns\HasPhilippineLocations;
     use WithPagination;
 
     /** Marker for "empty required field": the field turns red, no text is shown. */
@@ -894,27 +896,10 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         <h3 class="text-sm font-semibold">Address</h3>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <flux:field class="relative">
-                                <flux:label>Province <span class="text-red-500">*</span></flux:label>
-                                <flux:input wire:model="province" :invalid="$errors->has('province')" />
-                                @if ($msg = $this->visibleError('province'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
-                            </flux:field>
-                            <flux:field class="relative">
-                                <flux:label>City / Municipality <span class="text-red-500">*</span></flux:label>
-                                <flux:input wire:model="city" :invalid="$errors->has('city')" />
-                                @if ($msg = $this->visibleError('city'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
-                            </flux:field>
-                            <flux:field class="relative">
-                                <flux:label>Barangay </flux:label>
-                                <flux:input wire:model="barangay" :invalid="$errors->has('barangay')" />
-                                @if ($msg = $this->visibleError('barangay'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
-                            </flux:field>
+                            <x-ph-region-select :options="$this->regionOptions()" />
+                            <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
+                            <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City / Municipality" />
+                            <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
                             <flux:field class="relative">
                                 <flux:label>Purok / Street </flux:label>
                                 <flux:input wire:model="purok" :invalid="$errors->has('purok')" />
