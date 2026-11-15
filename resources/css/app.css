@@ -246,3 +246,11 @@ select:focus[data-flux-control] {
 .grid.border-b [data-flux-field] {
     margin-bottom: 0;
 }
+
+
+/* Report filter cards: no field reserves room for an error message unless a real
+   .field-error is showing. Flux's empty error slot otherwise adds 1.5rem under every
+   labelled input, which pushed buttons out of line and left blank space in the card. */
+.compact-fields [data-flux-field]:not(:has(.field-error)) {
+    margin-bottom: 0;
+}
