@@ -1325,7 +1325,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
     <flux:modal wire:model="showCancelReservationModal" class="md:w-[30rem]">
         <form wire:submit="cancelReservation" novalidate class="space-y-5">
             <div>
-                <flux:heading size="lg">Cancel reservation #{{ $cancelReservationId }}</flux:heading>
+                <flux:heading size="lg">Cancel reservation</flux:heading>
                 <flux:text class="mt-1">Provide a reason. This cancels the whole reservation.</flux:text>
             </div>
 

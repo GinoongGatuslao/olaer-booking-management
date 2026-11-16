@@ -1156,13 +1156,6 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                         <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{{ $message }}</div>
                     @enderror
 
-                    <flux:field class="relative">
-                        <flux:label>Amount to pay <span class="text-red-500">*</span></flux:label>
-                        <flux:input wire:model="settleAmount" type="number" min="0.01" step="0.01" :invalid="$errors->has('settleAmount')" />
-                        @error('settleAmount')
-                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
-                        @enderror
-                    </flux:field>
 
                     <flux:field class="relative">
                         <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>

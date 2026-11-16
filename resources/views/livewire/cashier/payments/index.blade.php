@@ -1307,12 +1307,12 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 wire:click="sortHistoryBy('p_ref_no')"
                                 class="font-semibold hover:text-zinc-950 dark:hover:text-white"
                             >
-                                RECEIPT {{ $this->sortIndicator('p_ref_no') }}
+                                RECEIPT # {{ $this->sortIndicator('p_ref_no') }}
                             </button>
                         </th>
                         <th class="px-5 py-3">Transaction</th>
-                        <th class="px-5 py-3">Target</th>
-                        <th class="px-5 py-3">Mode</th>
+                        <th class="px-5 py-3">TRANSACTION #</th>
+                        <th class="px-5 py-3">PAYMENT MODE</th>
                         <th class="px-5 py-3">External reference</th>
                         <th class="px-5 py-3">
                             <button
@@ -1338,7 +1338,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                                 STATUS {{ $this->sortIndicator('payment_status') }}
                             </button>
                         </th>
-                        <th class="px-5 py-3">Handled by</th>
+                        <th class="px-5 py-3">CREATED by</th>
                         <th class="px-5 py-3 text-right">Actions</th>
                     </tr>
                 </thead>

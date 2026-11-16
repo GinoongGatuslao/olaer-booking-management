@@ -180,12 +180,12 @@
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
-                        <th class="p-2">Receipt</th>
-                        <th class="p-2">Target</th>
-                        <th class="p-2">Guest</th>
-                        <th class="p-2">Mode</th>
-                        <th class="p-2">Handled By</th>
-                        <th class="p-2 text-right">Amount</th>
+                        <th class="p-2">Receipt #</th>
+                        <th class="p-2">Transaction #</th>
+                        <th class="p-2">Guest Name</th>
+                        <th class="p-2">Payment Mode</th>
+                        <th class="p-2">Created By</th>
+                        <th class="p-2 text-right">Amount Paid</th>
                     </tr>
                 </thead>
 
@@ -222,12 +222,12 @@
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
-                        <th class="p-2">Reservation</th>
-                        <th class="p-2">Guest</th>
-                        <th class="p-2">Mode</th>
+                        <th class="p-2">Reservation #</th>
+                        <th class="p-2">Guest Name</th>
+                        <th class="p-2">Payment Mode</th>
                         <th class="p-2">Reference</th>
                         <th class="p-2">Handled By</th>
-                        <th class="p-2 text-right">Amount</th>
+                        <th class="p-2 text-right">Amount Paid</th>
                     </tr>
                 </thead>
 

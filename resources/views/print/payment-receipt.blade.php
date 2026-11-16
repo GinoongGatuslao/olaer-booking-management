@@ -39,7 +39,7 @@
                     <tr>
                         <th class="py-2 pr-3">Item</th>
                         <th class="py-2 pr-3 text-right">Charge</th>
-                        <th class="py-2 pr-3 text-right">Paid now</th>
+                        <th class="py-2 pr-3 text-right">Amount Paid</th>
                         <th class="py-2 text-right">Still owed</th>
                     </tr>
                 </thead>

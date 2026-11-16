@@ -908,7 +908,7 @@ protected function validationAttributes(): array
                 <flux:input wire:model="paymentAmount" type="number" step="0.01" label="Total Payment" readonly />
                 @if ($this->isCashMode())
                     <flux:field class="relative">
-                        <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                        <flux:label>Cash given <span class="text-red-500">*</span></flux:label>
                         <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
                         @if ($msg = $this->visibleError('cashPaid'))
                             <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
