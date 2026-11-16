@@ -553,7 +553,6 @@ protected function messages(): array
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3 md:items-start">
-                <x-ph-region-select :options="$this->regionOptions()" />
                 <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
                 <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
                 <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />

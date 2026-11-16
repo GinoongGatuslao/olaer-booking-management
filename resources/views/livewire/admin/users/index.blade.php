@@ -896,7 +896,6 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                         <h3 class="text-sm font-semibold">Address</h3>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                            <x-ph-region-select :options="$this->regionOptions()" />
                             <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
                             <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City / Municipality" />
                             <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
