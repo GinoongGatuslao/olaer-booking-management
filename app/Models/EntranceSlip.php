@@ -12,6 +12,12 @@ class EntranceSlip extends Model
 {
     use HasFactory;
 
+    /**
+     * A slip stays Unpaid on the day it is made. From the next day an unpaid slip is
+     * Closed: it can only be viewed and is not counted in any report.
+     */
+    public const STATUS_CLOSED = 'Closed';
+
     protected $table = 'tbl_entrance_slip';
 
     protected $primaryKey = 'entrance_slip_id';
@@ -54,6 +60,22 @@ class EntranceSlip extends Model
             'admitted_at' => 'datetime',
             'voided_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Closed, or still marked Unpaid but made on an earlier day (the nightly job has not
+     * run yet). Either way nothing can be done with the slip except view it.
+     */
+    public function isClosed(): bool
+    {
+        if ((string) $this->status === self::STATUS_CLOSED) {
+            return true;
+        }
+
+        return (string) $this->status === 'Unpaid'
+            && $this->admitted_at === null
+            && $this->date_created !== null
+            && $this->date_created->lt(today());
     }
 
     public function createdBy(): BelongsTo

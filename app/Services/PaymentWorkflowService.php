@@ -357,6 +357,12 @@ class PaymentWorkflowService
             );
         }
 
+        if ($target->isClosed()) {
+            throw new InvalidArgumentException(
+                'This entrance slip is closed. It can only be viewed.',
+            );
+        }
+
         if ((string) $target->getAttribute('status') === 'Paid') {
             throw new InvalidArgumentException(
                 'This entrance slip is already paid.',

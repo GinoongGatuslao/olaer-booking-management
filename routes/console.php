@@ -42,3 +42,9 @@ Schedule::command(
     ->dailyAt($noShowReleaseTime)
     ->timezone($noShowReleaseTimezone)
     ->withoutOverlapping();
+
+// Unpaid entrance slips from earlier days become Closed (view only).
+Schedule::command('olaer:close-entrance-slips')
+    ->dailyAt('00:05')
+    ->timezone((string) config('app.timezone', 'Asia/Manila'))
+    ->withoutOverlapping();

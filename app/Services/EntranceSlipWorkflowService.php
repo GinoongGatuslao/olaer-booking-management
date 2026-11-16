@@ -17,6 +17,31 @@ class EntranceSlipWorkflowService
         private readonly TransactionLedgerService $ledger,
     ) {}
 
+    /**
+     * Closes every unpaid slip made before today. Run nightly, and again whenever the
+     * cashier opens a slip list, so a slip is never left Unpaid after its day has ended.
+     * Safe to run repeatedly. Returns how many slips were closed.
+     */
+    public function closePastUnpaid(?Carbon $today = null): int
+    {
+        $cutoff = ($today ?? Carbon::today())->toDateString();
+        $closed = 0;
+
+        EntranceSlip::query()
+            ->where('status', 'Unpaid')
+            ->whereNull('admitted_at')
+            ->whereDate('date_created', '<', $cutoff)
+            ->chunkById(200, function ($slips) use (&$closed): void {
+                foreach ($slips as $slip) {
+                    // Per model, so the change is written to the activity log.
+                    $slip->update(['status' => EntranceSlip::STATUS_CLOSED]);
+                    $closed++;
+                }
+            }, 'entrance_slip_id');
+
+        return $closed;
+    }
+
     /** @param array<string, mixed> $data */
     public function issue(array $data): EntranceSlip
     {
@@ -261,6 +286,10 @@ class EntranceSlipWorkflowService
                 throw new InvalidArgumentException('Only the security guard who created this entrance slip may edit it.');
             }
 
+            if ($slip->isClosed()) {
+                throw new InvalidArgumentException('This entrance slip is closed. It can only be viewed.');
+            }
+
             if ($slip->admitted_at !== null || $slip->status !== 'Unpaid' || $slip->payments()->exists()) {
                 throw new InvalidArgumentException('Paid or admitted entrance slips can no longer be edited.');
             }
@@ -328,6 +357,10 @@ class EntranceSlipWorkflowService
                 throw new InvalidArgumentException(
                     'Only the security guard who created the slip may initiate its correction.',
                 );
+            }
+
+            if ($old->isClosed()) {
+                throw new InvalidArgumentException('This entrance slip is closed. It can only be viewed.');
             }
 
             if ($old->admitted_at === null && $old->payments()->doesntExist()) {
@@ -404,6 +437,10 @@ class EntranceSlipWorkflowService
 
             if ($slip->admitted_at !== null) {
                 throw new InvalidArgumentException('This entrance slip has already been admitted.');
+            }
+
+            if ($slip->isClosed()) {
+                throw new InvalidArgumentException('This entrance slip is closed. It can only be viewed.');
             }
 
             if ($slip->status !== 'Paid' || bccomp((string) $slip->amount_due, '0.00', 2) !== 0) {

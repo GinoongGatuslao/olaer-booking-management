@@ -36,6 +36,7 @@
         'payment required' => 'red',
 
         'cancelled',
+        'closed',
         'no-show' => 'zinc',
 
         default => 'zinc',

@@ -71,6 +71,13 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
     public function mount(): void
     {
+        // Unpaid slips from earlier days become Closed (view only).
+        try {
+            app(EntranceSlipWorkflowService::class)->closePastUnpaid();
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+
         // The list starts on today; a date in the address bar still wins.
         if ($this->dateFrom === '' && ! request()->has('date_from')) {
             $this->dateFrom = now()->toDateString();
@@ -511,6 +518,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
         return match (strtolower($status)) {
             'paid' => 'green',
             'unpaid' => 'amber',
+            'closed' => 'zinc',
             default => 'zinc',
         };
     }
@@ -597,6 +605,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             <option value="">All slips</option>
                             <option value="Unpaid">Unpaid</option>
                             <option value="Paid">Paid</option>
+                            <option value="Closed">Closed</option>
                         </flux:select>
 
                         <flux:input
@@ -764,10 +773,10 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                                 @endif
 
                                                 <flux:menu.item
-                                                    icon="{{ $slip->status === 'Unpaid' ? 'banknotes' : 'eye' }}"
+                                                    icon="{{ $slip->status === 'Unpaid' && ! $slip->isClosed() ? 'banknotes' : 'eye' }}"
                                                     wire:click="selectSlip({{ $slip->entrance_slip_id }})"
                                                 >
-                                                    {{ $slip->status === 'Unpaid' ? 'Pay' : 'View' }}
+                                                    {{ $slip->status === 'Unpaid' && ! $slip->isClosed() ? 'Pay' : 'View' }}
                                                 </flux:menu.item>
                                             </x-table-actions>
                                         </div>
@@ -939,7 +948,11 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                             </div>
                         </div>
 
-                        @if ($this->selectedSlip->status !== 'Paid' && (float) $this->selectedSlip->amount_due > 0)
+                        @if ($this->selectedSlip->isClosed())
+                            <div class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                This entrance slip was not paid on the day it was made, so it is closed. It can only be viewed. It cannot be paid, admitted, edited or voided, and it is not counted in any report.
+                            </div>
+                        @elseif ($this->selectedSlip->status !== 'Paid' && (float) $this->selectedSlip->amount_due > 0)
                             <form wire:submit="recordPayment" novalidate class="space-y-4">
                                 <flux:field class="relative">
                                     <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>

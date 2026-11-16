@@ -90,6 +90,13 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function mount(): void
     {
+        // Unpaid entrance slips from earlier days become Closed, so they are not payable.
+        try {
+            app(\App\Services\EntranceSlipWorkflowService::class)->closePastUnpaid();
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+
         // The list starts on today; a date in the address bar still wins.
         if ($this->historyDateFrom === '' && ! request()->has('date_from')) {
             $this->historyDateFrom = now()->toDateString();
@@ -822,7 +829,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             )
             ->with('guest')
             ->where('tbl_entrance_slip.amount_due', '>', 0)
-            ->where('tbl_entrance_slip.status', '!=', 'Paid');
+            ->whereNotIn('tbl_entrance_slip.status', ['Paid', EntranceSlip::STATUS_CLOSED]);
 
         $searchText = trim($this->payableSearch);
 
