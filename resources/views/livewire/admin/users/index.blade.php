@@ -912,6 +912,11 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                     <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
 
                         
+                        <flux:label>
+                            {{ $editingUserId !== null
+                                ? 'Leave both password fields blank to keep the current password.'
+                                : 'A password is required for a new account.' }}
+                        </flux:label>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
                             <flux:field class="relative">
@@ -929,11 +934,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
                                 @endif
                             </flux:field>
                         </div>
-                        <p class="mt-1 text-xs text-zinc-500">
-                            {{ $editingUserId !== null
-                                ? 'Leave both password fields blank to keep the current password.'
-                                : 'A password is required for a new account.' }}
-                        </p>
+                        
                     </div>
 
                     <div class="flex justify-end gap-3 pt-2">
