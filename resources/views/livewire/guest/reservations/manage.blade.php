@@ -1,7 +1,12 @@
 <?php
 
+use App\Models\Booking;
+use App\Models\RefundRequest;
 use App\Models\Reservation;
+use App\Services\GuestBookingManagementService;
 use App\Services\GuestReservationManagementService;
+use App\Services\RefundRequestWorkflowService;
+use App\Services\StaffBookingCancellationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -10,13 +15,17 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
-new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resort')] class extends Component
+new #[Layout('layouts.public')] #[Title('Manage Reservation or Booking - Olaer Spring Resort')] class extends Component
 {
+    /** 'reservation' or 'booking': one page handles either. */
+    public string $type = 'reservation';
     public string $referenceNumber = '';
     public string $email = '';
     public string $otp = '';
     #[Locked]
     public ?int $reservationId = null;
+    #[Locked]
+    public ?int $bookingId = null;
     #[Locked]
     public bool $otpRequested = false;
     #[Locked]
@@ -42,7 +51,22 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
     public function mount(): void
     {
-        //
+        $type = request()->query('type');
+
+        if (in_array($type, ['reservation', 'booking'], true)) {
+            $this->type = $type;
+        }
+    }
+
+    public function updatedType(): void
+    {
+        if (! in_array($this->type, ['reservation', 'booking'], true)) {
+            $this->type = 'reservation';
+        }
+
+        $this->resetVerification();
+        $this->resetMessages();
+        $this->resetValidation();
     }
 
     public function requestOtp(GuestReservationManagementService $service): void
@@ -51,6 +75,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         $this->resetMessages();
 
         $this->validate([
+            'type' => ['required', 'in:reservation,booking'],
             'referenceNumber' => ['required', 'string', 'max:30'],
             'email' => ['required', 'email', 'max:100'],
         ]);
@@ -67,13 +92,20 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         RateLimiter::hit($rateLimitKey, 600);
 
         try {
-            $result = $service->requestOtp($this->referenceNumber, $this->email);
-            $this->reservationId = $result['reservation_id'];
+            if ($this->type === 'booking') {
+                $result = app(GuestBookingManagementService::class)
+                    ->requestOtp($this->referenceNumber, $this->email);
+                $this->bookingId = $result['booking_id'];
+            } else {
+                $result = $service->requestOtp($this->referenceNumber, $this->email);
+                $this->reservationId = $result['reservation_id'];
+            }
+
             $this->debugOtp = app()->environment('local')
                 ? $result['debug_otp']
                 : null;
             $this->otpRequested = true;
-            $this->successMessage = 'OTP sent to the reservation email.';
+            $this->successMessage = 'OTP sent to the '.$this->type.' email.';
         } catch (Throwable) {
             $this->errorMessage =
                 'We could not send a one-time code. Check your details or try again later.';
@@ -89,6 +121,17 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         ]);
 
         try {
+            if ($this->type === 'booking') {
+                $booking = app(GuestBookingManagementService::class)
+                    ->verifyOtp((int) $this->bookingId, $this->email, $this->otp);
+                $this->bookingId = (int) $booking->booking_id;
+                $this->verified = true;
+                $this->otpRequested = false;
+                $this->successMessage = 'Booking verified. You can review it below.';
+
+                return;
+            }
+
             $reservation = $service->verifyOtp((int) $this->reservationId, $this->email, $this->otp);
             $this->reservationId = (int) $reservation->reservation_id;
             $this->verified = true;
@@ -191,8 +234,18 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
     public function prepareCancel(): void
     {
-        if (! $this->ensureVerifiedReservation()) {
+        if (! $this->ensureVerifiedRecord()) {
             return;
+        }
+
+        if ($this->type === 'booking') {
+            $booking = $this->booking();
+
+            if (! $booking || ! app(StaffBookingCancellationService::class)->canCancel($booking)) {
+                $this->errorMessage = 'This booking can no longer be cancelled online. Please contact the resort cashier.';
+
+                return;
+            }
         }
 
         $this->showCancelForm = true;
@@ -370,9 +423,85 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         }
     }
 
+    public function cancelBooking(GuestBookingManagementService $service): void
+    {
+        if ($this->type !== 'booking' || ! $this->ensureVerifiedRecord()) {
+            return;
+        }
+
+        $this->resetMessages();
+
+        $this->validate([
+            'cancellationReason' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $service->cancelBooking((int) $this->bookingId, $this->cancellationReason);
+            $this->verified = false;
+            $this->showCancelForm = false;
+            $this->successMessage = 'Booking cancelled successfully. If you made a payment, contact the resort cashier with your reference number about a refund.';
+        } catch (\InvalidArgumentException $exception) {
+            $this->errorMessage = $exception->getMessage();
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->errorMessage = 'The booking could not be cancelled. Refresh the page and try again.';
+        }
+    }
+
+    public function booking(): ?Booking
+    {
+        if ($this->type !== 'booking' || ! $this->verified || ! $this->bookingId) {
+            return null;
+        }
+
+        return Booking::query()
+            ->with([
+                'guest.address',
+                'details.facility.facilityType',
+                'payments.modeOfPayment',
+                'reservation.payments',
+                'refundRequests',
+            ])
+            ->find($this->bookingId);
+    }
+
+    public function canCancelBooking(Booking $booking): bool
+    {
+        return app(StaffBookingCancellationService::class)->canCancel($booking);
+    }
+
+    public function bookingPaid(Booking $booking): string
+    {
+        return app(RefundRequestWorkflowService::class)->amountPaid($booking);
+    }
+
+    /** Plain-language refund progress for the guest. */
+    public function refundStatusText(RefundRequest $refund): string
+    {
+        $money = fn ($amount): string => '₱'.number_format((float) $amount, 2);
+
+        if ($refund->isGivenToGuest()) {
+            return 'Refunded '.$money($refund->refunded_amount).' on '.$refund->refunded_at->format('M d, Y').'.';
+        }
+
+        if ($refund->isAwaitingAdminGcash()) {
+            return 'Approved for '.$money($refund->approved_amount).'. Your GCash refund is being sent.';
+        }
+
+        if ($refund->isWaitingForRelease()) {
+            return 'Approved for '.$money($refund->approved_amount).'. The cashier will give it to you.';
+        }
+
+        if ((string) $refund->status === RefundRequest::STATUS_REJECTED) {
+            return 'This refund request was not approved. Ask the cashier if you have questions.';
+        }
+
+        return 'Waiting for the resort to review your refund request.';
+    }
+
     public function reservation(): ?Reservation
     {
-        if (! $this->verified || ! $this->reservationId) {
+        if ($this->type !== 'reservation' || ! $this->verified || ! $this->reservationId) {
             return null;
         }
 
@@ -547,12 +676,13 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
             Str::lower(trim($this->email)),
         ]);
 
-        return 'reservation-management-otp:'.hash('sha256', $identity);
+        return 'reservation-management-otp:'.hash('sha256', $this->type.'|'.$identity);
     }
 
     private function resetVerification(): void
     {
         $this->reservationId = null;
+        $this->bookingId = null;
         $this->otpRequested = false;
         $this->verified = false;
         $this->debugOtp = null;
@@ -563,11 +693,25 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
     private function ensureVerifiedReservation(): bool
     {
-        if ($this->verified && $this->reservationId) {
+        if ($this->type === 'reservation' && $this->verified && $this->reservationId) {
             return true;
         }
 
         $this->errorMessage = 'Verify your reservation before making changes.';
+
+        return false;
+    }
+
+    /** Verified for whichever type is selected. */
+    private function ensureVerifiedRecord(): bool
+    {
+        $id = $this->type === 'booking' ? $this->bookingId : $this->reservationId;
+
+        if ($this->verified && $id) {
+            return true;
+        }
+
+        $this->errorMessage = 'Verify your '.$this->type.' before making changes.';
 
         return false;
     }
@@ -587,17 +731,17 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
         <div class="relative mx-auto max-w-[90rem] px-4 sm:px-6 lg:px-8">
             <p class="text-xs font-semibold uppercase tracking-[0.24em] text-public-sand">Guest self-service</p>
-            <h1 class="mt-4 max-w-3xl font-public-display text-4xl leading-tight sm:text-5xl">Manage your reservation securely</h1>
+            <h1 class="mt-4 max-w-3xl font-public-display text-4xl leading-tight sm:text-5xl">Manage your reservation or booking securely</h1>
             <p class="mt-4 max-w-2xl text-sm leading-7 text-white/70 sm:text-base">
-                Verify ownership with the reference number, reservation email, and one-time code before changing an active unpaid reservation.
+                Verify ownership with the reference number, email, and one-time code. Update or cancel an active unpaid reservation, or review and cancel a booking.
             </p>
         </div>
     </header>
 
     <div class="mx-auto max-w-6xl space-y-6 px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
-        <ol aria-label="Reservation management progress" class="grid gap-3 sm:grid-cols-3">
+        <ol aria-label="Manage reservation or booking progress" class="grid gap-3 sm:grid-cols-3">
             @foreach ([
-                ['label' => 'Find reservation', 'active' => ! $otpRequested && ! $verified, 'complete' => $otpRequested || $verified],
+                ['label' => 'Find your '.$type, 'active' => ! $otpRequested && ! $verified, 'complete' => $otpRequested || $verified],
                 ['label' => 'Verify one-time code', 'active' => $otpRequested && ! $verified, 'complete' => $verified],
                 ['label' => 'Review and manage', 'active' => $verified, 'complete' => false],
             ] as $step)
@@ -621,26 +765,35 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                     @if (! $otpRequested)
                         <div>
                             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Step 1 of 3</p>
-                            <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-emerald-200">Find your reservation</h2>
+                            <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-emerald-200">Find your {{ $type }}</h2>
                             <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">
-                                Enter the exact reference number and email from your reservation confirmation.
+                                Choose what you want to manage, then enter the exact reference number and email from your {{ $type }} confirmation.
                             </p>
                         </div>
 
                         <form wire:submit="requestOtp" class="mt-6 space-y-5">
+                            <flux:field class="relative max-w-xs">
+                                <flux:label>I want to manage a</flux:label>
+                                <flux:select wire:model.live="type">
+                                    <option value="reservation">Reservation</option>
+                                    <option value="booking">Booking</option>
+                                </flux:select>
+                                <flux:error class="field-error" name="type" />
+                            </flux:field>
+
                             <div class="grid gap-5 md:grid-cols-2">
                                 <flux:field class="relative">
-                                    <flux:label>Reservation reference</flux:label>
+                                    <flux:label>{{ ucfirst($type) }} reference</flux:label>
                                     <flux:input
                                         wire:model.live="referenceNumber"
                                         autocomplete="off"
-                                        placeholder="Enter your reservation reference"
+                                        placeholder="Enter your {{ $type }} reference"
                                     />
                                     <flux:error class="field-error" name="referenceNumber" />
                                 </flux:field>
 
                                 <flux:field class="relative">
-                                    <flux:label>Reservation email</flux:label>
+                                    <flux:label>{{ ucfirst($type) }} email</flux:label>
                                     <flux:input
                                         type="email"
                                         wire:model.live="email"
@@ -697,7 +850,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                                     wire:loading.attr="disabled"
                                     wire:target="verifyOtp"
                                 >
-                                    <span wire:loading.remove wire:target="verifyOtp">Verify reservation</span>
+                                    <span wire:loading.remove wire:target="verifyOtp">Verify {{ $type }}</span>
                                     <span wire:loading wire:target="verifyOtp">Verifying…</span>
                                 </flux:button>
                                 <flux:button
@@ -718,9 +871,9 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                     <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-sand">Before you continue</p>
                     <h2 class="mt-3 font-public-display text-2xl">Online changes have limits</h2>
                     <ul class="mt-5 space-y-4 text-sm leading-6 text-white/70">
-                        <li>Only active reservations without verified payment can be changed online.</li>
-                        <li>Availability and pricing are checked again when you save an update.</li>
-                        <li>For paid or converted reservations, contact the resort cashier for assistance.</li>
+                        <li>Only active reservations without verified payment can be updated or cancelled online.</li>
+                        <li>A booking can be reviewed here and cancelled until the first guest checks in. Refunds are handled by the resort cashier.</li>
+                        <li>Converted or paid reservations are managed under their booking reference. For other changes, contact the resort cashier.</li>
                     </ul>
                     <a
                         href="{{ route('guest.confirmations.lookup') }}"
@@ -796,6 +949,112 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                     >
                         Cancel reservation
                     </flux:button>
+                </div>
+            </article>
+        @endif
+
+        @php($booking = $this->booking())
+
+        @if ($booking)
+            @php($bookingPaid = $this->bookingPaid($booking))
+            @php($bookingCancelled = (string) $booking->status === 'Cancelled')
+            <article class="rounded-3xl bg-white p-6 shadow-public-card dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
+                <div class="flex flex-col justify-between gap-5 md:flex-row md:items-start">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-public-terracotta">Verified booking</p>
+                        <h2 class="mt-2 break-all font-public-display text-3xl text-public-forest dark:text-emerald-200">{{ $booking->b_ref_no }}</h2>
+                        <p class="mt-2 text-sm text-public-muted dark:text-zinc-300">
+                            {{ $booking->guest?->first_name }} {{ $booking->guest?->last_name }} · {{ $booking->guest?->email }}
+                        </p>
+                        <div class="mt-3"><x-status-badge :status="$booking->status" /></div>
+                    </div>
+                    <div class="text-left md:text-right">
+                        <p class="text-sm text-public-muted dark:text-zinc-400">Total</p>
+                        <p class="mt-1 text-3xl font-bold text-public-forest dark:text-emerald-200">₱{{ number_format((float) $booking->total_price, 2) }}</p>
+                        <p class="mt-1 text-sm text-public-muted dark:text-zinc-400">Paid: ₱{{ number_format((float) $bookingPaid, 2) }}</p>
+                        @unless ($bookingCancelled)
+                            <p class="text-sm text-public-muted dark:text-zinc-400">Balance: ₱{{ number_format((float) $booking->amount_due, 2) }}</p>
+                        @endunless
+                    </div>
+                </div>
+
+                <div class="mt-7 overflow-x-auto rounded-2xl border border-public-forest/10">
+                    <table class="min-w-[46rem] w-full text-left text-sm">
+                        <thead class="bg-public-cream-muted text-public-muted dark:bg-zinc-800 dark:text-zinc-300">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold">Facility</th>
+                                <th class="px-4 py-3 font-semibold">Rate</th>
+                                <th class="px-4 py-3 font-semibold">Check-in</th>
+                                <th class="px-4 py-3 font-semibold">Check-out</th>
+                                <th class="px-4 py-3 font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($booking->details as $detail)
+                                <tr wire:key="managed-booking-detail-{{ $detail->booking_details_id }}" class="border-t border-public-forest/10">
+                                    <td class="px-4 py-3">
+                                        <div class="font-semibold">{{ $detail->facility?->facility_name }}</div>
+                                        <div class="text-xs text-public-muted dark:text-zinc-400">{{ $detail->facility?->facilityType?->facility_type }}</div>
+                                    </td>
+                                    <td class="px-4 py-3">{{ $detail->rate_type }}</td>
+                                    <td class="px-4 py-3">{{ optional($detail->check_in_date)->format('M d, Y') }}</td>
+                                    <td class="px-4 py-3">{{ optional($detail->check_out_date)->format('M d, Y') }}</td>
+                                    <td class="px-4 py-3">{{ $detail->status }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-6 rounded-2xl border border-public-forest/10 p-4 text-sm">
+                    <p class="font-semibold text-public-forest dark:text-white">Payments</p>
+                    <div class="mt-2 space-y-2 text-public-muted dark:text-zinc-300">
+                        @forelse ($booking->payments as $payment)
+                            <div wire:key="managed-booking-payment-{{ $payment->payment_id }}" class="flex justify-between gap-3">
+                                <span>{{ $payment->modeOfPayment?->mode_of_payment }} — {{ $payment->payment_status }}</span>
+                                <span>₱{{ number_format((float) $payment->amount_paid, 2) }}</span>
+                            </div>
+                        @empty
+                            <p>No payment record yet.</p>
+                        @endforelse
+                    </div>
+                </div>
+
+                @if ($bookingCancelled)
+                    <div class="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-100">
+                        <p class="font-semibold">This booking was cancelled{{ $booking->cancelled_at ? ' on '.$booking->cancelled_at->format('M d, Y') : '' }}.</p>
+                        @if ($booking->cancellation_reason)
+                            <p class="mt-1">Reason: {{ $booking->cancellation_reason }}</p>
+                        @endif
+
+                        @forelse ($booking->refundRequests as $refund)
+                            <p wire:key="managed-booking-refund-{{ $refund->refund_request_id }}" class="mt-2">
+                                <span class="font-semibold">Refund request {{ $refund->attempt_no }}:</span>
+                                {{ $this->refundStatusText($refund) }}
+                            </p>
+                        @empty
+                            @if ((float) $bookingPaid > 0)
+                                <p class="mt-2">To ask for a refund, contact the resort cashier with your booking reference number.</p>
+                            @endif
+                        @endforelse
+                    </div>
+                @endif
+
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    @if ($this->canCancelBooking($booking))
+                        <flux:button
+                            variant="danger"
+                            wire:click="prepareCancel"
+                            wire:loading.attr="disabled"
+                            wire:target="prepareCancel"
+                        >
+                            Cancel booking
+                        </flux:button>
+                    @elseif (! $bookingCancelled)
+                        <p class="text-sm text-public-muted dark:text-zinc-300">
+                            This booking can no longer be cancelled online. Please contact the resort cashier for any changes.
+                        </p>
+                    @endif
                 </div>
             </article>
         @endif
@@ -959,10 +1218,14 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
         @endif
 
         @if ($showCancelForm)
-            <form wire:submit="cancelReservation" class="rounded-3xl border border-red-200 bg-white p-6 shadow-public-card dark:border-red-900/50 dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
+            <form wire:submit="{{ $type === 'booking' ? 'cancelBooking' : 'cancelReservation' }}" class="rounded-3xl border border-red-200 bg-white p-6 shadow-public-card dark:border-red-900/50 dark:bg-zinc-900 dark:text-zinc-100 sm:p-8">
                 <p class="text-xs font-semibold uppercase tracking-[0.18em] text-red-700 dark:text-red-300">Permanent action</p>
-                <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-white">Cancel this reservation?</h2>
-                <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Cancellation releases the held facility. It is allowed only for an active reservation without verified payment.</p>
+                <h2 class="mt-2 font-public-display text-3xl text-public-forest dark:text-white">Cancel this {{ $type }}?</h2>
+                @if ($type === 'booking')
+                    <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Cancelling releases every facility on this booking. Your payments stay on record, and the resort cashier handles any refund under the Cancellation and Refund Policy. This is allowed until the first guest checks in.</p>
+                @else
+                    <p class="mt-2 text-sm leading-6 text-public-muted dark:text-zinc-300">Cancellation releases the held facility. It is allowed only for an active reservation without verified payment.</p>
+                @endif
 
                 <div class="mt-6">
                     <flux:field class="relative">
@@ -977,12 +1240,12 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                         type="submit"
                         variant="danger"
                         wire:loading.attr="disabled"
-                        wire:target="cancelReservation"
+                        wire:target="cancelReservation,cancelBooking"
                     >
-                        <span wire:loading.remove wire:target="cancelReservation">Confirm cancellation</span>
-                        <span wire:loading wire:target="cancelReservation">Cancelling…</span>
+                        <span wire:loading.remove wire:target="cancelReservation,cancelBooking">Confirm cancellation</span>
+                        <span wire:loading wire:target="cancelReservation,cancelBooking">Cancelling…</span>
                     </flux:button>
-                    <flux:button type="button" variant="ghost" wire:click="$set('showCancelForm', false)">Keep reservation</flux:button>
+                    <flux:button type="button" variant="ghost" wire:click="$set('showCancelForm', false)">Keep {{ $type }}</flux:button>
                 </div>
             </form>
         @endif

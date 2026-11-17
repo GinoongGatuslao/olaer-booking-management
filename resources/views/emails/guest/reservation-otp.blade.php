@@ -1,9 +1,9 @@
 <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5; max-width: 720px; margin: 0 auto;">
     <h1 style="font-size: 22px; margin-bottom: 4px;">Olaer Spring Resort</h1>
-    <h2 style="font-size: 18px; color: #047857; margin-top: 0;">Reservation Verification Code</h2>
+    <h2 style="font-size: 18px; color: #047857; margin-top: 0;">{{ $label ?? 'Reservation' }} Verification Code</h2>
 
     <p>Hello,</p>
-    <p>Use the code below to verify your identity and manage your reservation.</p>
+    <p>Use the code below to verify your identity and manage your {{ strtolower($label ?? 'Reservation') }}.</p>
 
     <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 24px 0;">
         <tbody>
@@ -19,7 +19,7 @@
     <table style="width: 100%; border-collapse: collapse;">
         <tbody>
             <tr>
-                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold; width: 35%;">Reservation Reference No.</td>
+                <td style="border: 1px solid #e5e7eb; padding: 8px; font-weight: bold; width: 35%;">{{ $label ?? 'Reservation' }} Reference No.</td>
                 <td style="border: 1px solid #e5e7eb; padding: 8px;">{{ $reference }}</td>
             </tr>
             <tr>

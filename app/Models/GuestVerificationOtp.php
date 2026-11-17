@@ -16,6 +16,7 @@ class GuestVerificationOtp extends Model
 
     protected $fillable = [
         'reservation_id',
+        'booking_id',
         'email',
         'purpose',
         'otp_hash',
@@ -36,5 +37,10 @@ class GuestVerificationOtp extends Model
     public function reservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
+    }
+
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }
 }

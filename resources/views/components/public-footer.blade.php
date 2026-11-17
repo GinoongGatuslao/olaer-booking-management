@@ -29,7 +29,7 @@
             <nav aria-label="Footer booking links" class="mt-5 grid gap-3 text-sm text-white/70">
                 <a href="{{ route('guest.reservations.create') }}" class="hover:text-white">Reserve a Facility</a>
                 <a href="{{ route('guest.bookings.create') }}" class="hover:text-white">Direct Booking</a>
-                <a href="{{ route('guest.reservations.manage') }}" class="hover:text-white">Manage Reservation</a>
+                <a href="{{ route('guest.reservations.manage') }}" class="hover:text-white">Manage Reservation / Booking</a>
                 <a href="{{ route('guest.confirmations.lookup') }}" class="hover:text-white">Find Confirmation</a>
             </nav>
         </div>

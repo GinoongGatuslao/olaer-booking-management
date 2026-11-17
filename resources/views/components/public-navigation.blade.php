@@ -75,7 +75,7 @@
                         href="{{ route('guest.reservations.manage') }}"
                         class="rounded-2xl px-4 py-3 text-sm font-medium text-public-forest/75 hover:bg-white/70 hover:text-public-forest"
                     >
-                        Manage Reservation
+                        Manage Reservation / Booking
                     </a>
                     <a
                         href="{{ route('guest.confirmations.lookup') }}"

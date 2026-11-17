@@ -209,8 +209,11 @@ Volt::route('/confirm-request/{token}', 'guest.submissions.confirm')
     ->where('token', '[A-Za-z0-9]{64}')
     ->name('guest.submissions.confirm');
 
-Volt::route('/reservation/manage', 'guest.reservations.manage')
+Volt::route('/manage', 'guest.reservations.manage')
     ->name('guest.reservations.manage');
+
+// The old address keeps working for links people already have.
+Route::redirect('/reservation/manage', '/manage', 301);
 
 Volt::route('/confirmation', 'guest.confirmations.lookup')
     ->name('guest.confirmations.lookup');

@@ -42,6 +42,24 @@ class StaffBookingCancellationService
 
     public function cancel(int $bookingId, string $reason, int $cashierUserId): Booking
     {
+        $reason = $this->cleanReason($reason);
+
+        $this->guardCashier($cashierUserId);
+
+        return $this->run($bookingId, $reason);
+    }
+
+    /**
+     * Guest self-service cancellation. The guest has already proven ownership
+     * with a one-time code, so there is no cashier check; every other rule is the same.
+     */
+    public function cancelForGuest(int $bookingId, string $reason): Booking
+    {
+        return $this->run($bookingId, $this->cleanReason($reason));
+    }
+
+    private function cleanReason(string $reason): string
+    {
         $reason = trim($reason);
 
         if ($reason === '') {
@@ -52,8 +70,11 @@ class StaffBookingCancellationService
             throw new InvalidArgumentException('Cancellation reason must not exceed 500 characters.');
         }
 
-        $this->guardCashier($cashierUserId);
+        return $reason;
+    }
 
+    private function run(int $bookingId, string $reason): Booking
+    {
         return DB::transaction(function () use ($bookingId, $reason): Booking {
             $booking = Booking::query()
                 ->lockForUpdate()

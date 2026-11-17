@@ -405,7 +405,7 @@ new #[Layout('layouts.public')] #[Title('Find Confirmation - Olaer Spring Resort
                                     Reserve a Facility
                                 </flux:button>
                                 <flux:button href="{{ route('guest.reservations.manage') }}" variant="ghost" wire:navigate>
-                                    Manage Reservation
+                                    Manage Reservation / Booking
                                 </flux:button>
                             </div>
                         </div>
