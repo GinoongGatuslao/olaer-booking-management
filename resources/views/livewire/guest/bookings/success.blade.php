@@ -71,7 +71,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                         </div>
 
                         <dl class="grid gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 text-sm dark:border-zinc-700 dark:bg-zinc-700 sm:grid-cols-2">
-                            <div class="bg-white p-5 dark:bg-zinc-900">
+                            <div class="bg-white p-5 dark:bg-zinc-900 sm:col-span-2">
                                 <dt class="text-zinc-500 dark:text-zinc-400">Guest</dt>
                                 <dd class="mt-1 font-semibold">{{ $booking->guest?->full_name }}</dd>
                                 <dd class="mt-1 text-zinc-600 dark:text-zinc-300">{{ $booking->guest?->email }}</dd>
@@ -128,7 +128,7 @@ new #[Layout('layouts.public')] #[Title('Booking Received - Olaer Spring Resort'
                                     @endif
                                 </dd>
                             </div>
-                            <div class="bg-white p-5 dark:bg-zinc-900">
+                            <div class="bg-white p-5 dark:bg-zinc-900 sm:col-span-2">
                                 <dt class="text-zinc-500 dark:text-zinc-400">Review status</dt>
                                 <dd class="mt-1 font-semibold">{{ $payment?->payment_status ?? 'Pending review' }}</dd>
                                 <dd class="mt-1 text-zinc-600 dark:text-zinc-300">

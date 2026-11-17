@@ -390,8 +390,8 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
             'settleAmount.gt' => 'The amount to pay must be greater than zero.',
             'settleModeId.required' => 'Choose a mode of payment.',
             'settleCashPaid.required' => 'Enter the cash received.',
-            'settleCashPaid.numeric' => 'Cash paid must be a number.',
-            'settleCashPaid.gte' => 'Cash paid must be at least the amount to pay.',
+            'settleCashPaid.numeric' => 'Cash given must be a number.',
+            'settleCashPaid.gte' => 'Cash given must be at least the amount to pay.',
         ]);
 
         try {
@@ -1179,7 +1179,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
 
                     @if ($this->settleModeName() === 'cash')
                         <flux:field class="relative">
-                            <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                            <flux:label>Cash given <span class="text-red-500">*</span></flux:label>
                             <flux:input wire:model.live.debounce.300ms="settleCashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('settleCashPaid')" />
                             @error('settleCashPaid')
                                 <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>

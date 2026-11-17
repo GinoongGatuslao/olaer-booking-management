@@ -787,7 +787,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-end">
                 <div>
                     <flux:heading size="lg">Facility requirements</flux:heading>
-                    <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
+                    <flux:text class="mt-1">Fill in all the required details. To add more facilities, click “Add Facility.” Once completed, click “Check Availability & Total” to proceed. </flux:text>
                 </div>
             </div>
 
@@ -898,7 +898,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
 
             <div class="mt-5 flex flex-wrap items-center gap-3">
-                <flux:button type="button" variant="ghost" wire:click="addGroup">Add another facility group</flux:button>
+                <flux:button type="button" variant="ghost" wire:click="addGroup">Add facility</flux:button>
                 <flux:button type="button" wire:click="savePlan">Check availability & total</flux:button>
                 @if ($planTotal !== '')
                     <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Current total: ₱{{ number_format((float) $planTotal, 2) }}</span>
@@ -1045,33 +1045,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
         </flux:card>
 
-        {{-- Every error text shows here (fields only turn red). The toast stays until the errors are fixed or it is dismissed. --}}
-        @php($toastErrors = $this->bannerErrors())
-        @if ($toastErrors !== [])
-            <div
-                wire:key="error-toast-{{ $errorToastTick }}-{{ md5(json_encode($toastErrors)) }}"
-                x-data="{ show: true }"
-                x-show="show"
-                x-transition.opacity.duration.200ms
-                role="alert"
-                class="fixed right-4 top-4 z-[60] max-h-[80vh] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-            >
-                <div class="flex items-start gap-3">
-                    <div class="min-w-0 flex-1">
-                        <p class="font-semibold">Please fix the following:</p>
-                        <ul class="mt-1 list-disc space-y-1 pl-5">
-                            @foreach ($toastErrors as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                    <button type="button" x-on:click="show = false" class="shrink-0 text-red-700 hover:text-red-900 dark:text-red-200 dark:hover:text-white" aria-label="Dismiss">&times;</button>
-                </div>
-            </div>
-        @endif
+        {{-- Every error text shows in the shared toast; fields only turn red. --}}
+        <x-error-toast :messages="$this->bannerErrors()" heading="Please fix the following:" :tick="$errorToastTick" />
 
         <p class="text-sm text-zinc-600 dark:text-zinc-300">
-           <strong>Kindly review your information especially the email since entering the wrong email will make you not receive the confirmation email and redo the entire process again. After you review the Booking, Cancellation, and Refund Policy, we will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
+           <strong>Please carefully review all your information, especially your email address, as an incorrect email may prevent you from receiving the confirmation link and require you to repeat the reservation process. A confirmation link will be sent to your email. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
         </p>
 
         <div class="flex justify-end">

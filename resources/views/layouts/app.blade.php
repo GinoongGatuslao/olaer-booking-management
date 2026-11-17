@@ -161,26 +161,27 @@
             // to this layout toast when the page didn't render one (avoids two toasts).
             $pageToastShown = (bool) request()->attributes->get('toast_rendered', false);
             $layoutSuccess = $pageToastShown ? null : session('success');
-            $layoutError = session('error');
+            // Errors use the shared error toast (same look as the form pages); skip it if the page already shows one.
+            $layoutError = request()->attributes->get('error_toast_rendered', false) ? null : session('error');
         @endphp
 
-        @if (request()->hasSession() && ($layoutSuccess || $layoutError))
+        @if ($layoutError)
+            <x-error-toast :messages="$layoutError" fresh />
+        @endif
+
+        @if (request()->hasSession() && $layoutSuccess)
             <div
                 x-data="{ show: true }"
                 x-init="setTimeout(() => show = false, 6000)"
                 x-show="show"
                 x-transition
-                class="fixed right-4 top-4 z-[100] w-[min(26rem,calc(100vw-2rem))]"
+                class="fixed right-4 {{ request()->attributes->get('error_toast_rendered', false) ? 'top-24' : 'top-4' }} z-[100] w-[min(26rem,calc(100vw-2rem))]"
                 role="status"
                 aria-live="polite"
             >
-                <div @class([
-                    'rounded-xl border px-4 py-3 shadow-xl backdrop-blur',
-                    'border-emerald-200 bg-emerald-50/95 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/95 dark:text-emerald-100' => $layoutSuccess,
-                    'border-red-200 bg-red-50/95 text-red-900 dark:border-red-800 dark:bg-red-950/95 dark:text-red-100' => ! $layoutSuccess && $layoutError,
-                ])>
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-emerald-900 shadow-xl backdrop-blur dark:border-emerald-800 dark:bg-emerald-950/95 dark:text-emerald-100">
                     <div class="flex items-start justify-between gap-3">
-                        <p class="text-sm font-medium">{{ $layoutSuccess ?? $layoutError }}</p>
+                        <p class="text-sm font-medium">{{ $layoutSuccess }}</p>
                         <button type="button" class="text-lg leading-none opacity-60 hover:opacity-100" x-on:click="show = false" aria-label="Dismiss notification">×</button>
                     </div>
                 </div>

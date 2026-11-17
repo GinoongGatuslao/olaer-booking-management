@@ -247,12 +247,15 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 'required',
                 'integer',
                 'exists:tbl_amenity,amenity_id',
+                'distinct',
             ],
             'items.*.quantity' => [
                 'required',
                 'integer',
                 'min:1',
             ],
+        ], [
+            'items.*.amenity_id.distinct' => 'Each amenity can only be added once. Raise its quantity instead.',
         ]);
 
         try {
@@ -356,12 +359,15 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                 'required',
                 'integer',
                 'exists:tbl_amenity,amenity_id',
+                'distinct',
             ],
             'editItems.*.quantity' => [
                 'required',
                 'integer',
                 'min:1',
             ],
+        ], [
+            'editItems.*.amenity_id.distinct' => 'Each amenity can only be added once. Raise its quantity instead.',
         ]);
 
         try {
@@ -871,7 +877,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                                 <flux:select wire:model.live="items.{{ $index }}.amenity_id" :invalid="$errors->has('items.'.$index.'.amenity_id')">
                                 <option value="">Select amenity</option>
 
-                                @foreach ($rentableAmenities as $amenity)
+                                @php($pickedElsewhere = collect($items)->except($index)->pluck('amenity_id')->filter()->map(fn ($id): int => (int) $id)->all())
+                                @foreach ($rentableAmenities->reject(fn ($option): bool => in_array((int) $option->amenity_id, $pickedElsewhere, true)) as $amenity)
                                     <option value="{{ $amenity->amenity_id }}">
                                         {{ $amenity->amenityName?->amenity_name }}
                                         —
@@ -973,7 +980,8 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
                             <flux:select wire:model.live="editItems.{{ $index }}.amenity_id" :invalid="$errors->has('editItems.'.$index.'.amenity_id')">
                             <option value="">Select amenity</option>
 
-                            @foreach ($rentableAmenities as $amenity)
+                            @php($pickedElsewhere = collect($editItems)->except($index)->pluck('amenity_id')->filter()->map(fn ($id): int => (int) $id)->all())
+                            @foreach ($rentableAmenities->reject(fn ($option): bool => in_array((int) $option->amenity_id, $pickedElsewhere, true)) as $amenity)
                                 <option value="{{ $amenity->amenity_id }}">
                                     {{ $amenity->amenityName?->amenity_name }}
                                     —

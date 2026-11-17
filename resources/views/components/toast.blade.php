@@ -14,9 +14,16 @@
     ];
 
     $key = 'toast-'.$type.'-'.md5((string) $message).($fresh ? '-'.microtime(true) : '');
+
+    // A flash set by an earlier action is still readable on the very next request. On a Livewire update that
+    // would pop the same toast a second time, so only show a flash that was set during this request.
+    $stale = $fresh
+        && request()->hasHeader('X-Livewire')
+        && collect(array_diff(session()->get('_flash.old', []), session()->get('_flash.new', [])))
+            ->contains(fn ($flashKey): bool => session()->get($flashKey) === $message);
 @endphp
 
-@if (filled($message))
+@if (filled($message) && ! $stale)
     @php
         // Tell the layout this page already shows the flash message, so the
         // layout's fallback toast doesn't show it a second time.

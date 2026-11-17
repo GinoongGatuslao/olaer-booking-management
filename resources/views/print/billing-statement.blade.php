@@ -36,7 +36,7 @@
         </div>
     </div>
 
-    <div class="mb-6 grid grid-cols-2 gap-4 text-sm">
+    <div class="mb-6 gap-4 text-sm">
         <div class="rounded-xl border border-zinc-200 p-4">
             <h3 class="mb-2 font-semibold">
                 Guest Information
@@ -46,23 +46,6 @@
             <p>{{ $statement['guest_email'] }}</p>
         </div>
 
-        <div class="rounded-xl border border-zinc-200 p-4">
-            <h3 class="mb-2 font-semibold">
-                Statement Summary
-            </h3>
-            <p>
-                <strong>Total Charges:</strong>
-                {{ $money($statement['total_price']) }}
-            </p>
-            <p>
-                <strong>Verified Paid:</strong>
-                {{ $money($statement['total_paid']) }}
-            </p>
-            <p>
-                <strong>Amount Due:</strong>
-                {{ $money($statement['amount_due']) }}
-            </p>
-        </div>
     </div>
 
     <h3 class="mb-2 font-semibold">

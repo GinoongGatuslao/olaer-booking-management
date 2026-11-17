@@ -613,9 +613,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
 
         <x-toast :message="$successMessage" />
 
-        @if ($errorMessage)
-            <div role="alert" class="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{{ $errorMessage }}</div>
-        @endif
+        <x-error-toast :messages="$errorMessage" />
 
         @if (! $verified)
             <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">

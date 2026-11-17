@@ -183,12 +183,15 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                 'required',
                 'integer',
                 'exists:tbl_amenity,amenity_id',
+                'distinct',
             ],
             'items.*.quantity' => [
                 'required',
                 'integer',
                 'min:1',
             ],
+        ], [
+            'items.*.amenity_id.distinct' => 'Each amenity can only be added once. Raise its quantity instead.',
         ]);
 
         try {
@@ -823,7 +826,8 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                 <flux:select wire:model.live="items.{{ $index }}.amenity_id" :invalid="$errors->has('items.'.$index.'.amenity_id')">
                                 <option value="">Select amenity</option>
 
-                                @foreach ($rentableAmenities as $amenity)
+                                @php($pickedElsewhere = collect($items)->except($index)->pluck('amenity_id')->filter()->map(fn ($id): int => (int) $id)->all())
+                                @foreach ($rentableAmenities->reject(fn ($option): bool => in_array((int) $option->amenity_id, $pickedElsewhere, true)) as $amenity)
                                     <option value="{{ $amenity->amenity_id }}">
                                         {{ $amenity->amenityName?->amenity_name ?? 'Unnamed amenity' }} — ₱{{ number_format((float) $amenity->amenity_price, 2) }} @if (($max = $this->maxFor($amenity, $form['booking_detail_id'])) !== null)(max {{ $max }})@endif
                                     </option>

@@ -16,7 +16,7 @@
     @if ($payment->reference_number)
         <div class="t-row"><span>GCash Ref</span><span>{{ $payment->reference_number }}</span></div>
     @endif
-    <div class="t-row"><span>Received By</span><span>{{ $payment->user->full_name ?? $payment->user->username ?? 'Guest Upload' }}</span></div>
+    <div class="t-row"><span>Created By</span><span>{{ $payment->user->full_name ?? $payment->user->username ?? 'Guest Upload' }}</span></div>
 
     <div class="t-sep"></div>
     <p class="t-strong">{{ $payer->full_name ?? 'Walk-in Guest' }}</p>
@@ -52,7 +52,7 @@
 
     {{-- Only cash payments store the cash received and the change returned. --}}
     @if (! is_null($payment->cash_paid))
-        <div class="t-row"><span>Cash Paid</span><span>{{ $peso($payment->cash_paid) }}</span></div>
+        <div class="t-row"><span>Cash Given</span><span>{{ $peso($payment->cash_paid) }}</span></div>
         <div class="t-row"><span>Change</span><span>{{ $peso($payment->change_amount) }}</span></div>
     @endif
 

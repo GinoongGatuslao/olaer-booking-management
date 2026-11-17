@@ -358,8 +358,8 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             'cashPaid' => [$this->isCashMode() ? 'required' : 'nullable', 'numeric', 'gt:0'],
         ], [
             'cashPaid.required' => 'Enter the cash received.',
-            'cashPaid.numeric' => 'Cash paid must be a number.',
-            'cashPaid.gt' => 'Cash paid must be greater than zero.',
+            'cashPaid.numeric' => 'Cash given must be a number.',
+            'cashPaid.gt' => 'Cash given must be greater than zero.',
         ]);
 
         $amountToRecord = $this->effectiveAmount() ?? (string) $validated['amountPaid'];
@@ -947,11 +947,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     <x-toast :message="session('success')" fresh />
 
-    @if (session('error'))
-        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-            {{ session('error') }}
-        </div>
-    @endif
+    <x-error-toast :messages="session('error')" fresh />
 
     @if (! $showPaymentModal)
     @error('payment')
@@ -1518,7 +1514,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
             @if ($this->isCashMode())
                 <flux:field class="relative">
-                    <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                    <flux:label>Cash given <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
                     @if ($msg = $this->visibleError('cashPaid'))
                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>

@@ -675,30 +675,8 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
             </flux:card>
         @endif
 
-        {{-- Every error text shows here (fields only turn red). It stays until the errors are fixed or it is dismissed. --}}
-        @php($toastErrors = $this->bannerErrors())
-        @if ($toastErrors !== [])
-            <div
-                wire:key="error-toast-{{ $errorToastTick }}-{{ md5(json_encode($toastErrors)) }}"
-                x-data="{ show: true }"
-                x-show="show"
-                x-transition.opacity.duration.200ms
-                role="alert"
-                class="fixed right-4 top-20 z-[60] max-h-[80vh] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
-            >
-                <div class="flex items-start gap-3">
-                    <div class="min-w-0 flex-1">
-                        <p class="font-semibold">Please fix the following:</p>
-                        <ul class="mt-1 list-disc space-y-1 pl-5">
-                            @foreach ($toastErrors as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                    <button type="button" x-on:click="show = false" class="shrink-0 text-red-700 hover:text-red-900 dark:text-red-200 dark:hover:text-white" aria-label="Dismiss">&times;</button>
-                </div>
-            </div>
-        @endif
+        {{-- Every error text shows in the shared toast; fields only turn red. --}}
+        <x-error-toast :messages="$this->bannerErrors()" heading="Please fix the following:" :tick="$errorToastTick" />
 
         <div class="flex justify-end gap-3">
             <flux:button href="{{ route('cashier.reservations.index') }}" variant="ghost" wire:navigate>Cancel</flux:button>

@@ -1283,7 +1283,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     </x-staff-page-header>
 
     <x-toast :message="session('success')" fresh />
-    <x-toast :message="session('error')" type="error" fresh />
+    <x-error-toast :messages="session('error')" fresh />
 
     @if (
         $selectedRequestId !== null

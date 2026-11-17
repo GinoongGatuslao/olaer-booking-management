@@ -239,11 +239,7 @@ new #[Layout('layouts.app')] #[Title('GCash Verification - Olaer Spring Resort')
 
     <x-toast :message="session('success')" fresh />
 
-    @if (session('error'))
-        <div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-            {{ session('error') }}
-        </div>
-    @endif
+    <x-error-toast :messages="session('error')" fresh />
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
         <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

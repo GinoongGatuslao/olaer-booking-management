@@ -37,7 +37,7 @@ final class CashTender
 
         if ($money->compare($cash, $amountPaid) === -1) {
             throw new InvalidArgumentException(sprintf(
-                'Cash paid must be at least the amount paid (₱%s).',
+                'Cash given must be at least the amount paid (₱%s).',
                 number_format((float) $amountPaid, 2),
             ));
         }

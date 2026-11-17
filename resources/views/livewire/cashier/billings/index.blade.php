@@ -198,11 +198,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         </p>
     </div>
 
-    @if ($errorMessage)
-        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-            {{ $errorMessage }}
-        </div>
-    @endif
+    <x-error-toast :messages="$errorMessage" />
 
     <flux:card class="overflow-hidden p-0">
         <div class="grid gap-3 border-b border-zinc-200 p-5 md:grid-cols-6 dark:border-zinc-800">

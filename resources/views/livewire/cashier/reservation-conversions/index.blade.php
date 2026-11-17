@@ -262,8 +262,8 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
 
         $this->validate($rules, [
             'cashPaid.required' => 'Enter the cash received.',
-            'cashPaid.numeric' => 'Cash paid must be a number.',
-            'cashPaid.gte' => 'Cash paid must be at least the amount being paid.',
+            'cashPaid.numeric' => 'Cash given must be a number.',
+            'cashPaid.gte' => 'Cash given must be at least the amount being paid.',
         ]);
 
         try {
@@ -330,11 +330,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
             @endif
     </x-toast>
 
-    @if ($errorMessage && ! $showConversionModal)
-        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-            {{ $errorMessage }}
-        </div>
-    @endif
+    <x-error-toast :messages="$showConversionModal ? null : $errorMessage" />
 
     <div>
         <section>
@@ -536,7 +532,7 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                             @error('referenceNumber') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
                             @if ($this->isCashMode())
                                 <flux:field class="relative">
-                                    <flux:label>Cash paid <span class="text-red-500">*</span></flux:label>
+                                    <flux:label>Cash given <span class="text-red-500">*</span></flux:label>
                                     <flux:input wire:model.live.debounce.300ms="cashPaid" type="number" min="0" step="0.01" :invalid="$errors->has('cashPaid')" />
                                     @if ($msg = $this->visibleError('cashPaid'))
                                         <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>

@@ -43,6 +43,7 @@ new #[Layout('layouts.public')] #[Title('Check Your Email - Olaer Spring Resort'
                 <li>Can't find it? Check your spam or junk folder.</li>
                 <li>Facilities are assigned when you click the link, not before.</li>
                 <li>To change something, go back and send a new request. The newest link replaces the older one.</li>
+                <li>If you accidentally enter incorrect information or make a mistake when creating your reservation / booking, we recommend submitting a new reservation / booking with the correct details rather than attempting to modify the existing one.</li>
             </ul>
 
             <div class="mt-6 flex flex-wrap gap-3">
