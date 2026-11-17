@@ -52,7 +52,7 @@ new #[Layout('layouts.public')] #[Title('Reservation Received - Olaer Spring Res
                         Thank you, {{ $reservation->guest?->first_name }}.
                     </h1>
                     <p class="mt-3 max-w-3xl text-sm leading-6 text-emerald-800 dark:text-emerald-200 sm:text-base">
-                        Your facility reservation is now on temporary hold. Save the reference below while the resort completes payment and booking confirmation.
+                        Your facility reservation is currently under review by our staff. Please save the reference number below for future inquiries while we verify your payment and finalize your confirmation.
                     </p>
                 </header>
 
@@ -64,7 +64,7 @@ new #[Layout('layouts.public')] #[Title('Reservation Received - Olaer Spring Res
                             {{ $reservation->r_ref_no }}
                         </p>
                         <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                            Keep this reference for confirmation lookup, reservation management, payment, and cashier assistance.
+                            Please keep this reference number for future inquiries, reservation modifications, or any assistance regarding your reservation.
                         </p>
                     </div>
 
@@ -113,9 +113,9 @@ new #[Layout('layouts.public')] #[Title('Reservation Received - Olaer Spring Res
                     </dl>
 
                     <div class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-                        <p class="font-semibold">This is a reservation hold, not yet a confirmed booking.</p>
+                        <p class="font-semibold">Your reservation is currently on hold and is not yet confirmed.</p>
                         <p class="mt-1 leading-6">
-                            Payment and final booking confirmation are still handled by the resort. An unpaid reservation remains subject to the resort’s reservation workflow.
+                            Payment verification and final booking confirmation are subject to the resort's approval. Please note that unpaid reservations remain subject to the resort's reservation policies and procedures.
                         </p>
                     </div>
                 </div>

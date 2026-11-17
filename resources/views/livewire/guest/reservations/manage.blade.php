@@ -876,22 +876,23 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation - Olaer Spring Resor
                             </flux:field>
                         </div>
 
-                        <fieldset class="mt-6">
-                            <legend class="text-sm font-semibold text-public-forest dark:text-white">Available facility</legend>
-                            <p class="mt-1 text-xs text-public-muted dark:text-zinc-400">Only facilities with the same price or a higher price than your current one are shown.</p>
-                            <div class="mt-3 grid gap-3 md:grid-cols-3">
-                                @forelse ($availableFacilities as $facility)
-                                    <label wire:key="manage-available-facility-{{ $detailId }}-{{ $facility->facility_id }}" class="cursor-pointer rounded-2xl border p-4 transition {{ (int) ($row['facility_id'] ?? 0) === (int) $facility->facility_id ? 'border-public-spring bg-public-spring-light ring-1 ring-public-spring' : 'border-public-forest/10 hover:border-public-spring' }}">
-                                        <input type="radio" name="manage-facility-{{ $detailId }}" wire:model.live="details.{{ $detailId }}.facility_id" value="{{ $facility->facility_id }}" class="sr-only">
-                                        <p class="font-semibold text-public-forest dark:text-white">{{ $facility->facility_name }}</p>
-                                        <p class="mt-1 text-sm text-public-muted dark:text-zinc-300">{{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests</p>
-                                    </label>
-                                @empty
-                                    <p class="text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection at the same or a higher price.</p>
-                                @endforelse
-                            </div>
-                            @error('details.'.$detailId.'.facility_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </fieldset>
+                        <flux:field class="relative mt-6">
+                            <flux:label>Available facility</flux:label>
+                            <p class="text-xs text-public-muted dark:text-zinc-400">Only facilities with the same price or a higher price than your current one are shown.</p>
+                            @if ($availableFacilities->isEmpty())
+                                <p class="mt-2 text-sm text-public-muted dark:text-zinc-300">No available facilities match the current date and rate selection at the same or a higher price.</p>
+                            @else
+                                <flux:select wire:model.live="details.{{ $detailId }}.facility_id">
+                                    <option value="">Select facility</option>
+                                    @foreach ($availableFacilities as $facility)
+                                        <option wire:key="manage-available-facility-{{ $detailId }}-{{ $facility->facility_id }}" value="{{ $facility->facility_id }}">
+                                            {{ $facility->facility_name }} — {{ $facility->facilityProduct?->strict_maximum ? 'Maximum' : 'Recommended' }} {{ $facility->facilityProduct?->strict_maximum ?? $facility->facilityProduct?->suggested_maximum ?? $facility->capacity }} guests
+                                        </option>
+                                    @endforeach
+                                </flux:select>
+                            @endif
+                            <flux:error class="field-error" name="details.{{ $detailId }}.facility_id" />
+                        </flux:field>
 
                         <div class="mt-6 max-w-xl">
                             <flux:field class="relative">
