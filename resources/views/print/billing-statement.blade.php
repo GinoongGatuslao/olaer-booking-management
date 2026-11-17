@@ -1,4 +1,4 @@
-<x-print.layout title="Billing Statement">
+<x-print.layout title="Billing Statement" size="landscape">
     @php
         $money = static fn (mixed $amount): string =>
             '₱'.number_format((float) $amount, 2);

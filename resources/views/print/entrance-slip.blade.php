@@ -1,67 +1,58 @@
-<x-print.layout title="Entrance Slip">
-    <div class="mb-6 flex items-start justify-between gap-4">
-        <div>
-            <h2 class="text-xl font-bold">Entrance Slip</h2>
-            <p class="text-sm text-zinc-600">Slip #{{ str_pad((string) $entranceSlip->entrance_slip_id, 6, '0', STR_PAD_LEFT) }}</p>
-        </div>
-        <div class="text-right text-sm">
-            <p><strong>Status:</strong> {{ $entranceSlip->status }}</p>
-            <p><strong>Date:</strong> {{ optional($entranceSlip->date_created)->format('M d, Y') }}</p>
-            <p><strong>Time:</strong> {{ $entranceSlip->time_created }}</p>
-        </div>
-    </div>
+<x-print.layout title="Entrance Slip" size="thermal">
+    @php
+        $peso = static fn (mixed $amount): string => '₱'.number_format((float) $amount, 2);
+    @endphp
 
-    <div class="mb-6 grid grid-cols-2 gap-4 text-sm">
-        <div class="rounded-xl border border-zinc-200 p-4">
-            <h3 class="mb-2 font-semibold">Guest Count</h3>
-            <p>Adults: {{ $entranceSlip->no_of_adult }}</p>
-            <p>Children: {{ $entranceSlip->no_of_children }}</p>
-            <p>Senior / PWD: {{ $entranceSlip->no_of_PWD_SC }}</p>
+    <p class="t-center t-big">ENTRANCE SLIP</p>
+    <p class="t-center t-small">Slip #{{ str_pad((string) $entranceSlip->entrance_slip_id, 6, '0', STR_PAD_LEFT) }}</p>
+    <div class="t-sep"></div>
+
+    <div class="t-row"><span>Status</span><span>{{ $entranceSlip->status }}</span></div>
+    <div class="t-row"><span>Date</span><span>{{ optional($entranceSlip->date_created)->format('M d, Y') }}</span></div>
+    <div class="t-row"><span>Time</span><span>{{ $entranceSlip->time_created }}</span></div>
+
+    <div class="t-sep"></div>
+    <p class="t-strong">GUEST COUNT</p>
+    <div class="t-row"><span>Adults</span><span>{{ $entranceSlip->no_of_adult }}</span></div>
+    <div class="t-row"><span>Children</span><span>{{ $entranceSlip->no_of_children }}</span></div>
+    <div class="t-row"><span>Senior / PWD</span><span>{{ $entranceSlip->no_of_PWD_SC }}</span></div>
+    <div class="t-row"><span>Male</span><span>{{ $entranceSlip->no_of_Male }}</span></div>
+    <div class="t-row"><span>Female</span><span>{{ $entranceSlip->no_of_Female }}</span></div>
+
+    <div class="t-sep"></div>
+    <p class="t-strong">CHARGES</p>
+
+    @forelse ($entranceSlip->details as $detail)
+        @php
+            $rate = (float) ($detail->unit_rate_snapshot ?? $detail->entranceFee?->entrance_fee_price);
+            $subtotal = (float) ($detail->line_total_snapshot ?? ((float) ($detail->entranceFee?->entrance_fee_price ?? 0) * $detail->guest_quantity));
+        @endphp
+        <div style="margin-top: 4px;">
+            <p class="t-strong">{{ $detail->entranceFee?->entrance_fee_name ?? 'Entrance Fee' }}</p>
+            <div class="t-row t-small"><span>{{ $detail->guest_quantity }} × {{ $peso($rate) }}</span><span class="t-strong">{{ $peso($subtotal) }}</span></div>
+            @if (($detail->discounted_quantity ?? 0) > 0)
+                <p class="t-small">{{ $detail->discounted_quantity }} discounted · {{ $detail->discount?->discount_name ?? 'Discount' }}</p>
+            @endif
         </div>
-        <div class="rounded-xl border border-zinc-200 p-4">
-            <p>Male: {{ $entranceSlip->no_of_Male }}</p>
-            <p>Female: {{ $entranceSlip->no_of_Female }}</p>
-        </div>
-    </div>
+    @empty
+        <p class="t-small">No entrance slip details found.</p>
+    @endforelse
 
-    <table class="mb-6 w-full border-collapse text-sm">
-        <thead>
-            <tr class="bg-zinc-100 text-left">
-                <th class="border border-zinc-300 p-2">Category</th>
-                <th class="border border-zinc-300 p-2 text-right">Qty</th>
-                <th class="border border-zinc-300 p-2 text-right">Rate</th>
-                <th class="border border-zinc-300 p-2 text-right">Discounted Qty</th>
-                <th class="border border-zinc-300 p-2">Discount</th>
-                <th class="border border-zinc-300 p-2 text-right">Subtotal</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse ($entranceSlip->details as $detail)
-                <tr>
-                    <td class="border border-zinc-300 p-2">{{ $detail->entranceFee?->entrance_fee_name ?? 'Entrance Fee' }}</td>
-                    <td class="border border-zinc-300 p-2 text-right">{{ $detail->guest_quantity }}</td>
-                    <td class="border border-zinc-300 p-2 text-right">₱{{ number_format((float) ($detail->unit_rate_snapshot ?? $detail->entranceFee?->entrance_fee_price), 2) }}</td>
-                    <td class="border border-zinc-300 p-2 text-right">{{ $detail->discounted_quantity ?? 0 }}</td>
-                    <td class="border border-zinc-300 p-2">{{ $detail->discount?->discount_name ?? 'None' }}</td>
-                    <td class="border border-zinc-300 p-2 text-right">₱{{ number_format((float) ($detail->line_total_snapshot ?? ((float) ($detail->entranceFee?->entrance_fee_price ?? 0) * $detail->guest_quantity)), 2) }}</td>
-                </tr>
-            @empty
-                <tr><td colspan="6" class="border border-zinc-300 p-2 text-center text-zinc-500">No entrance slip details found.</td></tr>
-            @endforelse
-        </tbody>
-    </table>
-
-    <div class="ml-auto w-full max-w-sm rounded-xl border border-zinc-200 p-4 text-sm">
-        <div class="flex justify-between"><span>Total Price</span><strong>₱{{ number_format((float) $entranceSlip->total_price, 2) }}</strong></div>
-        <div class="flex justify-between"><span>Amount Due</span><strong>₱{{ number_format((float) $entranceSlip->amount_due, 2) }}</strong></div>
-    </div>
-
-    <div class="mt-10 grid grid-cols-2 gap-8 text-sm">
-        <div class="border-t border-zinc-400 pt-2 text-center">Security Guard / Created By<br>{{ $entranceSlip->createdBy->full_name ?? $entranceSlip->createdBy->username ?? '' }}</div>
-        <div class="border-t border-zinc-400 pt-2 text-center">Cashier / Handled By<br>{{ $entranceSlip->handledBy->full_name ?? $entranceSlip->handledBy->username ?? '' }}</div>
-    </div>
+    <div class="t-sep"></div>
+    <div class="t-row t-big"><span>TOTAL</span><span>{{ $peso($entranceSlip->total_price) }}</span></div>
+    <div class="t-row"><span>Amount Due</span><span class="t-strong">{{ $peso($entranceSlip->amount_due) }}</span></div>
 
     @if ($entranceSlip->admitted_at)
-        <p class="mt-6 text-center text-sm"><strong>Admitted:</strong> {{ $entranceSlip->admitted_at->format('M d, Y h:i A') }} by {{ $entranceSlip->admittedBy?->full_name ?? $entranceSlip->admittedBy?->username }}</p>
+        <div class="t-sep"></div>
+        <p class="t-small">Admitted {{ $entranceSlip->admitted_at->format('M d, Y h:i A') }} by {{ $entranceSlip->admittedBy?->full_name ?? $entranceSlip->admittedBy?->username }}</p>
     @endif
+
+    <div class="t-sign">
+        Security Guard / Created By<br>{{ $entranceSlip->createdBy->full_name ?? $entranceSlip->createdBy->username ?? '' }}
+    </div>
+    <div class="t-sign">
+        Cashier / Handled By<br>{{ $entranceSlip->handledBy->full_name ?? $entranceSlip->handledBy->username ?? '' }}
+    </div>
+
+    <p class="t-center t-small" style="margin-top: 10px;">Thank you!</p>
 </x-print.layout>

@@ -1,86 +1,63 @@
-<x-print.layout title="Payment Receipt">
+<x-print.layout title="Payment Receipt" size="thermal">
     @php
         $payer = $payment->booking?->guest ?? $payment->reservation?->guest ?? $payment->entranceSlip?->guest;
         $source = $payment->booking ? 'Booking '.$payment->booking->b_ref_no : ($payment->reservation ? 'Reservation '.$payment->reservation->r_ref_no : ($payment->entranceSlip ? 'Entrance Slip #'.str_pad((string) $payment->entranceSlip->entrance_slip_id, 6, '0', STR_PAD_LEFT) : 'Payment'));
+        $peso = static fn (mixed $amount): string => '₱'.number_format((float) $amount, 2);
     @endphp
 
-    <div class="mb-6 flex items-start justify-between gap-4">
-        <div>
-            <h2 class="text-xl font-bold">Payment Receipt</h2>
-            <p class="text-sm text-zinc-600">Payment Ref: <strong>{{ $payment->p_ref_no }}</strong></p>
-        </div>
-        <div class="text-right text-sm">
-            <p><strong>Status:</strong> {{ $payment->payment_status }}</p>
-            <p><strong>Date Paid:</strong> {{ optional($payment->date_paid)->format('M d, Y') }}</p>
-        </div>
-    </div>
+    <p class="t-center t-big">PAYMENT RECEIPT</p>
+    <p class="t-center t-small">Ref: {{ $payment->p_ref_no }}</p>
+    <div class="t-sep"></div>
 
-    <div class="mb-6 grid grid-cols-2 gap-4 text-sm">
-        <div class="rounded-xl border border-zinc-200 p-4">
-            <h3 class="mb-2 font-semibold">Payer</h3>
-            <p>{{ $payer->full_name ?? 'Walk-in Guest' }}</p>
-            <p>{{ $payer->email ?? '' }}</p>
-            <p>{{ $payer->contact_no ?? '' }}</p>
-        </div>
-        <div class="rounded-xl border border-zinc-200 p-4">
-            <h3 class="mb-2 font-semibold">Payment Details</h3>
-            <p><strong>Source:</strong> {{ $source }}</p>
-            <p><strong>Mode:</strong> {{ $payment->modeOfPayment->mode_of_payment ?? 'N/A' }}</p>
-            <p><strong>GCash Ref:</strong> {{ $payment->reference_number ?: 'N/A' }}</p>
-            <p><strong>Recorded By:</strong> {{ $payment->user->full_name ?? $payment->user->username ?? 'Guest Upload' }}</p>
-        </div>
-    </div>
+    <div class="t-row"><span>Status</span><span>{{ $payment->payment_status }}</span></div>
+    <div class="t-row"><span>Date Paid</span><span>{{ optional($payment->date_paid)->format('M d, Y') }}</span></div>
+    <div class="t-row"><span>Source</span><span>{{ $source }}</span></div>
+    <div class="t-row"><span>Mode</span><span>{{ $payment->modeOfPayment->mode_of_payment ?? 'N/A' }}</span></div>
+    @if ($payment->reference_number)
+        <div class="t-row"><span>GCash Ref</span><span>{{ $payment->reference_number }}</span></div>
+    @endif
+    <div class="t-row"><span>Received By</span><span>{{ $payment->user->full_name ?? $payment->user->username ?? 'Guest Upload' }}</span></div>
+
+    <div class="t-sep"></div>
+    <p class="t-strong">{{ $payer->full_name ?? 'Walk-in Guest' }}</p>
+    @if (! empty($payer->contact_no))<p class="t-small">{{ $payer->contact_no }}</p>@endif
+    @if (! empty($payer->email))<p class="t-small">{{ $payer->email }}</p>@endif
 
     @if (! empty($breakdown) && count($breakdown['lines']) > 0)
-        <div class="mb-6 rounded-xl border border-zinc-200 p-4 text-sm">
-            <h3 class="mb-3 font-semibold">What this payment covered</h3>
-            <table class="w-full text-left">
-                <thead class="border-b border-zinc-200 text-xs uppercase text-zinc-500">
-                    <tr>
-                        <th class="py-2 pr-3">Item</th>
-                        <th class="py-2 pr-3 text-right">Charge</th>
-                        <th class="py-2 pr-3 text-right">Amount Paid</th>
-                        <th class="py-2 text-right">Still owed</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-100">
-                    @foreach ($breakdown['lines'] as $line)
-                        <tr>
-                            <td class="py-2 pr-3">
-                                <p class="font-medium">{{ $line['label'] }}</p>
-                                <p class="text-xs text-zinc-500">{{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif</p>
-                            </td>
-                            <td class="py-2 pr-3 text-right">₱{{ number_format((float) $line['charge'], 2) }}</td>
-                            <td class="py-2 pr-3 text-right font-semibold">₱{{ number_format((float) $line['applied'], 2) }}</td>
-                            <td class="py-2 text-right">₱{{ number_format((float) $line['remaining'], 2) }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        <div class="t-sep"></div>
+        <p class="t-strong">WHAT THIS PAYMENT COVERED</p>
 
-            @if ((float) $breakdown['unapplied'] > 0)
-                <p class="mt-2 text-xs text-zinc-500">₱{{ number_format((float) $breakdown['unapplied'], 2) }} of this payment was not matched to an itemised charge.</p>
-            @endif
-
-            <div class="mt-3 flex justify-between border-t border-zinc-200 pt-2 font-semibold">
-                <span>Balance after this payment</span>
-                <span>₱{{ number_format((float) $breakdown['balance_after'], 2) }}</span>
+        @foreach ($breakdown['lines'] as $line)
+            <div style="margin-top: 5px;">
+                <p class="t-strong">{{ $line['label'] }}</p>
+                <p class="t-small">{{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif</p>
+                <div class="t-row t-small"><span>Charge</span><span>{{ $peso($line['charge']) }}</span></div>
+                <div class="t-row"><span>Amount Paid</span><span class="t-strong">{{ $peso($line['applied']) }}</span></div>
+                @if ((float) $line['remaining'] > 0)
+                    <div class="t-row t-small"><span>Still owed</span><span>{{ $peso($line['remaining']) }}</span></div>
+                @endif
             </div>
-        </div>
+        @endforeach
+
+        @if ((float) $breakdown['unapplied'] > 0)
+            <p class="t-small" style="margin-top: 4px;">{{ $peso($breakdown['unapplied']) }} was not matched to an itemised charge.</p>
+        @endif
+
+        <div class="t-sep"></div>
+        <div class="t-row"><span>Balance after payment</span><span class="t-strong">{{ $peso($breakdown['balance_after']) }}</span></div>
     @endif
 
-    <div class="ml-auto w-full max-w-sm space-y-2 rounded-xl border border-zinc-200 p-4 text-sm">
-        <div class="flex justify-between text-lg"><span>Amount Paid</span><strong>₱{{ number_format((float) $payment->amount_paid, 2) }}</strong></div>
+    <div class="t-sep"></div>
+    <div class="t-row t-big"><span>AMOUNT PAID</span><span>{{ $peso($payment->amount_paid) }}</span></div>
 
-        {{-- Only cash payments store the cash received and the change returned. --}}
-        @if (! is_null($payment->cash_paid))
-            <div class="flex justify-between"><span>Cash Paid</span><strong>₱{{ number_format((float) $payment->cash_paid, 2) }}</strong></div>
-            <div class="flex justify-between"><span>Change</span><strong>₱{{ number_format((float) $payment->change_amount, 2) }}</strong></div>
-        @endif
-    </div>
+    {{-- Only cash payments store the cash received and the change returned. --}}
+    @if (! is_null($payment->cash_paid))
+        <div class="t-row"><span>Cash Paid</span><span>{{ $peso($payment->cash_paid) }}</span></div>
+        <div class="t-row"><span>Change</span><span>{{ $peso($payment->change_amount) }}</span></div>
+    @endif
 
-    <div class="mt-10 grid grid-cols-2 gap-8 text-sm">
-        <div class="border-t border-zinc-400 pt-2 text-center">Received By</div>
-        <div class="border-t border-zinc-400 pt-2 text-center">Guest Signature</div>
-    </div>
+    <div class="t-sign">Received By</div>
+    <div class="t-sign">Guest Signature</div>
+
+    <p class="t-center t-small" style="margin-top: 10px;">Thank you!</p>
 </x-print.layout>
