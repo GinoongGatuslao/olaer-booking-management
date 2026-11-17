@@ -38,7 +38,8 @@ trait ChecksFacilityGroups
             }
 
             foreach ($list as $message) {
-                $messages[] = $prefix.$message;
+                // One general line instead of one per missing occupant name.
+                $messages[] = $message === 'Room Occupants must be filled out.' ? $message : $prefix.$message;
             }
         }
 
@@ -111,7 +112,17 @@ trait ChecksFacilityGroups
         }
 
         if ($product->isRoom() && $product->strict_maximum !== null) {
-            return 'Maximum '.$product->strict_maximum.' guests per room';
+            $label = 'Up to '.$product->strict_maximum.' guests per room';
+            $included = $product->included_guest_count;
+
+            if ($included !== null && $included >= 0 && $included < $product->strict_maximum) {
+                $fee = \App\Support\GroupRowPricing::ROOM_EXTRA_GUEST_FEE;
+                $fee = number_format($fee, fmod($fee, 1.0) === 0.0 ? 0 : 2);
+
+                $label .= " · first {$included} guests free, ₱{$fee} per extra guest per night";
+            }
+
+            return $label;
         }
 
         $min = $product->suggested_minimum;
@@ -218,8 +229,8 @@ trait ChecksFacilityGroups
             'contactNo.required' => 'Enter the contact number.',
             'province.required' => 'Choose a province.',
             'city.required' => 'Choose a city or municipality.',
-            'roomOccupants.*.*.first_name.required' => 'Enter the first name.',
-            'roomOccupants.*.*.last_name.required' => 'Enter the last name.',
+            'roomOccupants.*.*.first_name.required' => 'Room Occupants must be filled out.',
+            'roomOccupants.*.*.last_name.required' => 'Room Occupants must be filled out.',
         ];
     }
 }

@@ -237,6 +237,11 @@ class FacilityInspectionWorkflowService
                 ->lockForUpdate()
                 ->findOrFail($fineId);
 
+            // A situational fine is not tied to a checklist item: always charged as 1.
+            if (strcasecmp(trim((string) $fine->fine_type), 'Situational') === 0) {
+                $quantity = 1;
+            }
+
             $sourceItem = $this->resolveChecklistItem(
                 $bookingDetailsId,
                 $itemSource,

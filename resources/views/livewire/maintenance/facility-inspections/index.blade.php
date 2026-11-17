@@ -98,6 +98,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
         return [
             'inspectionRequests' => $this->inspectionRequests(),
             'fines' => $this->fines(),
+            'quantityLocked' => $this->isSituationalFine(),
             'selectedChecklistItems' => $this->selectedChecklistItems(),
             'selectedGuestFines' => $this->selectedGuestFines(),
             'selectedDraftFines' => $this->selectedDraftFines(),
@@ -154,19 +155,28 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     /**
      * Most units one fine can cover: what the selected checklist item expects
      * (the facility's inclusive amount, or what was delivered for a request).
-     * Situational fines have no item, so they keep the general limit.
+     * A situational fine has no item and is always charged as 1.
      *
      * @param  array<int, array<string, mixed>>  $items
      */
     public function fineQuantityLimit(array $items): int
     {
-        if (trim($this->selectedChecklistKey) === '') {
-            return 100;
+        if ($this->isSituationalFine()) {
+            return 1;
         }
 
         $selected = collect($items)->firstWhere('key', $this->selectedChecklistKey);
 
         return $selected === null ? 100 : max((int) $selected['expected_quantity'], 1);
+    }
+
+    /**
+     * With no checklist item selected only situational fines are offered (see fines()).
+     * They are not tied to an item or an amenity, so the quantity is locked at 1.
+     */
+    private function isSituationalFine(): bool
+    {
+        return trim($this->selectedChecklistKey) === '';
     }
 
     public function clearFilters(): void
@@ -426,6 +436,10 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     public function addFine(
         FacilityInspectionWorkflowService $inspectionWorkflow,
     ): void {
+        if ($this->isSituationalFine()) {
+            $this->fineQuantity = 1; // locked: a situational fine is always charged as 1
+        }
+
         $quantityLimit = $this->fineQuantityLimit($this->selectedChecklistItems());
 
         $validated = $this->validate([
@@ -1471,8 +1485,29 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                         <flux:field class="relative">
                             <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
 
+                            @if ($quantityLocked)
+                                {{-- Situational fine: not tied to a checklist item, always charged as 1 --}}
+                                <div wire:key="fine-quantity-locked" class="flex items-center gap-2">
+                                    <flux:button type="button" icon="minus" aria-label="Decrease quantity" disabled />
+
+                                    <div class="min-w-0 flex-1">
+                                        <flux:input
+                                            type="text"
+                                            value="1"
+                                            class="text-center"
+                                            aria-label="Quantity (locked at 1)"
+                                            disabled
+                                        />
+                                    </div>
+
+                                    <flux:button type="button" icon="plus" aria-label="Increase quantity" disabled />
+                                </div>
+
+                    
+                            @else
                             {{-- Whole numbers only: 1 up to what the selected item has in the facility / was delivered --}}
                             <div
+                                wire:key="fine-quantity-editable"
                                 class="flex items-center gap-2"
                                 data-max="{{ $quantityLimit }}"
                                 x-data="{
@@ -1515,8 +1550,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                                 />
                             </div>
 
-                            @if ($selectedChecklistKey !== '')
-                                <p class="text-xs text-zinc-500 dark:text-zinc-400">Up to {{ $quantityLimit }} for this item.</p>
+    
                             @endif
                             @if ($msg = $this->visibleError('fineQuantity'))
                                 <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>

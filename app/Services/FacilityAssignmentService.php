@@ -210,7 +210,10 @@ class FacilityAssignmentService
             ]);
         }, attempts: 3);
 
-        $this->confirmationEmail->sendReservationCreated($reservation);
+        // The guest-link flow sends this itself once its own transaction has committed.
+        if (! ($guestData['defer_confirmation_email'] ?? false)) {
+            $this->confirmationEmail->sendReservationCreated($reservation);
+        }
 
         return $reservation;
     }
@@ -471,7 +474,10 @@ class FacilityAssignmentService
             ]);
         }, attempts: 3);
 
-        $this->confirmationEmail->sendBookingSubmitted($booking);
+        // The guest-link flow sends this itself once its own transaction has committed.
+        if (! ($guestData['defer_confirmation_email'] ?? false)) {
+            $this->confirmationEmail->sendBookingSubmitted($booking);
+        }
 
         return $booking;
     }
@@ -959,8 +965,18 @@ class FacilityAssignmentService
         $minimum = intdiv($group->estimated_users, $group->quantity);
         $remainder = $group->estimated_users % $group->quantity;
 
+        // Only rooms are restricted by guest count (GroupCapacityCheck makes sure every
+        // room gets at least 1). Cottages and function halls accept any estimate, so
+        // 1 estimated guest can still reserve 3 cottages: every unit counts as having
+        // at least 1 guest instead of being quoted with 0.
+        $isRoom = $group->facilityProduct->isRoom();
+
         return array_map(
-            fn (int $index): int => $minimum + ($index < $remainder ? 1 : 0),
+            function (int $index) use ($minimum, $remainder, $isRoom): int {
+                $count = $minimum + ($index < $remainder ? 1 : 0);
+
+                return $isRoom ? $count : max(1, $count);
+            },
             range(0, $group->quantity - 1),
         );
     }

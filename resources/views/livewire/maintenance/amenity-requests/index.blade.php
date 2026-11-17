@@ -24,6 +24,13 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
     {
         // Clear the red highlight of a field as soon as the user edits it.
         $this->resetValidation($property);
+
+        // Quantity accepts whole numbers of at least 1 only (a blank stays blank while typing).
+        if (preg_match('/^items\.(\d+)\.quantity$/', $property, $match) && isset($this->items[(int) $match[1]])) {
+            $digits = substr(preg_replace('/\D/', '', (string) ($this->items[(int) $match[1]]['quantity'] ?? '')), 0, 6);
+
+            $this->items[(int) $match[1]]['quantity'] = $digits === '' ? '' : max(1, (int) $digits);
+        }
     }
 
     /** Error text for a required field; an empty required field only turns red (no text). */
@@ -192,6 +199,9 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
             ],
         ], [
             'items.*.amenity_id.distinct' => 'Each amenity can only be added once. Raise its quantity instead.',
+            'items.*.quantity.required' => 'Enter a quantity (at least 1).',
+            'items.*.quantity.integer' => 'Quantity must be a whole number.',
+            'items.*.quantity.min' => 'Quantity must be at least 1.',
         ]);
 
         try {
@@ -840,7 +850,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
 
                             <flux:field class="relative">
                                 <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
-                                <flux:input wire:model.live="items.{{ $index }}.quantity" type="number" min="1" :invalid="$errors->has('items.'.$index.'.quantity')" />
+                                <flux:input wire:model.live="items.{{ $index }}.quantity" type="text" inputmode="numeric" pattern="[0-9]*" x-on:keydown="['e','E','+','-','.',','].includes($event.key) && $event.preventDefault()" x-on:input="$el.value = $el.value.replace(/\D/g, '')" x-on:blur="if ($el.value === '' || Number($el.value) < 1) { $el.value = 1; $el.dispatchEvent(new Event('input', { bubbles: true })) }" :invalid="$errors->has('items.'.$index.'.quantity')" />
                                 @if ($msg = $this->visibleError('items.'.$index.'.quantity'))
                                     <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
                                 @endif

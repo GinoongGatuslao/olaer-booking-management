@@ -566,7 +566,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                             </flux:field>
                             {{-- An invisible label keeps the button level with the inputs, with or without a hint under Schedule. --}}
                             <flux:field class="relative">
-                                <flux:label class="invisible" aria-hidden="true">Remove</flux:label>
+                                <flux:label class="invisible max-lg:hidden" aria-hidden="true">Remove</flux:label>
                                 <flux:button type="button" variant="ghost" class="w-full" wire:click="removeGroup({{ $index }})">Remove</flux:button>
                             </flux:field>
                         </div>

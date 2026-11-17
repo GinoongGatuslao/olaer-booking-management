@@ -2,10 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\FacilityProduct;
 use App\Models\GuestSubmissionConfirmation;
+use App\Models\Reservation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -26,6 +29,7 @@ class GuestSubmissionConfirmationService
         private readonly GcashProofStorageService $proofStorage,
         private readonly GcashReferenceIntegrityService $gcashReferences,
         private readonly DecimalMoneyService $money,
+        private readonly GuestConfirmationEmailService $confirmationEmail,
     ) {}
 
     /**
@@ -119,7 +123,9 @@ class GuestSubmissionConfirmationService
             throw new InvalidArgumentException('This confirmation link is not valid.');
         }
 
-        $result = DB::transaction(function () use ($submission): array {
+        $created = false;
+
+        $result = DB::transaction(function () use ($submission, &$created): array {
             $locked = GuestSubmissionConfirmation::query()
                 ->lockForUpdate()
                 ->findOrFail($submission->getKey());
@@ -149,6 +155,8 @@ class GuestSubmissionConfirmationService
                     .' Please make your request again.'];
             }
 
+            $created = true;
+
             return ['submission' => $locked->fresh(), 'error' => null];
         });
 
@@ -156,7 +164,40 @@ class GuestSubmissionConfirmationService
             throw new InvalidArgumentException($result['error']);
         }
 
+        // Only the click that actually created the record sends the details email;
+        // opening the link again never sends a second one.
+        if ($created) {
+            $this->sendDetailsEmail($result['submission']);
+        }
+
         return $result['submission'];
+    }
+
+    /**
+     * The email with the complete reservation / booking details, sent after the
+     * confirmation has been saved. A failure never undoes the confirmation, but it is logged.
+     */
+    private function sendDetailsEmail(GuestSubmissionConfirmation $submission): void
+    {
+        try {
+            if ($submission->type === 'booking') {
+                $booking = Booking::query()->find($submission->booking_id);
+                $sent = $booking !== null && $this->confirmationEmail->sendBookingSubmitted($booking);
+            } else {
+                $reservation = Reservation::query()->find($submission->reservation_id);
+                $sent = $reservation !== null && $this->confirmationEmail->sendReservationCreated($reservation);
+            }
+
+            if (! $sent) {
+                Log::warning('The reservation/booking details email was not sent after the guest confirmed.', [
+                    'submission_id' => $submission->getKey(),
+                    'type' => $submission->type,
+                    'email' => $submission->email,
+                ]);
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function createRecords(GuestSubmissionConfirmation $submission): void
@@ -172,6 +213,8 @@ class GuestSubmissionConfirmationService
             'payment_amount' => $payload['payment_amount'] ?? null,
             'reference_number' => $payload['reference_number'] ?? null,
             'proof_of_payment_path' => $payload['proof_of_payment_path'] ?? null,
+            // confirm() sends the details email itself, once this transaction has committed.
+            'defer_confirmation_email' => true,
         ];
 
         $ids = [];

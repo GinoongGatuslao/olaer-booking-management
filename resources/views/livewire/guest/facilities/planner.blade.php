@@ -54,7 +54,8 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             }
 
             foreach ($list as $message) {
-                $messages[] = $prefix.$message;
+                // One general line instead of one per missing occupant name.
+                $messages[] = $message === 'Room Occupants must be filled out.' ? $message : $prefix.$message;
             }
         }
 
@@ -140,7 +141,17 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         }
 
         if ($product->isRoom() && $product->strict_maximum !== null) {
-            return 'Maximum '.$product->strict_maximum.' guests per room';
+            $label = 'Up to '.$product->strict_maximum.' guests per room';
+            $included = $product->included_guest_count;
+
+            if ($included !== null && $included >= 0 && $included < $product->strict_maximum) {
+                $fee = \App\Support\GroupRowPricing::ROOM_EXTRA_GUEST_FEE;
+                $fee = number_format($fee, fmod($fee, 1.0) === 0.0 ? 0 : 2);
+
+                $label .= " · first {$included} guests free, ₱{$fee} per extra guest per night";
+            }
+
+            return $label;
         }
 
         $min = $product->suggested_minimum;
@@ -707,8 +718,8 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             'contactNo.regex' => 'The contact number must be 11 digits and start with 09.',
             'province.required' => 'Choose your province.',
             'city.required' => 'Choose your city or municipality.',
-            'roomOccupants.*.*.first_name.required' => 'Enter the first name.',
-            'roomOccupants.*.*.last_name.required' => 'Enter the last name.',
+            'roomOccupants.*.*.first_name.required' => 'Room Occupants must be filled out.',
+            'roomOccupants.*.*.last_name.required' => 'Room Occupants must be filled out.',
             'paymentAmount.required' => 'Enter the payment amount.',
             'paymentAmount.numeric' => 'The payment amount must be a number.',
             'paymentAmount.min' => 'The payment amount must be at least ₱1.',
@@ -847,9 +858,11 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                                     :invalid="$errors->has('groups.'.$index.'.estimated_users') || isset($issues[$index]['estimated_users'])"
                                 />
                             </flux:field>
-                            <div class="flex items-end">
+                            {{-- An invisible label keeps the button level with the inputs, with or without a hint under Schedule. --}}
+                            <flux:field class="relative">
+                                <flux:label class="invisible max-lg:hidden" aria-hidden="true">Remove</flux:label>
                                 <flux:button type="button" variant="ghost" wire:click="removeGroup({{ $index }})" class="w-full">Remove</flux:button>
-                            </div>
+                            </flux:field>
                         </div>
 
                         <div class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -1048,7 +1061,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         <x-error-toast :messages="$this->bannerErrors()" heading="Please fix the following:" :tick="$errorToastTick" />
 
         <p class="text-sm text-zinc-600 dark:text-zinc-300">
-           <strong>Kindly review your information especially the email since entering the wrong email will make you not receive the confirmation email and redo the entire process again. After you review the Booking, Cancellation, and Refund Policy, we will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
+           <strong>Please carefully review all your information, especially your email address, as an incorrect email may prevent you from receiving the confirmation link and require you to repeat the reservation process. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
         </p>
 
         <div class="flex justify-end">
