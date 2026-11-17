@@ -4,6 +4,7 @@ use App\FacilitySchedulePolicy;
 use App\Models\FacilityProduct;
 use App\Services\FacilityAssignmentService;
 use App\Services\FacilityRequirementService;
+use App\Support\GroupCapacityCheck;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -16,53 +17,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
 {
 
     use \App\Concerns\HasPhilippineLocations;
-
-    /**
-     * Messages for the error summary. An empty required field is only highlighted
-     * on the field itself, so it is left out of the summary.
-     *
-     * @return array<int, string>
-     */
-    public function bannerErrors(): array
-    {
-        $requiredFields = [
-            'city',
-            'contactNo',
-            'email',
-            'firstName',
-            'groups.*.check_in_date',
-            'groups.*.check_out_date',
-            'groups.*.estimated_users',
-            'groups.*.facility_product_id',
-            'groups.*.quantity',
-            'groups.*.rate_code',
-            'lastName',
-            'partyCount',
-            'province',
-            'roomOccupants.*.*.first_name',
-            'roomOccupants.*.*.last_name',
-        ];
-
-        $messages = [];
-
-        foreach ($this->getErrorBag()->messages() as $key => $list) {
-            $value = data_get($this, $key);
-            $blank = $value === null || $value === '' || $value === [];
-            $isRequiredField = collect($requiredFields)->contains(
-                fn (string $pattern): bool => \Illuminate\Support\Str::is($pattern, $key),
-            );
-
-            if ($isRequiredField && $blank) {
-                continue;
-            }
-
-            foreach ($list as $message) {
-                $messages[] = $message;
-            }
-        }
-
-        return array_values(array_unique($messages));
-    }
+    use \App\Concerns\ChecksFacilityGroups;
 
     public function updated(string $property): void
     {
@@ -73,19 +28,6 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
         \App\Support\PersonInput::normalize($this, $property);
     }
 
-    /** Error text for a required field; an empty required field only turns red (no text). */
-    public function visibleError(string $field): ?string
-    {
-        $message = $this->getErrorBag()->first($field);
-
-        if ($message === '') {
-            return null;
-        }
-
-        $value = data_get($this, $field);
-
-        return $value === null || $value === '' || $value === [] ? null : $message;
-    }
     public string $token = '';
     public int $partyCount = 1;
     public array $groups = [];
@@ -148,16 +90,12 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
     }
 
     /** @return array<string, string> */
-protected function messages(): array
-{
-    return [
-        'groups.*.estimated_users.required' => 'Please enter the number of guests.',
-        'groups.*.estimated_users.integer'  => 'Guests must be a whole number.',
-        'groups.*.estimated_users.min'      => 'There must be at least 1 guest.',
-        'groups.*.estimated_users.max'      => 'You can book up to 500 guests.',
-        'groups.*.quantity.required'        => 'Please enter a quantity.',
-    ];
-}
+    protected function messages(): array
+    {
+        return [
+            ...$this->facilityGroupMessages(),
+        ];
+    }
 
     /** @return array<string, string> */
     protected function validationAttributes(): array
@@ -237,6 +175,8 @@ protected function messages(): array
 
     public function updatedGroups(): void
     {
+        $this->sanitizeWholeNumbers();
+
         foreach ($this->groups as $index => $group) {
             $product = $this->productFor($index);
 
@@ -295,7 +235,12 @@ protected function messages(): array
     ): void {
         $this->errorToastTick++;
         $this->resetErrorBag();
+        $this->sanitizeWholeNumbers(fillBlanks: true);
         $this->validate($this->planRules());
+
+        if ($this->groupIssues() !== []) {
+            return; // the toast lists them and the fields are red
+        }
 
         try {
             $intent = $requirements->replaceGroups(
@@ -361,7 +306,12 @@ protected function messages(): array
         FacilityAssignmentService $assignments,
     ): void {
         $this->errorToastTick++;
+        $this->sanitizeWholeNumbers(fillBlanks: true);
         $this->validate($this->rules());
+
+        if ($this->groupIssues() !== []) {
+            return;
+        }
 
         try {
             $intent = $requirements->replaceGroups(
@@ -403,14 +353,14 @@ protected function messages(): array
     private function planRules(): array
     {
         return [
-            'partyCount' => ['required', 'integer', 'min:1', 'max:500'],
+            'partyCount' => ['required', 'integer', 'min:1'],
             'groups' => ['required', 'array', 'min:1', 'max:20'],
             'groups.*.facility_product_id' => ['required', 'integer', 'exists:tbl_facility_product,facility_product_id'],
             'groups.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
             'groups.*.rate_code' => ['required', 'string', 'max:30'],
             'groups.*.check_in_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'groups.*.check_out_date' => ['required', 'date_format:Y-m-d'],
-            'groups.*.estimated_users' => ['required', 'integer', 'min:1', 'max:500'],
+            'groups.*.estimated_users' => ['required', 'integer', 'min:1'],
         ];
     }
 
@@ -443,15 +393,6 @@ protected function messages(): array
         );
     }
 
-    public function availabilityFor(int $index): ?array
-    {
-        try {
-            return app(FacilityRequirementService::class)->availabilityFor($this->groups[$index]);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
     private function expectedRoomGuestCounts(): array
     {
         $counts = [];
@@ -466,7 +407,8 @@ protected function messages(): array
             $quantity = (int) ($group['quantity'] ?? 0);
             $estimatedUsers = (int) ($group['estimated_users'] ?? 0);
 
-            if ($quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $estimatedUsers > 500 || array_sum($counts) + $estimatedUsers > 500) {
+            // A room never holds more than its strict maximum; a wrong row gets no occupant rows.
+            if ($quantity < 1 || $quantity > 50 || GroupCapacityCheck::message($product, $quantity, $estimatedUsers) !== null) {
                 continue;
             }
 
@@ -483,6 +425,13 @@ protected function messages(): array
 
     private function syncRoomOccupantRows(): void
     {
+        // While a room row is wrong, keep what was typed; the rows rebuild once it is fixed.
+        foreach ($this->groups as $index => $group) {
+            if (GroupCapacityCheck::message($this->productFor($index), (int) ($group['quantity'] ?? 0), (int) ($group['estimated_users'] ?? 0)) !== null) {
+                return;
+            }
+        }
+
         $rooms = [];
 
         foreach ($this->expectedRoomGuestCounts() as $roomIndex => $guestCount) {
@@ -522,9 +471,6 @@ protected function messages(): array
                 <flux:field class="relative">
                     <flux:label>First name <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="firstName" :invalid="$errors->has('firstName')" />
-                    @if ($msg = $this->visibleError('firstName'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
                 </flux:field>
                 <flux:field class="relative">
                     <flux:label>Middle name</flux:label>
@@ -533,29 +479,21 @@ protected function messages(): array
                 <flux:field class="relative">
                     <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="lastName" :invalid="$errors->has('lastName')" />
-                    @if ($msg = $this->visibleError('lastName'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
                 </flux:field>
                 <flux:field class="relative md:col-span-2">
                     <flux:label>Email <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="email" type="email" :invalid="$errors->has('email')" />
-                    @if ($msg = $this->visibleError('email'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
                 </flux:field>
                 <flux:field class="relative">
                     <flux:label>Contact number <span class="text-red-500">*</span></flux:label>
                     <flux:input wire:model="contactNo" maxlength="11" :invalid="$errors->has('contactNo')" />
-                    @if ($msg = $this->visibleError('contactNo'))
-                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                    @endif
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3 md:items-start">
-                <x-ph-province-select :options="$this->provinceOptions()" :error="$this->visibleError('province')" />
-                <x-ph-city-select :options="$this->cityOptions()" :error="$this->visibleError('city')" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
-                <x-ph-barangay-select :options="$this->barangayOptions()" :error="$this->visibleError('barangay')" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
+                <x-ph-region-select :options="$this->regionOptions()" />
+                <x-ph-province-select :options="$this->provinceOptions()" />
+                <x-ph-city-select :options="$this->cityOptions()" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
+                <x-ph-barangay-select :options="$this->barangayOptions()" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
                 <flux:field class="relative md:col-span-2">
                     <flux:label>Purok/Street</flux:label>
                     <flux:input wire:model="purok" />
@@ -573,6 +511,7 @@ protected function messages(): array
             </div>
 
             <div class="mt-5 space-y-4">
+                @php($issues = $this->groupIssues())
                 @foreach ($groups as $index => $group)
                     @php($product = $this->productFor($index))
                     @php($availability = $this->availabilityFor($index))
@@ -586,9 +525,6 @@ protected function messages(): array
                                     <option value="{{ $candidate->facility_product_id }}"> {{ $candidate->display_name }}</option>
                                 @endforeach
                             </flux:select>
-                                @if ($msg = $this->visibleError('groups.'.$index.'.facility_product_id'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
                             </flux:field>
                             <flux:field class="relative">
                                 <flux:label>Schedule <span class="text-red-500">*</span></flux:label>
@@ -599,26 +535,35 @@ protected function messages(): array
                                     <option value="{{ $rate->rate_code->value }}">{{ $rate->display_name }} — ₱{{ number_format((float) $rate->amount, 2) }}</option>
                                 @endforeach
                             </flux:select>
-                                @if ($msg = $this->visibleError('groups.'.$index.'.rate_code'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
                                 @if ($product && \App\Support\DayRateCutoff::closedFor($product->schedule_policy, (string) ($group['check_in_date'] ?? '')))
                                     <p class="text-xs text-zinc-500 dark:text-zinc-400">Only Night rate is available currently.</p>
                                 @endif
                             </flux:field>
                             <flux:field class="relative">
                                 <flux:label>Quantity <span class="text-red-500">*</span></flux:label>
-                                <flux:input wire:model.live="groups.{{ $index }}.quantity" type="number" min="1" max="50" :invalid="$errors->has('groups.'.$index.'.quantity')" />
-                                @if ($msg = $this->visibleError('groups.'.$index.'.quantity'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
+                                <flux:input
+                                    wire:model.live.debounce.400ms="groups.{{ $index }}.quantity"
+                                    type="text"
+                                    inputmode="numeric"
+                                    pattern="[0-9]*"
+                                    x-on:keydown="['e','E','+','-','.',','].includes($event.key) && $event.preventDefault()"
+                                    x-on:input="$el.value = $el.value.replace(/\D/g, '')"
+                                    x-on:blur="if ($el.value === '' || Number($el.value) < 1) { $el.value = 1; $el.dispatchEvent(new Event('input', { bubbles: true })) }"
+                                    :invalid="$errors->has('groups.'.$index.'.quantity') || isset($issues[$index]['quantity'])"
+                                />
                             </flux:field>
                             <flux:field class="relative">
                                 <flux:label>Estimated guests <span class="text-red-500">*</span></flux:label>
-                                <flux:input wire:model.live="groups.{{ $index }}.estimated_users" type="number" min="1" max="500" :invalid="$errors->has('groups.'.$index.'.estimated_users')" />
-                                @if ($msg = $this->visibleError('groups.'.$index.'.estimated_users'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
+                                <flux:input
+                                    wire:model.live.debounce.400ms="groups.{{ $index }}.estimated_users"
+                                    type="text"
+                                    inputmode="numeric"
+                                    pattern="[0-9]*"
+                                    x-on:keydown="['e','E','+','-','.',','].includes($event.key) && $event.preventDefault()"
+                                    x-on:input="$el.value = $el.value.replace(/\D/g, '')"
+                                    x-on:blur="if ($el.value === '' || Number($el.value) < 1) { $el.value = 1; $el.dispatchEvent(new Event('input', { bubbles: true })) }"
+                                    :invalid="$errors->has('groups.'.$index.'.estimated_users') || isset($issues[$index]['estimated_users'])"
+                                />
                             </flux:field>
                             {{-- An invisible label keeps the button level with the inputs, with or without a hint under Schedule. --}}
                             <flux:field class="relative">
@@ -630,16 +575,10 @@ protected function messages(): array
                             <flux:field class="relative">
                                 <flux:label>Check-in/use date <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.check_in_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_in_date')" />
-                                @if ($msg = $this->visibleError('groups.'.$index.'.check_in_date'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
                             </flux:field>
                             <flux:field class="relative">
                                 <flux:label>Check-out/end date <span class="text-red-500">*</span></flux:label>
                                 <flux:input wire:model.live="groups.{{ $index }}.check_out_date" type="date" min="{{ today()->toDateString() }}" :invalid="$errors->has('groups.'.$index.'.check_out_date')" />
-                                @if ($msg = $this->visibleError('groups.'.$index.'.check_out_date'))
-                                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                @endif
                             </flux:field>
                         </div>
                         @php($rowSummary = \App\Support\GroupRowPricing::summarize($product, $group))
@@ -651,14 +590,13 @@ protected function messages(): array
                                 <flux:badge color="green" title="Before any discount">Subtotal: ₱{{ number_format($rowSummary['subtotal'], 2) }}</flux:badge>
                             </div>
                         @endif
+                        {{-- Shown as soon as a facility and a schedule are chosen. --}}
                         @if ($availability)
                             <div class="mt-3 flex flex-wrap gap-2">
-                                <flux:badge color="emerald">{{ $availability['available'] }} available</flux:badge>
-                                <flux:badge color="zinc">{{ $availability['requested'] }} requested</flux:badge>
-                                @if ($product?->strict_maximum)
-                                    <flux:badge color="blue">Maximum {{ $product->strict_maximum }} per room</flux:badge>
-                                @else
-                                    <flux:badge color="blue">Capacity is informational</flux:badge>
+                                <flux:badge color="emerald">{{ $availability['available'] ?? '—' }} available</flux:badge>
+                                <flux:badge :color="$availability['available'] !== null && $availability['requested'] > $availability['available'] ? 'red' : 'zinc'">{{ $availability['requested'] }} requested</flux:badge>
+                                @if ($capacityText = $this->capacityLabel($product))
+                                    <flux:badge color="blue">{{ $capacityText }}</flux:badge>
                                 @endif
                             </div>
                         @endif
@@ -708,7 +646,7 @@ protected function messages(): array
             @endif
         </flux:card>
 
-        @if ($roomOccupants !== [])
+        @if ($this->showRoomOccupants())
             <flux:card>
                 <flux:heading size="lg">Room occupants</flux:heading>
                 <flux:text>All occupants are required and will be attached to the exact assigned room.</flux:text>
@@ -722,17 +660,11 @@ protected function messages(): array
                                         <flux:field class="relative">
                                             <flux:label>First name <span class="text-red-500">*</span></flux:label>
                                             <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.first_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name')" />
-                                            @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.first_name'))
-                                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                            @endif
                                         </flux:field>
                                         <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.middle_name" label="Middle name" />
                                         <flux:field class="relative">
                                             <flux:label>Last name <span class="text-red-500">*</span></flux:label>
                                             <flux:input wire:model="roomOccupants.{{ $roomIndex }}.{{ $occupantIndex }}.last_name" :invalid="$errors->has('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name')" />
-                                            @if ($msg = $this->visibleError('roomOccupants.'.$roomIndex.'.'.$occupantIndex.'.last_name'))
-                                                <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
-                                            @endif
                                         </flux:field>
                                     </div>
                                 @endforeach
@@ -743,24 +675,26 @@ protected function messages(): array
             </flux:card>
         @endif
 
-        {{-- Errors show as a toast in the top-right corner (required-but-empty fields are only highlighted). --}}
+        {{-- Every error text shows here (fields only turn red). It stays until the errors are fixed or it is dismissed. --}}
         @php($toastErrors = $this->bannerErrors())
         @if ($toastErrors !== [])
             <div
                 wire:key="error-toast-{{ $errorToastTick }}-{{ md5(json_encode($toastErrors)) }}"
                 x-data="{ show: true }"
-                x-init="setTimeout(() => show = false, 8000)"
                 x-show="show"
                 x-transition.opacity.duration.200ms
                 role="alert"
-                class="fixed right-4 top-20 z-[60] w-[calc(100vw-2rem)] max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+                class="fixed right-4 top-20 z-[60] max-h-[80vh] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-100"
             >
                 <div class="flex items-start gap-3">
-                    <ul class="min-w-0 flex-1 list-disc space-y-1 pl-5">
-                        @foreach ($toastErrors as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold">Please fix the following:</p>
+                        <ul class="mt-1 list-disc space-y-1 pl-5">
+                            @foreach ($toastErrors as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
                     <button type="button" x-on:click="show = false" class="shrink-0 text-red-700 hover:text-red-900 dark:text-red-200 dark:hover:text-white" aria-label="Dismiss">&times;</button>
                 </div>
             </div>

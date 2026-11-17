@@ -58,8 +58,8 @@ class FacilityRequirementService
         int $partyCount,
         array $groups,
     ): FacilityRequirementIntent {
-        if ($partyCount < 1 || $partyCount > 500 || $groups === [] || count($groups) > 20) {
-            throw new InvalidArgumentException('Enter 1 to 500 guests and 1 to 20 facility groups.');
+        if ($partyCount < 1 || $groups === [] || count($groups) > 20) {
+            throw new InvalidArgumentException('Enter at least 1 guest and 1 to 20 facility groups.');
         }
 
         return DB::transaction(function () use ($intent, $partyCount, $groups): FacilityRequirementIntent {
@@ -136,7 +136,7 @@ class FacilityRequirementService
         $checkInDate = (string) ($group['check_in_date'] ?? '');
         $checkOutDate = (string) ($group['check_out_date'] ?? '');
 
-        if ($productId < 1 || $quantity < 1 || $quantity > 50 || $estimatedUsers < $quantity || $estimatedUsers > 500 || $rateCode === null) {
+        if ($productId < 1 || $quantity < 1 || $quantity > 50 || $estimatedUsers < 1 || $rateCode === null) {
             throw new InvalidArgumentException('Each facility requirement needs a valid product, rate, quantity, and guest estimate.');
         }
 
@@ -179,8 +179,11 @@ class FacilityRequirementService
             $checkOut->toDateString(),
         );
 
-        if ($product->strict_maximum !== null && $estimatedUsers > $quantity * $product->strict_maximum) {
-            throw new InvalidArgumentException('The room guest estimate exceeds the selected quantity\'s maximum capacity.');
+        // Only rooms are restricted; cottages and function halls take any guest estimate.
+        $capacityMessage = \App\Support\GroupCapacityCheck::message($product, $quantity, $estimatedUsers);
+
+        if ($capacityMessage !== null) {
+            throw new InvalidArgumentException($capacityMessage);
         }
 
         return [
