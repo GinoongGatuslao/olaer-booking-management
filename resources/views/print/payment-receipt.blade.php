@@ -29,7 +29,6 @@
         @foreach ($breakdown['lines'] as $line)
             <div style="margin-top: 5px;">
                 <p class="t-strong">{{ $line['label'] }}</p>
-                <p class="t-small">{{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif</p>
                 <div class="t-row t-small"><span>Charge</span><span>{{ $peso($line['charge']) }}</span></div>
                 @if ((float) $line['remaining'] > 0)
                     <div class="t-row t-small"><span>Still owed</span><span>{{ $peso($line['remaining']) }}</span></div>
@@ -56,5 +55,5 @@
 
     <div class="t-sign">Received By</div>
 
-    <p class="t-center t-small" style="margin-top: 10px;">Thank you!</p>
+    <p class="t-center t-small" style="margin-top: 10px;">Make a splash in one of the longest swimming pools here in Mindanao!</p>
 </x-print.layout>
