@@ -1629,7 +1629,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                             <div wire:key="inspection-photo-{{ $photo->facility_inspection_photo_id }}" class="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
                                 <a href="{{ route('facility-inspection-photos.show', $photo) }}" target="_blank" rel="noopener">
                                     <img
-                                        src="{{ route('facility-inspection-photos.show', $photo) }}"
+                                        src="{{ route('facility-inspection-photos.show', [$photo, 'size' => 'thumb']) }}"
                                         alt="{{ $photo->original_name ?? 'Damage photo' }}"
                                         loading="lazy"
                                         class="aspect-square w-full object-cover"

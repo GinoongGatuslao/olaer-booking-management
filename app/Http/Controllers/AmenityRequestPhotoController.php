@@ -4,17 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\AmenityRequestPhoto;
 use App\Services\AmenityDeliveryPhotoService;
+use App\Support\SecureFileResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class AmenityRequestPhotoController extends Controller
 {
+    /**
+     * Streams a photo. Pass ?size=thumb for the small grid preview; it falls
+     * back to the original when no thumbnail exists (older photos).
+     */
     public function __invoke(
         Request $request,
         AmenityRequestPhoto $photo,
         AmenityDeliveryPhotoService $photos,
-    ): StreamedResponse {
+    ): Response {
         $role = strtolower(trim((string) $request->user()?->loadMissing('role')->role?->role_name));
 
         abort_unless(
@@ -25,17 +29,21 @@ class AmenityRequestPhotoController extends Controller
         $path = $photos->normalize((string) $photo->path);
 
         abort_if($path === null, 404);
-        abort_unless(Storage::disk(AmenityDeliveryPhotoService::DISK)->exists($path), 404);
 
-        return Storage::disk(AmenityDeliveryPhotoService::DISK)->response(
+        $name = 'delivery-proof-'.$photo->amenity_request_photo_id;
+
+        if ($request->query('size') === 'thumb') {
+            $thumbPath = $photos->normalize((string) $photo->thumb_path);
+
+            if ($thumbPath !== null) {
+                return SecureFileResponse::inline(AmenityDeliveryPhotoService::DISK, $thumbPath, $name.'-thumb.jpg');
+            }
+        }
+
+        return SecureFileResponse::inline(
+            AmenityDeliveryPhotoService::DISK,
             $path,
-            'delivery-proof-'.$photo->amenity_request_photo_id.'.'.strtolower((string) pathinfo($path, PATHINFO_EXTENSION)),
-            [
-                'Cache-Control' => 'private, no-store, max-age=0',
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Frame-Options' => 'SAMEORIGIN',
-            ],
-            'inline',
+            $name.'.'.strtolower((string) pathinfo($path, PATHINFO_EXTENSION)),
         );
     }
 }

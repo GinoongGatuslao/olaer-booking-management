@@ -6,6 +6,7 @@ use App\Models\FacilityInspectionPhoto;
 use App\Models\FacilityInspectionRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use App\Support\PhotoThumbnails;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
@@ -62,11 +63,19 @@ class FacilityInspectionPhotoService
 
                     $storedPaths[] = $path;
 
+                    // Small preview for photo grids; null if one could not be made.
+                    $thumbPath = PhotoThumbnails::storeForUpload($file, self::DISK, $path);
+
+                    if ($thumbPath !== null) {
+                        $storedPaths[] = $thumbPath;
+                    }
+
                     $photos[] = FacilityInspectionPhoto::query()->create([
                         'facility_inspection_request_id' => $request->facility_inspection_request_id,
                         'booking_details_id' => $request->booking_details_id,
                         'uploaded_by_user_id' => $userId,
                         'path' => $path,
+                        'thumb_path' => $thumbPath,
                         'original_name' => mb_substr((string) $file->getClientOriginalName(), 0, 255),
                         'mime_type' => $file->getMimeType(),
                         'file_size' => (int) $file->getSize(),
@@ -97,6 +106,12 @@ class FacilityInspectionPhotoService
 
             if ($path !== null) {
                 Storage::disk(self::DISK)->delete($path);
+            }
+
+            $thumbPath = $this->normalize((string) $photo->thumb_path);
+
+            if ($thumbPath !== null) {
+                Storage::disk(self::DISK)->delete($thumbPath);
             }
         });
     }

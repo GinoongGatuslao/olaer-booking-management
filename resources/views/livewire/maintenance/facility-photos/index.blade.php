@@ -450,7 +450,7 @@ new #[Layout('layouts.app')] #[Title('Facility Readiness - Olaer Spring Resort')
                         <div wire:key="facility-photo-{{ $photo->facility_condition_photo_id }}" class="relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
                             <a href="{{ route('facility-condition-photos.show', $photo) }}" target="_blank" rel="noopener">
                                 <img
-                                    src="{{ route('facility-condition-photos.show', $photo) }}"
+                                    src="{{ route('facility-condition-photos.show', [$photo, 'size' => 'thumb']) }}"
                                     alt="{{ $photo->original_name ?? 'Facility photo' }}"
                                     loading="lazy"
                                     class="aspect-square w-full object-cover"

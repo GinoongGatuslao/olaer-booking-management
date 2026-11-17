@@ -1030,7 +1030,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                                                     class="block size-12 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
                                                 >
                                                     <img
-                                                        src="{{ route('amenity-request-photos.show', $photo) }}"
+                                                        src="{{ route('amenity-request-photos.show', [$photo, 'size' => 'thumb']) }}"
                                                         alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
                                                         loading="lazy"
                                                         class="size-full object-cover"
@@ -1154,7 +1154,7 @@ new #[Layout('layouts.app')] #[Title('Maintenance Amenity Requests - Olaer Sprin
                             @foreach ($dialogPhotos as $photo)
                                 <div wire:key="dialog-photo-{{ $photo->amenity_request_photo_id }}" class="relative overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
                                     <img
-                                        src="{{ route('amenity-request-photos.show', $photo) }}"
+                                        src="{{ route('amenity-request-photos.show', [$photo, 'size' => 'thumb']) }}"
                                         alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
                                         class="aspect-square w-full object-cover"
                                     />

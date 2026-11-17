@@ -787,7 +787,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-end">
                 <div>
                     <flux:heading size="lg">Facility requirements</flux:heading>
-                    <flux:text class="mt-1">Fill in all the required details. To add more facilities, click “Add Facility.” Once completed, click “Check Availability & Total” to proceed. </flux:text>
+                    <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
                 </div>
             </div>
 
@@ -898,7 +898,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
 
             <div class="mt-5 flex flex-wrap items-center gap-3">
-                <flux:button type="button" variant="ghost" wire:click="addGroup">Add facility</flux:button>
+                <flux:button type="button" variant="ghost" wire:click="addGroup">Add another facility group</flux:button>
                 <flux:button type="button" wire:click="savePlan">Check availability & total</flux:button>
                 @if ($planTotal !== '')
                     <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Current total: ₱{{ number_format((float) $planTotal, 2) }}</span>
@@ -933,7 +933,6 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <x-ph-region-select :options="$this->regionOptions()" />
                 <x-ph-province-select :options="$this->provinceOptions()" />
                 <x-ph-city-select :options="$this->cityOptions()" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
                 <x-ph-barangay-select :options="$this->barangayOptions()" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
@@ -1049,7 +1048,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         <x-error-toast :messages="$this->bannerErrors()" heading="Please fix the following:" :tick="$errorToastTick" />
 
         <p class="text-sm text-zinc-600 dark:text-zinc-300">
-           <strong>Please carefully review all your information, especially your email address, as an incorrect email may prevent you from receiving the confirmation link and require you to repeat the reservation process. A confirmation link will be sent to your email. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
+           <strong>Kindly review your information especially the email since entering the wrong email will make you not receive the confirmation email and redo the entire process again. After you review the Booking, Cancellation, and Refund Policy, we will email you a confirmation link. Your {{ $bookingMode ? 'booking' : 'reservation' }} and payment proof are only submitted after you click it (the link works for {{ \App\Services\GuestSubmissionConfirmationService::LINK_MINUTES }} minutes).</strong>
         </p>
 
         <div class="flex justify-end">

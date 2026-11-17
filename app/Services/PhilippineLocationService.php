@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
- * Region / province / city-municipality / barangay lists for the address dropdowns.
+ * Province / city-municipality / barangay lists for the address dropdowns.
  * Data lives in the tbl_ph_* tables (filled by `php artisan locations:import`).
  * While those tables are missing or empty every method returns [] and the forms fall back
  * to plain text inputs, so nothing breaks before the import has been run.
@@ -18,40 +18,18 @@ class PhilippineLocationService
 {
     private const VERSION_KEY = 'ph_locations.version';
 
-    /** @return array<int, string> */
-    public function regions(): array
-    {
-        return $this->remember('regions', fn (): array => DB::table('tbl_ph_region')
-            ->orderBy('region_code')
-            ->pluck('name')
-            ->all());
-    }
-
     /**
-     * @param  string  $region  limit to this region ('' = every province)
      * @param  string  $include  a value already saved on a record; kept in the list even
      *                           when it is not an official name (older free-text addresses)
      * @return array<int, string>
      */
-    public function provinces(string $region = '', string $include = ''): array
+    public function provinces(string $include = ''): array
     {
-        $region = trim($region);
-
-        $names = $this->remember('provinces.'.md5(mb_strtolower($region)), function () use ($region): array {
-            $query = DB::table('tbl_ph_province as p')->orderBy('p.name');
-
-            if ($region !== '') {
-                $query->join('tbl_ph_region as r', 'r.region_code', '=', 'p.region_code')
-                    ->where('r.name', $region);
-            }
-
-            return $query->distinct()->pluck('p.name')->all();
-        });
-
-        if ($names === [] && $region !== '') {
-            // Unknown region: fall back to every province rather than an empty box.
-            return $this->provinces('', $include);
-        }
+        $names = $this->remember('provinces', fn (): array => DB::table('tbl_ph_province')
+            ->orderBy('name')
+            ->distinct()
+            ->pluck('name')
+            ->all());
 
         return $names === [] ? [] : $this->withCurrent($names, $include);
     }
@@ -106,27 +84,6 @@ class PhilippineLocationService
         }
 
         return $this->withCurrent($names, $include);
-    }
-
-    /** The region a province belongs to, or null when the province is not in the list. */
-    public function regionOfProvince(string $province): ?string
-    {
-        $province = trim($province);
-
-        if ($province === '') {
-            return null;
-        }
-
-        try {
-            $name = DB::table('tbl_ph_province as p')
-                ->join('tbl_ph_region as r', 'r.region_code', '=', 'p.region_code')
-                ->where('p.name', $province)
-                ->value('r.name');
-        } catch (Throwable) {
-            return null;
-        }
-
-        return is_string($name) ? $name : null;
     }
 
     /** Forget cached lists (called after an import). */

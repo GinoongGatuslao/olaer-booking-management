@@ -6,6 +6,7 @@ use App\Models\AmenityRequest;
 use App\Models\AmenityRequestPhoto;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use App\Support\PhotoThumbnails;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
@@ -62,10 +63,18 @@ class AmenityDeliveryPhotoService
 
                     $storedPaths[] = $path;
 
+                    // Small preview for photo grids; null if one could not be made.
+                    $thumbPath = PhotoThumbnails::storeForUpload($file, self::DISK, $path);
+
+                    if ($thumbPath !== null) {
+                        $storedPaths[] = $thumbPath;
+                    }
+
                     $photos[] = AmenityRequestPhoto::query()->create([
                         'amenity_request_id' => $request->amenity_request_id,
                         'uploaded_by_user_id' => $userId,
                         'path' => $path,
+                        'thumb_path' => $thumbPath,
                         'original_name' => mb_substr((string) $file->getClientOriginalName(), 0, 255),
                         'mime_type' => $file->getMimeType(),
                         'file_size' => (int) $file->getSize(),
@@ -95,6 +104,12 @@ class AmenityDeliveryPhotoService
 
             if ($path !== null) {
                 Storage::disk(self::DISK)->delete($path);
+            }
+
+            $thumbPath = $this->normalize((string) $photo->thumb_path);
+
+            if ($thumbPath !== null) {
+                Storage::disk(self::DISK)->delete($thumbPath);
             }
         });
     }

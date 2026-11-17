@@ -993,7 +993,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                                         class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
                                     >
                                         <img
-                                            src="{{ route('facility-inspection-photos.show', $photo) }}"
+                                            src="{{ route('facility-inspection-photos.show', [$photo, 'size' => 'thumb']) }}"
                                             alt="{{ $photo->original_name ?? 'Damage photo' }}"
                                             loading="lazy"
                                             class="aspect-square w-full object-cover"
@@ -1022,7 +1022,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                                         class="block overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
                                     >
                                         <img
-                                            src="{{ route('facility-condition-photos.show', $photo) }}"
+                                            src="{{ route('facility-condition-photos.show', [$photo, 'size' => 'thumb']) }}"
                                             alt="{{ $photo->original_name ?? 'Facility photo' }}"
                                             loading="lazy"
                                             class="aspect-square w-full object-cover"

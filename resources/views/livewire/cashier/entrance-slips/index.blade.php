@@ -989,8 +989,7 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
                                 @endif
 
                                 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                                    Entrance slips must be paid in full. The payment amount will be exactly
-                                    ₱{{ number_format((float) $this->selectedSlip->amount_due, 2) }}.
+                                    Entrance slips must be paid in full.
                                 </div>
 
                                 <flux:button

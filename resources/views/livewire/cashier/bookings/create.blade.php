@@ -629,11 +629,10 @@ protected function validationAttributes(): array
                 </flux:field>
             </div>
             <div class="mt-4 grid gap-4 md:grid-cols-3 md:items-start">
-                <x-ph-region-select :options="$this->regionOptions()" />
                 <x-ph-province-select :options="$this->provinceOptions()" />
                 <x-ph-city-select :options="$this->cityOptions()" :enabled="$province !== ''" :listed="count($this->provinceOptions()) > 0" label="City/Municipality" />
                 <x-ph-barangay-select :options="$this->barangayOptions()" :enabled="$city !== ''" :listed="count($this->provinceOptions()) > 0" />
-                <flux:field class="relative md:col-span-2">
+                <flux:field class="relative md:col-span-3">
                     <flux:label>Purok/Street</flux:label>
                     <flux:input wire:model="purok" />
                 </flux:field>

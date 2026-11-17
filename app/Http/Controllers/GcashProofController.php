@@ -5,15 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Services\GcashProofStorageService;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Support\SecureFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class GcashProofController extends Controller
 {
     public function __invoke(
         Payment $payment,
         GcashProofStorageService $proofStorage,
-    ): StreamedResponse {
+    ): Response {
         $payment->loadMissing('modeOfPayment');
 
         abort_unless(
@@ -67,16 +67,7 @@ class GcashProofController extends Controller
         $filename = 'gcash-proof-'.$safeReference
             .($extension !== '' ? '.'.$extension : '');
 
-        return Storage::disk($disk)->response(
-            $path,
-            $filename,
-            [
-                'Cache-Control' => 'private, no-store, max-age=0',
-                'Pragma' => 'no-cache',
-                'X-Content-Type-Options' => 'nosniff',
-                'X-Frame-Options' => 'SAMEORIGIN',
-            ],
-            'inline',
-        );
+        // Payment proofs are sensitive: fresh short-lived URL, nothing cached.
+        return SecureFileResponse::inline($disk, $path, $filename, cacheable: false);
     }
 }

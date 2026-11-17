@@ -471,7 +471,7 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
                                             class="block size-20 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700"
                                         >
                                             <img
-                                                src="{{ route('amenity-request-photos.show', $photo) }}"
+                                                src="{{ route('amenity-request-photos.show', [$photo, 'size' => 'thumb']) }}"
                                                 alt="{{ $photo->original_name ?? 'Proof of delivery' }}"
                                                 loading="lazy"
                                                 class="size-full object-cover"

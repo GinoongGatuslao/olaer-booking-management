@@ -18,6 +18,7 @@ class AmenityRequestPhoto extends Model
         'amenity_request_id',
         'uploaded_by_user_id',
         'path',
+        'thumb_path',
         'original_name',
         'mime_type',
         'file_size',
