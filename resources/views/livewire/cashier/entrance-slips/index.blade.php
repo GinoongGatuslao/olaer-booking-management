@@ -515,22 +515,12 @@ new #[Layout('layouts.app')] #[Title('Entrance Slip Payments - Olaer Spring Reso
 
     public function statusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'paid' => 'green',
-            'unpaid' => 'amber',
-            'closed' => 'zinc',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function paymentStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'verified' => 'green',
-            'pending' => 'amber',
-            'rejected' => 'red',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function sortIndicator(string $field): string

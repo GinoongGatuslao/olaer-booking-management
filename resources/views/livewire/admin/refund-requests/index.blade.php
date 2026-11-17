@@ -371,7 +371,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                             <td class="whitespace-nowrap px-4 py-4 text-right">₱{{ number_format((float) $refund->requested_amount, 2) }}</td>
                             <td class="whitespace-nowrap px-4 py-4 text-right font-medium">{{ $refund->approved_amount !== null ? '₱'.number_format((float) $refund->approved_amount, 2) : '—' }}</td>
                             <td class="px-4 py-4">
-                                <flux:badge size="sm" color="{{ match ((string) $refund->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $refund->status }}</flux:badge>
+                                <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $refund->status) }}">{{ $refund->status }}</flux:badge>
                                 @if ($refund->refunded_at)
                                     <flux:badge size="sm" color="zinc">Given to guest</flux:badge>
                                 @elseif ($refund->isAwaitingAdminGcash())
@@ -415,7 +415,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 <div class="pe-8">
                     <div class="flex flex-wrap items-center gap-2">
                         <flux:heading size="lg">Refund request · {{ $reservation->r_ref_no }}</flux:heading>
-                        <flux:badge size="sm" color="{{ match ((string) $selected->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $selected->status }}</flux:badge>
+                        <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $selected->status) }}">{{ $selected->status }}</flux:badge>
                     </div>
                     <flux:text class="mt-1">
                         Attempt {{ $selected->attempt_no }} of {{ RefundRequestWorkflowService::MAX_ATTEMPTS }}, sent {{ $selected->created_at?->format('M d, Y h:i A') }} by {{ $selected->requestedBy?->full_name ?? 'a cashier' }}.

@@ -553,7 +553,7 @@ new #[Layout('layouts.app')] #[Title('User Management - Olaer Spring Resort')] c
 
     public function statusColor(string $status): string
     {
-        return $status === 'Active' ? 'green' : 'red';
+        return \App\Support\StatusColor::for($status);
     }
 
     public function roleColor(?string $roleName): string

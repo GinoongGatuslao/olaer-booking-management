@@ -7,6 +7,7 @@ use App\Models\FacilityInspectionRequest;
 use App\Models\GuestFine;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
+use App\Support\StatusColor;
 
 class BookingWorkspaceService
 {
@@ -117,47 +118,22 @@ class BookingWorkspaceService
 
     public function bookingStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'booked', 'paid', 'checked-in' => 'green',
-            'pending verification', 'partially checked-out' => 'amber',
-            'checked-out' => 'blue',
-            'cancelled', 'payment rejected' => 'red',
-            default => 'zinc',
-        };
+        return StatusColor::for($status);
     }
 
     public function detailStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'booked' => 'blue',
-            'checked-in' => 'green',
-            'checked-out' => 'zinc',
-            'cancelled', 'payment rejected' => 'red',
-            'transferred', 'extended' => 'amber',
-            default => 'zinc',
-        };
+        return StatusColor::for($status);
     }
 
     public function paymentStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'verified' => 'green',
-            'pending' => 'amber',
-            'rejected' => 'red',
-            default => 'zinc',
-        };
+        return StatusColor::for($status);
     }
 
     public function requestStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'delivered', 'completed' => 'green',
-            'pending', 'awaiting payment' => 'amber',
-            'accepted', 'delivering', 'in progress' => 'blue',
-            'cancelled', 'rejected' => 'red',
-            'undelivered' => 'orange',
-            default => 'zinc',
-        };
+        return StatusColor::for($status);
     }
 
     public function guestName(Booking $booking): string

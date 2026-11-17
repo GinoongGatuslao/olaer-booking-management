@@ -484,16 +484,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
 
     public function workflowStageColor(string $stage): string
     {
-        return match ($stage) {
-            'Ready for Check-out' => 'green',
-            'Checked-out' => 'blue',
-            'Payment Due' => 'red',
-            'Needs Inspection Request' => 'amber',
-            'Waiting for Inspection Result' => 'amber',
-            default => str_starts_with($stage, 'Inspection ')
-                ? 'purple'
-                : 'zinc',
-        };
+        return \App\Support\StatusColor::for($stage);
     }
 
     private function bookingDetails(): LengthAwarePaginator
@@ -1076,7 +1067,7 @@ new #[Layout('layouts.app')] #[Title('Cashier Check-out - Olaer Spring Resort')]
                             wire:navigate
                             variant="ghost"
                         >
-                            Booking Workspace
+                            View Booking
                         </flux:button>
                     @endif
 

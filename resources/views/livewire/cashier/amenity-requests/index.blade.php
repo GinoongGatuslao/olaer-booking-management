@@ -452,14 +452,7 @@ new #[Layout('layouts.app')] #[Title('Amenity Requests - Olaer Spring Resort')] 
 
     public function statusColor(string $status): string
     {
-        return match ($status) {
-            'Pending' => 'blue',
-            'Delivering' => 'purple',
-            'Delivered' => 'green',
-            'Cancelled' => 'red',
-            'Undelivered' => 'orange',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function sortIndicator(string $field): string

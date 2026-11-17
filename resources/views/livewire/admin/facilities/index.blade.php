@@ -611,13 +611,7 @@ new #[Layout('layouts.app')] #[Title('Facility Management - Olaer Spring Resort'
 
     public function statusColor(string $status): string
     {
-        return match ($status) {
-            'Available' => 'green',
-            'Unavailable' => 'red',
-            'Booked' => 'blue',
-            'Occupied' => 'amber',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 };
 

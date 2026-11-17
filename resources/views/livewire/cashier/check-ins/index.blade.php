@@ -120,11 +120,7 @@ new class extends Component {
 
     public function statusColor(string $status): string
     {
-        return match ($status) {
-            'Booked', 'Rescheduled', 'Transferred', 'Extended' => 'blue',
-            'Checked-in' => 'green',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function sortBy(string $field): void

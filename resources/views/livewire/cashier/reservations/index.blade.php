@@ -1043,9 +1043,9 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                     @elseif ($refund['latest'] && $refund['latest']->isAwaitingAdminGcash())
                                         <flux:badge size="sm" color="amber">GCash refund with admin</flux:badge>
                                     @elseif ($refund['latest'] && $refund['latest']->isGivenToGuest())
-                                        <flux:badge size="sm" color="green">Refunded</flux:badge>
+                                        <flux:badge size="sm" color="{{ \App\Support\StatusColor::for('Refunded') }}">Refunded</flux:badge>
                                     @elseif ($refund['latest'])
-                                        <flux:badge size="sm" color="{{ match ((string) $refund['latest']->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">
+                                        <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $refund['latest']->status) }}">
                                             Refund {{ strtolower((string) $refund['latest']->status) }}
                                         </flux:badge>
                                     @else
@@ -1146,7 +1146,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
                                             <div wire:key="refund-{{ $request->refund_request_id }}" class="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/60">
                                                 <div class="flex flex-wrap items-center gap-2">
                                                     <span class="font-medium text-brand-text dark:text-white">Attempt {{ $request->attempt_no }}</span>
-                                                    <flux:badge size="sm" color="{{ match ((string) $request->status) { 'Approved' => 'green', 'Rejected' => 'red', default => 'amber' } }}">{{ $request->status }}</flux:badge>
+                                                    <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $request->status) }}">{{ $request->status }}</flux:badge>
                                                     <span class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $request->created_at?->format('M d, Y h:i A') }}</span>
                                                 </div>
                                                 <div class="mt-1 text-brand-text dark:text-zinc-200">

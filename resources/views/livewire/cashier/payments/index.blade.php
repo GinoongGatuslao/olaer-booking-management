@@ -508,12 +508,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function paymentStatusColor(string $status): string
     {
-        return match (strtolower($status)) {
-            'verified', 'paid' => 'green',
-            'pending' => 'amber',
-            'rejected' => 'red',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function handledBy(Payment $payment): string

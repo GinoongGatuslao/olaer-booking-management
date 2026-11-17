@@ -651,22 +651,12 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
 
     public function requestStatusColor(string $status): string
     {
-        return match ($status) {
-            'Pending' => 'amber',
-            'In Progress' => 'purple',
-            'Completed' => 'green',
-            'Cancelled' => 'red',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function inspectionStatusColor(?string $status): string
     {
-        return match ($status) {
-            'Cleared' => 'green',
-            'Damage Found' => 'red',
-            default => 'zinc',
-        };
+        return \App\Support\StatusColor::for($status);
     }
 
     public function sortIndicator(string $field): string

@@ -133,7 +133,7 @@ new #[Layout('layouts.app')] #[Title('Booking Details - Olaer Spring Resort')] c
     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
             <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-medium text-zinc-500">Booking workspace</p>
+                <p class="text-sm font-medium text-zinc-500">View Booking</p>
 
                 <flux:badge color="{{ $this->bookingStatusColor((string) $this->booking->status) }}">
                     {{ $this->booking->status }}
