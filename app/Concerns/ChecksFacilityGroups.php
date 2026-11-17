@@ -110,7 +110,7 @@ trait ChecksFacilityGroups
             return null;
         }
 
-        if ($product->strict_maximum !== null) {
+        if ($product->isRoom() && $product->strict_maximum !== null) {
             return 'Maximum '.$product->strict_maximum.' guests per room';
         }
 

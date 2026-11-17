@@ -516,15 +516,15 @@ new #[Layout('layouts.app')] #[Title('Convert Reservation to Booking - Olaer Spr
                     <div class="mt-4 space-y-4">
 
                         @if ((float) $selected->amount_due > 0)
-                            <label class="block">
-                                <span class="text-sm font-medium">Mode of Payment</span>
-                                <select wire:model.live="modeOfPaymentId" class="mt-1 w-full rounded-lg border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
+                            <flux:field class="relative">
+                                <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                                <flux:select wire:model.live="modeOfPaymentId" :invalid="$errors->has('modeOfPaymentId')">
                                     <option value="">Select mode</option>
                                     @foreach ($this->modesOfPayment() as $mode)
                                         <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
                                     @endforeach
-                                </select>
-                            </label>
+                                </flux:select>
+                            </flux:field>
                             @error('modeOfPaymentId') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
                             @if($this->modeOfPaymentId == '2')
                             <flux:input label="Reference Number" wire:model.live="referenceNumber" placeholder="Required for GCash" />

@@ -968,7 +968,8 @@ class FacilityAssignmentService
     /** @param array<string, mixed> $assignment */
     private function isRoomAssignment(array $assignment): bool
     {
-        return $assignment['group']->facilityProduct->included_guest_count !== null
+        return $assignment['group']->facilityProduct->isRoom()
+            && $assignment['group']->facilityProduct->included_guest_count !== null
             && $assignment['group']->facilityProduct->strict_maximum !== null;
     }
 

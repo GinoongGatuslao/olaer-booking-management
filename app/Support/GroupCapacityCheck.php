@@ -8,14 +8,16 @@ use App\Models\FacilityProduct;
  * One wording for the strict room-capacity rule, shared by the planner form
  * (live check) and FacilityRequirementService (server check).
  *
- * Only products with a strict_maximum (rooms) are restricted. Cottages and
- * function halls accept any number of estimated guests and any quantity.
+ * Only rooms are restricted (a strict-capacity, overnight product). Cottages and
+ * function halls are never restricted: any number of estimated guests is accepted
+ * for any quantity (e.g. 1 estimated guest can reserve 3 cottages), even if a
+ * strict_maximum value happens to be stored on the product.
  */
 class GroupCapacityCheck
 {
     public static function message(?FacilityProduct $product, int $quantity, int $guests): ?string
     {
-        if ($product === null || $product->strict_maximum === null || $quantity < 1 || $guests < 1) {
+        if ($product === null || ! $product->isRoom() || $product->strict_maximum === null || $quantity < 1 || $guests < 1) {
             return null;
         }
 

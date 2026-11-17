@@ -139,7 +139,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             return null;
         }
 
-        if ($product->strict_maximum !== null) {
+        if ($product->isRoom() && $product->strict_maximum !== null) {
             return 'Maximum '.$product->strict_maximum.' guests per room';
         }
 
@@ -656,7 +656,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
         foreach ($this->groups as $index => $group) {
             $product = $this->productFor($index);
 
-            if ($product?->included_guest_count === null || $product->strict_maximum === null) {
+            if ($product === null || ! $product->isRoom() || $product->included_guest_count === null || $product->strict_maximum === null) {
                 continue;
             }
 

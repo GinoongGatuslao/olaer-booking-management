@@ -539,7 +539,7 @@ protected function validationAttributes(): array
         foreach ($this->groups as $index => $group) {
             $product = $this->productFor($index);
 
-            if ($product?->included_guest_count === null || $product->strict_maximum === null) {
+            if ($product === null || ! $product->isRoom() || $product->included_guest_count === null || $product->strict_maximum === null) {
                 continue;
             }
 
