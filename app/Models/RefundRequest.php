@@ -19,6 +19,7 @@ class RefundRequest extends Model
 
     protected $fillable = [
         'reservation_id',
+        'booking_id',
         'attempt_no',
         'requested_by_user_id',
         'requested_amount',
@@ -58,6 +59,34 @@ class RefundRequest extends Model
     public function reservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
+    }
+
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
+    }
+
+    public function isForBooking(): bool
+    {
+        return $this->booking_id !== null;
+    }
+
+    /** The reservation or booking this refund belongs to. */
+    public function subject(): Reservation|Booking|null
+    {
+        return $this->isForBooking() ? $this->booking : $this->reservation;
+    }
+
+    public function subjectLabel(): string
+    {
+        return $this->isForBooking() ? 'Booking' : 'Reservation';
+    }
+
+    public function referenceNumber(): ?string
+    {
+        return $this->isForBooking()
+            ? $this->booking?->b_ref_no
+            : $this->reservation?->r_ref_no;
     }
 
     public function requestedBy(): BelongsTo

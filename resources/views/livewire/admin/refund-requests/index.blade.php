@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
@@ -51,7 +52,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         $search = trim($this->search);
 
         return RefundRequest::query()
-            ->with(['reservation.guest', 'reservation.payments', 'requestedBy', 'reviewedBy'])
+            ->with(['reservation.guest', 'reservation.payments', 'booking.guest', 'booking.payments', 'booking.reservation.payments', 'requestedBy', 'reviewedBy'])
             ->when(
                 in_array($this->statusFilter, ['Pending', 'Approved', 'Rejected'], true),
                 fn ($query) => $query->where('status', $this->statusFilter),
@@ -64,13 +65,20 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                     ->whereNotNull('gcash_handoff_at'),
             )
             ->when($search !== '', function ($query) use ($search): void {
-                $query->whereHas('reservation', function ($reservation) use ($search): void {
-                    $reservation->where('r_ref_no', 'like', "%{$search}%")
-                        ->orWhereHas('guest', function ($guest) use ($search): void {
-                            $guest->where('first_name', 'like', "%{$search}%")
-                                ->orWhere('last_name', 'like', "%{$search}%")
-                                ->orWhere('contact_no', 'like', "%{$search}%");
-                        });
+                $matchesPerson = function ($guest) use ($search): void {
+                    $guest->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('contact_no', 'like', "%{$search}%");
+                };
+
+                $query->where(function ($outer) use ($search, $matchesPerson): void {
+                    $outer->whereHas('reservation', function ($reservation) use ($search, $matchesPerson): void {
+                        $reservation->where('r_ref_no', 'like', "%{$search}%")
+                            ->orWhereHas('guest', $matchesPerson);
+                    })->orWhereHas('booking', function ($booking) use ($search, $matchesPerson): void {
+                        $booking->where('b_ref_no', 'like', "%{$search}%")
+                            ->orWhereHas('guest', $matchesPerson);
+                    });
                 });
             })
             ->orderByRaw("case when status = 'Pending' then 0 else 1 end")
@@ -90,6 +98,11 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 'reservation.details.facility.facilityType',
                 'reservation.payments',
                 'reservation.refundRequests',
+                'booking.guest',
+                'booking.details.facility.facilityType',
+                'booking.payments',
+                'booking.reservation.payments',
+                'booking.refundRequests',
                 'requestedBy',
                 'reviewedBy',
                 'gcashHandoffBy',
@@ -99,7 +112,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             ->find($this->reviewRequestId);
     }
 
-    public function amountPaid(Reservation $reservation): string
+    public function amountPaid(Reservation|Booking $reservation): string
     {
         return app(RefundRequestWorkflowService::class)->amountPaid($reservation);
     }
@@ -305,7 +318,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     <x-staff-page-header
         eyebrow="Admin"
         title="Refund Requests"
-        description="Cashiers send refund requests for cancelled reservations. Approve to set the most they may refund, or reject. A note is optional. GCash refunds come back here for you to send and record."
+        description="Cashiers send refund requests for cancelled reservations and bookings. Approve to set the most they may refund, or reject. A note is optional. GCash refunds come back here for you to send and record."
     >
         <x-slot:actions>
             <flux:button :href="route('admin.dashboard')" wire:navigate variant="ghost">Back to dashboard</flux:button>
@@ -345,7 +358,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                     <tr>
                         <th class="px-4 py-3 font-semibold">Sent</th>
-                        <th class="px-4 py-3 font-semibold">Reservation</th>
+                        <th class="px-4 py-3 font-semibold">Reservation / Booking</th>
                         <th class="px-4 py-3 font-semibold">Guest</th>
                         <th class="px-4 py-3 text-right font-semibold">Paid</th>
                         <th class="px-4 py-3 text-right font-semibold">Requested</th>
@@ -363,11 +376,11 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                                 <div class="text-xs text-zinc-500">{{ $refund->created_at?->format('h:i A') }} · by {{ $refund->requestedBy?->full_name ?? 'Unknown' }}</div>
                             </td>
                             <td class="px-4 py-4">
-                                <div class="font-medium">{{ $refund->reservation?->r_ref_no }}</div>
-                                <div class="text-xs text-zinc-500">Attempt {{ $refund->attempt_no }} of {{ RefundRequestWorkflowService::MAX_ATTEMPTS }}</div>
+                                <div class="font-medium">{{ $refund->referenceNumber() }}</div>
+                                <div class="text-xs text-zinc-500">{{ $refund->subjectLabel() }} · Attempt {{ $refund->attempt_no }} of {{ RefundRequestWorkflowService::MAX_ATTEMPTS }}</div>
                             </td>
-                            <td class="px-4 py-4">{{ $this->guestName($refund->reservation?->guest) }}</td>
-                            <td class="whitespace-nowrap px-4 py-4 text-right">₱{{ $refund->reservation ? number_format((float) $this->amountPaid($refund->reservation), 2) : '0.00' }}</td>
+                            <td class="px-4 py-4">{{ $this->guestName($refund->subject()?->guest) }}</td>
+                            <td class="whitespace-nowrap px-4 py-4 text-right">₱{{ $refund->subject() ? number_format((float) $this->amountPaid($refund->subject()), 2) : '0.00' }}</td>
                             <td class="whitespace-nowrap px-4 py-4 text-right">₱{{ number_format((float) $refund->requested_amount, 2) }}</td>
                             <td class="whitespace-nowrap px-4 py-4 text-right font-medium">{{ $refund->approved_amount !== null ? '₱'.number_format((float) $refund->approved_amount, 2) : '—' }}</td>
                             <td class="px-4 py-4">
@@ -401,9 +414,9 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     </flux:card>
 
     <flux:modal wire:model="showReviewModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[40rem]">
-        @if ($selected && $selected->reservation)
+        @if ($selected && $selected->subject())
             @php
-                $reservation = $selected->reservation;
+                $reservation = $selected->subject();
                 $paid = $this->amountPaid($reservation);
                 $isPending = (string) $selected->status === 'Pending';
                 $awaitingGcash = $selected->isAwaitingAdminGcash();
@@ -414,7 +427,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             <div class="space-y-5">
                 <div class="pe-8">
                     <div class="flex flex-wrap items-center gap-2">
-                        <flux:heading size="lg">Refund request · {{ $reservation->r_ref_no }}</flux:heading>
+                        <flux:heading size="lg">Refund request · {{ $selected->referenceNumber() }}</flux:heading>
                         <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $selected->status) }}">{{ $selected->status }}</flux:badge>
                     </div>
                     <flux:text class="mt-1">
@@ -430,7 +443,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                 @enderror
 
                 <div class="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
-                    <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Reservation</div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">{{ $selected->subjectLabel() }}</div>
                     <div class="flex justify-between gap-4"><span class="text-zinc-500">Guest</span><span class="text-right font-medium">{{ $this->guestName($reservation->guest) }}</span></div>
                     <div class="flex justify-between gap-4"><span class="text-zinc-500">Contact</span><span>{{ $reservation->guest?->contact_no ?: '—' }}</span></div>
                     <div class="flex justify-between gap-4"><span class="text-zinc-500">Email</span><span class="break-all">{{ $reservation->guest?->email ?: '—' }}</span></div>
@@ -438,7 +451,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                         <span class="text-zinc-500">Facilities</span>
                         <span class="text-right">
                             @foreach ($reservation->details as $detail)
-                                <span class="block">{{ $detail->facility?->facility_name ?? 'Unassigned facility' }}{{ $detail->facility?->facilityType ? ' ('.$detail->facility->facilityType->facility_type.')' : '' }} · {{ $detail->check_in_date?->format('M d, Y') }} → {{ $detail->check_out_date?->format('M d, Y') }}</span>
+                                <span class="block">{{ $detail->facility?->facility_name ?? 'Unassigned facility' }}{{ $detail->facility?->facilityType ? ' ('.$detail->facility->facilityType->facility_type.')' : '' }} · {{ $detail->check_in_date ? \Illuminate\Support\Carbon::parse($detail->check_in_date)->format('M d, Y') : '—' }} → {{ $detail->check_out_date ? \Illuminate\Support\Carbon::parse($detail->check_out_date)->format('M d, Y') : '—' }}</span>
                             @endforeach
                         </span>
                     </div>
@@ -465,7 +478,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
 
                 @if ($others->isNotEmpty())
                     <div class="rounded-lg bg-zinc-50 p-4 text-sm dark:bg-zinc-900/60">
-                        <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Earlier attempts on this reservation</div>
+                        <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Earlier attempts on this {{ strtolower($selected->subjectLabel()) }}</div>
                         @foreach ($others as $other)
                             <div class="mt-2" wire:key="other-{{ $other->refund_request_id }}">
                                 Attempt {{ $other->attempt_no }} · {{ $other->status }} · asked ₱{{ number_format((float) $other->requested_amount, 2) }}@if ($other->approved_amount !== null), approved ₱{{ number_format((float) $other->approved_amount, 2) }}@endif

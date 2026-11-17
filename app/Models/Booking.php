@@ -27,6 +27,8 @@ class Booking extends Model
         'reservation_id',
         'entrance_slip_id',
         'status',
+        'cancellation_reason',
+        'cancelled_at',
     ];
 
     protected function casts(): array
@@ -37,6 +39,7 @@ class Booking extends Model
             'total_guest_count' => 'integer',
             'total_price' => 'decimal:2',
             'amount_due' => 'decimal:2',
+            'cancelled_at' => 'date',
         ];
     }
 
@@ -83,5 +86,11 @@ class Booking extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class, 'booking_id', 'booking_id');
+    }
+
+    public function refundRequests(): HasMany
+    {
+        return $this->hasMany(RefundRequest::class, 'booking_id', 'booking_id')
+            ->orderBy('attempt_no');
     }
 }

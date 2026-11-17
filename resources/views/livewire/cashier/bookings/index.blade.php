@@ -1,10 +1,16 @@
 <?php
 
+use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Facility;
 use App\Models\FacilityProduct;
+use App\Models\Guest;
+use App\Models\ModeOfPayment;
+use App\Models\RefundRequest;
 use App\Services\BookingWorkflowService;
 use App\Services\FacilityAvailabilityService;
+use App\Services\RefundRequestWorkflowService;
+use App\Services\StaffBookingCancellationService;
 use App\Services\RoomOccupantService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -105,10 +111,34 @@ new class extends Component {
         'occupants' => [],
     ];
 
+    // Cancelling a whole booking
+    public bool $showCancelBookingModal = false;
+    public ?int $cancelBookingId = null;
+    public string $cancelBookingReason = '';
+
+    // Asking the admin for a refund on a cancelled booking
+    public bool $showRefundModal = false;
+    public ?int $refundBookingId = null;
+    public string $refundNote = '';
+
+    // Giving an approved refund back to the guest
+    public bool $showReleaseModal = false;
+    public ?int $releaseRequestId = null;
+    public string $releaseAmount = '';
+    public string $releaseModeId = '';
+    public string $releaseNote = '';
+    public string $releaseContact = '';
+
     public function with(): array
     {
+        $bookings = $this->bookings();
+
         return [
-            'bookings' => $this->bookings(),
+            'bookings' => $bookings,
+            'bookingModels' => $this->bookingModels($bookings),
+            'refundBooking' => $this->refundBooking(),
+            'releaseRequest' => $this->releaseRequest(),
+            'refundModes' => ModeOfPayment::query()->orderBy('mode_of_payment_id')->get(),
             'bookingStatuses' => $this->bookingStatuses(),
             'detailStatuses' => $this->detailStatuses(),
             'transferProducts' => $this->transferProducts(),
@@ -761,6 +791,347 @@ new class extends Component {
             ->pluck('status');
     }
 
+
+    /** The bookings on this page as models, for cancellation and refund details. */
+    private function bookingModels($paginator)
+    {
+        $ids = $paginator->getCollection()
+            ->map(fn ($rows) => (int) $rows->first()->booking_id)
+            ->all();
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Booking::query()
+            ->with([
+                'details',
+                'payments',
+                'reservation.payments',
+                'refundRequests.reviewedBy',
+                'refundRequests.refundModeOfPayment',
+                'refundRequests.refundedBy',
+                'refundRequests.gcashHandoffBy',
+            ])
+            ->whereIn('booking_id', $ids)
+            ->get()
+            ->keyBy('booking_id');
+    }
+
+    public function guestName(?Guest $guest): string
+    {
+        return trim(implode(' ', array_filter([
+            $guest?->first_name,
+            $guest?->middle_name,
+            $guest?->last_name,
+        ]))) ?: '—';
+    }
+
+    public function canCancelBooking(Booking $booking): bool
+    {
+        return app(StaffBookingCancellationService::class)->canCancel($booking);
+    }
+
+    public function beginBookingCancellation(int $bookingId): void
+    {
+        $booking = Booking::query()->with('details')->find($bookingId);
+
+        if ($booking === null) {
+            session()->flash('error', 'This booking is no longer available. Refresh the list.');
+
+            return;
+        }
+
+        if (! $this->canCancelBooking($booking)) {
+            session()->flash('error', 'Only booked bookings that have not been checked in can be cancelled.');
+
+            return;
+        }
+
+        $this->cancelBookingId = (int) $booking->booking_id;
+        $this->cancelBookingReason = '';
+        $this->resetValidation();
+        $this->showCancelBookingModal = true;
+    }
+
+    public function closeBookingCancellation(): void
+    {
+        $this->showCancelBookingModal = false;
+        $this->cancelBookingId = null;
+        $this->cancelBookingReason = '';
+        $this->resetValidation();
+    }
+
+    public function updatedShowCancelBookingModal(bool $open): void
+    {
+        if (! $open) {
+            $this->closeBookingCancellation();
+        }
+    }
+
+    public function cancelBooking(StaffBookingCancellationService $cancellation): void
+    {
+        $validated = $this->validate([
+            'cancelBookingId' => ['required', 'exists:tbl_booking,booking_id'],
+            'cancelBookingReason' => ['required', 'string', 'max:500'],
+        ], [
+            'cancelBookingId.required' => 'This booking is no longer available. Refresh the list.',
+            'cancelBookingId.exists' => 'This booking is no longer available. Refresh the list.',
+            'cancelBookingReason.required' => 'Enter a reason for cancelling this booking.',
+            'cancelBookingReason.max' => 'The cancellation reason cannot be longer than :max characters.',
+        ]);
+
+        try {
+            $cancellation->cancel(
+                (int) $validated['cancelBookingId'],
+                $validated['cancelBookingReason'],
+                (int) Auth::id(),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('cancelBookingReason', $exception->getMessage());
+
+            return;
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('cancelBookingReason', 'The booking could not be cancelled. Refresh the list and try again.');
+
+            return;
+        }
+
+        $this->closeBookingCancellation();
+        session()->flash('success', 'Booking cancelled successfully.');
+    }
+
+    /** @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?RefundRequest} */
+    public function refundInfo(Booking $booking): array
+    {
+        $booking->loadMissing(['payments', 'reservation.payments', 'refundRequests']);
+
+        return app(RefundRequestWorkflowService::class)->eligibility($booking);
+    }
+
+    public function refundBooking(): ?Booking
+    {
+        if ($this->refundBookingId === null) {
+            return null;
+        }
+
+        return Booking::query()
+            ->with(['guest', 'details.facility.facilityType', 'payments', 'reservation.payments', 'refundRequests'])
+            ->find($this->refundBookingId);
+    }
+
+    public function beginRefundRequest(int $bookingId): void
+    {
+        $booking = Booking::query()
+            ->with(['payments', 'reservation.payments', 'refundRequests'])
+            ->find($bookingId);
+
+        if ($booking === null) {
+            session()->flash('error', 'This booking is no longer available. Refresh the list.');
+
+            return;
+        }
+
+        $eligibility = $this->refundInfo($booking);
+
+        if (! $eligibility['can_request']) {
+            session()->flash('error', (string) $eligibility['reason']);
+
+            return;
+        }
+
+        $this->refundBookingId = (int) $booking->booking_id;
+        $this->refundNote = '';
+        $this->resetValidation();
+        $this->showRefundModal = true;
+    }
+
+    public function closeRefundRequest(): void
+    {
+        $this->showRefundModal = false;
+        $this->refundBookingId = null;
+        $this->refundNote = '';
+        $this->resetValidation();
+    }
+
+    public function updatedShowRefundModal(bool $open): void
+    {
+        if (! $open) {
+            $this->closeRefundRequest();
+        }
+    }
+
+    public function submitRefundRequest(RefundRequestWorkflowService $refunds): void
+    {
+        $validated = $this->validate([
+            'refundBookingId' => ['required', 'exists:tbl_booking,booking_id'],
+            'refundNote' => ['required', 'string', 'max:1000'],
+        ], [
+            'refundBookingId.required' => 'This booking is no longer available. Refresh the list.',
+            'refundBookingId.exists' => 'This booking is no longer available. Refresh the list.',
+            'refundNote.required' => 'Add a note to the admin explaining why this refund is needed.',
+            'refundNote.max' => 'The note cannot be longer than :max characters.',
+        ]);
+
+        try {
+            $refunds->submitForBooking(
+                (int) $validated['refundBookingId'],
+                $validated['refundNote'],
+                (int) Auth::id(),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('refundRequest', $exception->getMessage());
+
+            return;
+        }
+
+        $this->closeRefundRequest();
+        session()->flash('success', 'Refund request sent to the admin.');
+    }
+
+    public function releaseRequest(): ?RefundRequest
+    {
+        if ($this->releaseRequestId === null) {
+            return null;
+        }
+
+        return RefundRequest::query()
+            ->with(['booking.guest'])
+            ->find($this->releaseRequestId);
+    }
+
+    public function refundProofUrl(RefundRequest $refund): ?string
+    {
+        if (blank($refund->refund_proof_path) || ! \Illuminate\Support\Facades\Route::has('refunds.proof')) {
+            return null;
+        }
+
+        return route('refunds.proof', $refund);
+    }
+
+    public function beginRefundRelease(int $refundRequestId): void
+    {
+        $request = RefundRequest::query()->find($refundRequestId);
+
+        if ($request === null || ! $request->isWaitingForRelease()) {
+            session()->flash('error', 'This refund is no longer waiting to be given to the guest. Refresh the list.');
+
+            return;
+        }
+
+        $this->releaseRequestId = (int) $request->refund_request_id;
+        $this->releaseAmount = number_format((float) $request->approved_amount, 2, '.', '');
+        $this->releaseModeId = (string) (ModeOfPayment::query()
+            ->whereRaw('LOWER(mode_of_payment) = ?', ['cash'])
+            ->value('mode_of_payment_id') ?? '');
+        $this->releaseNote = '';
+        $this->releaseContact = '';
+        $this->resetValidation();
+        $this->showReleaseModal = true;
+    }
+
+    public function closeRefundRelease(): void
+    {
+        $this->showReleaseModal = false;
+        $this->releaseRequestId = null;
+        $this->releaseAmount = '';
+        $this->releaseModeId = '';
+        $this->releaseNote = '';
+        $this->releaseContact = '';
+        $this->resetValidation();
+    }
+
+    public function updatedShowReleaseModal(bool $open): void
+    {
+        if (! $open) {
+            $this->closeRefundRelease();
+        }
+    }
+
+    public function isGcashRelease(): bool
+    {
+        return strtolower(trim((string) ModeOfPayment::query()
+            ->whereKey((int) $this->releaseModeId)
+            ->value('mode_of_payment'))) === 'gcash';
+    }
+
+    public function updatedReleaseModeId(): void
+    {
+        if (! $this->isGcashRelease()) {
+            $this->releaseNote = '';
+            $this->releaseContact = '';
+        }
+
+        $this->resetValidation(['releaseNote', 'releaseContact']);
+    }
+
+    /**
+     * Cash (or any non-GCash mode): the cashier gives the money and it is recorded now.
+     * GCash: the refund goes to the admin, who sends it and records the reference and proof.
+     */
+    public function releaseRefund(RefundRequestWorkflowService $refunds): void
+    {
+        $isGcash = $this->isGcashRelease();
+
+        $validated = $this->validate([
+            'releaseRequestId' => ['required', 'integer'],
+            'releaseAmount' => ['required', 'numeric', 'min:0.01'],
+            'releaseModeId' => ['required', 'integer', 'exists:tbl_mode_of_payment,mode_of_payment_id'],
+            'releaseNote' => [$isGcash ? 'required' : 'nullable', 'string', 'max:1000'],
+            'releaseContact' => [$isGcash ? 'required' : 'nullable', 'regex:/^\d{11}$/'],
+        ], [
+            'releaseRequestId.required' => 'This refund is no longer available. Refresh the list.',
+            'releaseAmount.required' => $isGcash ? 'Enter the amount to refund through GCash.' : 'Enter the amount given to the guest.',
+            'releaseAmount.numeric' => 'The amount must be a number.',
+            'releaseAmount.min' => 'The amount must be greater than zero.',
+            'releaseModeId.required' => 'Choose how the refund is given.',
+            'releaseModeId.exists' => 'Choose a valid mode of payment.',
+            'releaseNote.required' => 'Add a note to the admin about this GCash refund.',
+            'releaseNote.max' => 'The note cannot be longer than :max characters.',
+            'releaseContact.required' => 'Enter the guest\'s GCash contact number.',
+            'releaseContact.regex' => 'The contact number must be 11 digits, numbers only.',
+        ]);
+
+        try {
+            if ($isGcash) {
+                $refunds->sendGcashToAdmin(
+                    (int) $validated['releaseRequestId'],
+                    (string) $validated['releaseAmount'],
+                    $validated['releaseNote'] ?? null,
+                    $validated['releaseContact'] ?? null,
+                    (int) Auth::id(),
+                );
+            } else {
+                $refunds->release(
+                    (int) $validated['releaseRequestId'],
+                    (int) $validated['releaseModeId'],
+                    (string) $validated['releaseAmount'],
+                    null,
+                    null,
+                    (int) Auth::id(),
+                );
+            }
+        } catch (\InvalidArgumentException $exception) {
+            $this->addError('releaseRefund', $exception->getMessage());
+
+            return;
+        } catch (\Throwable $exception) {
+            report($exception);
+            $this->addError('releaseRefund', 'The refund could not be recorded. Please refresh and try again.');
+
+            return;
+        }
+
+        $this->closeRefundRelease();
+        session()->flash(
+            'success',
+            $isGcash
+                ? 'GCash refund sent to the admin. They will send it and record the reference number and proof.'
+                : 'Refund recorded. It now reduces revenue.',
+        );
+    }
+
     /** Facilities of the chosen product that are free for this booking's schedule. */
     private function transferFacilities()
     {
@@ -823,7 +1194,7 @@ new class extends Component {
     <x-staff-page-header
         eyebrow="Cashier operations"
         title="Booking Management"
-        description="Create paid facility bookings, reschedule stays, transfer facilities, and extend eligible cottage bookings."
+        description="Create paid facility bookings, reschedule stays, transfer facilities, extend eligible cottage bookings, and cancel or refund bookings."
     >
         <x-slot:actions>
             <flux:button href="{{ route('cashier.bookings.create') }}" variant="primary" wire:navigate>
@@ -846,6 +1217,7 @@ new class extends Component {
         $pageError = collect([
             'booking',
             'cancelDetailForm.booking_details_id',
+            'refundBookingId',
         ])->map(fn (string $key): ?string => $errors->first($key) ?: null)->filter()->first();
     @endphp
     @if ($pageError)
@@ -959,7 +1331,7 @@ new class extends Component {
                                 @endif
                             </td>
                             <td class="px-4 py-3">₱{{ number_format((float) $booking->total_price, 2) }}</td>
-                            <td class="px-4 py-3">₱{{ number_format((float) $booking->amount_due, 2) }}</td>
+                            <td class="px-4 py-3">{{ (string) $booking->booking_status === 'Cancelled' ? '—' : '₱'.number_format((float) $booking->amount_due, 2) }}</td>
                             <td class="px-4 py-3">
                                 <x-status-badge :status="(string) $booking->booking_status" />
                             </td>
@@ -974,6 +1346,16 @@ new class extends Component {
                                             >
                                                 View booking
                                             </flux:menu.item>
+                                            @php($cancelModel = $bookingModels->get($booking->booking_id))
+                                            @if ($cancelModel && $this->canCancelBooking($cancelModel))
+                                                <flux:menu.item
+                                                    icon="x-circle"
+                                                    variant="danger"
+                                                    wire:click="beginBookingCancellation({{ $booking->booking_id }})"
+                                                >
+                                                    Cancel booking
+                                                </flux:menu.item>
+                                            @endif
                                         </x-table-actions>
                                     @endif
                                 </div>
@@ -999,6 +1381,108 @@ new class extends Component {
                                         <div>{{ (int) $booking->no_of_extra_guests }}</div>
                                     </div>
                                 </div>
+
+                                @php($model = $bookingModels->get($booking->booking_id))
+                                @if ($model && (string) $model->status === 'Cancelled')
+                                    @php($refund = $this->refundInfo($model))
+                                    <div class="mt-4 space-y-3 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                                        <div>
+                                            <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Cancellation</div>
+                                            <div class="text-brand-text dark:text-white">
+                                                {{ $model->cancelled_at?->format('M d, Y') }} · {{ $model->cancellation_reason ?: 'No reason recorded' }}
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Refund</div>
+                                                <div class="text-brand-text dark:text-white">
+                                                    Verified payments ₱{{ number_format((float) $refund['paid'], 2) }} · {{ $refund['used'] }} of {{ $refund['max'] }} requests used
+                                                </div>
+                                            </div>
+
+                                            @if ($refund['can_request'])
+                                                <flux:button size="sm" variant="primary" icon="arrow-uturn-left" type="button" wire:click="beginRefundRequest({{ $model->booking_id }})">
+                                                    Request refund
+                                                </flux:button>
+                                            @else
+                                                <span class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $refund['reason'] }}</span>
+                                            @endif
+                                        </div>
+
+                                        @foreach ($model->refundRequests as $request)
+                                            <div wire:key="refund-{{ $request->refund_request_id }}" class="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900/60">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <span class="font-medium text-brand-text dark:text-white">Attempt {{ $request->attempt_no }}</span>
+                                                    <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $request->status) }}">{{ $request->status }}</flux:badge>
+                                                    <span class="text-xs text-brand-text-muted dark:text-zinc-400">{{ $request->created_at?->format('M d, Y h:i A') }}</span>
+                                                </div>
+                                                <div class="mt-1 text-brand-text dark:text-zinc-200">
+                                                    Requested ₱{{ number_format((float) $request->requested_amount, 2) }}
+                                                    @if ($request->status === 'Approved')
+                                                        · <span class="font-medium">Admin approved ₱{{ number_format((float) $request->approved_amount, 2) }}.</span>
+                                                    @endif
+                                                </div>
+                                                @if ($request->isWaitingForRelease())
+                                                    <div class="mt-2 flex flex-wrap items-center gap-3">
+                                                        <span class="text-xs text-brand-text-muted dark:text-zinc-400">Give the guest the money, then record how you paid it.</span>
+                                                        <flux:button size="sm" variant="primary" icon="banknotes" type="button" wire:click="beginRefundRelease({{ $request->refund_request_id }})">
+                                                            Give refund to guest
+                                                        </flux:button>
+                                                    </div>
+                                                @elseif ($request->isAwaitingAdminGcash())
+                                                    <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                                                        <span class="font-medium">Sent to admin for GCash</span>
+                                                        · ₱{{ number_format((float) $request->gcash_handoff_amount, 2) }}
+                                                        · {{ $request->gcash_handoff_at?->format('M d, Y h:i A') }}
+                                                        @if ($request->gcashHandoffBy)
+                                                            by {{ $request->gcashHandoffBy->full_name }}
+                                                        @endif
+                                                        <div class="text-xs">Waiting for the admin to send the money and add the reference number and proof.</div>
+                                                        @if ($request->gcash_handoff_contact_number)
+                                                            <div class="mt-1 text-xs">GCash number: {{ $request->gcash_handoff_contact_number }}</div>
+                                                        @endif
+                                                        @if ($request->gcash_handoff_note)
+                                                            <div class="mt-1 text-xs">Your note: {{ $request->gcash_handoff_note }}</div>
+                                                        @endif
+                                                    </div>
+                                                @elseif ($request->isGivenToGuest())
+                                                    @php($proofLink = $this->refundProofUrl($request))
+                                                    <div class="mt-1 text-sm text-brand-text dark:text-zinc-200">
+                                                        <span class="font-medium">Refunded ₱{{ number_format((float) $request->refunded_amount, 2) }}</span>
+                                                        via {{ $request->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}
+                                                        on {{ $request->refunded_at?->format('M d, Y h:i A') }}
+                                                        @if ($request->refundedBy)
+                                                            by {{ $request->refundedBy->full_name }}
+                                                        @endif
+                                                        @if ($request->refund_reference_number)
+                                                            · Ref {{ $request->refund_reference_number }}
+                                                        @endif
+                                                        @if ($proofLink)
+                                                            · <a href="{{ $proofLink }}" target="_blank" rel="noopener" class="font-medium underline">View proof</a>
+                                                        @endif
+                                                    </div>
+                                                    @if ($proofLink)
+                                                        <a href="{{ $proofLink }}" target="_blank" rel="noopener" class="mt-2 block w-fit">
+                                                            <img src="{{ $proofLink }}" alt="GCash refund proof" loading="lazy" class="max-h-40 rounded-lg border border-zinc-200 object-contain dark:border-zinc-700" />
+                                                        </a>
+                                                    @endif
+                                                    @if ($request->gcash_handoff_note)
+                                                        <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">Your note to the admin: {{ $request->gcash_handoff_note }}</div>
+                                                    @endif
+                                                @endif
+                                                @if ($request->request_note)
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">Your note: {{ $request->request_note }}</div>
+                                                @endif
+                                                @if ($request->admin_note)
+                                                    <div class="mt-1 text-xs text-brand-text-muted dark:text-zinc-400">
+                                                        Admin{{ $request->reviewedBy ? ' ('.$request->reviewedBy->full_name.')' : '' }}: {{ $request->admin_note }}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
 
                                 <div class="space-y-3">
                                     @foreach ($withFacility as $row)
@@ -1207,5 +1691,189 @@ new class extends Component {
                 <flux:button type="submit" variant="primary">Save Occupants</flux:button>
             </div>
         </form>
+    </flux:modal>
+
+    {{-- Cancel a whole booking --}}
+    <flux:modal wire:model="showCancelBookingModal" class="w-full md:w-[30rem]">
+        <form wire:submit="cancelBooking" novalidate class="space-y-5">
+            <div class="pe-8">
+                <flux:heading size="lg">Cancel booking</flux:heading>
+                <flux:text class="mt-1">
+                    Every facility on this booking is cancelled and released for other guests. Payments stay on record; request a refund afterwards if one is due.
+                </flux:text>
+            </div>
+
+            @error('cancelBookingId')
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+            @enderror
+
+            <flux:field class="relative">
+                <flux:label>Cancellation reason <span class="text-red-500">*</span></flux:label>
+                <flux:input wire:model="cancelBookingReason" :invalid="$errors->has('cancelBookingReason')" />
+                @if ($msg = $this->visibleError('cancelBookingReason'))
+                    <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                @endif
+            </flux:field>
+
+            <div class="flex justify-end gap-3">
+                <flux:button type="button" variant="ghost" wire:click="closeBookingCancellation">Close</flux:button>
+                <flux:button type="submit" variant="danger">Confirm cancellation</flux:button>
+            </div>
+        </form>
+    </flux:modal>
+
+    {{-- Request a refund for a cancelled booking --}}
+    <flux:modal wire:model="showRefundModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[36rem]">
+        @if ($refundBooking)
+            @php($refundInfo = $this->refundInfo($refundBooking))
+            <form wire:submit="submitRefundRequest" novalidate class="space-y-5">
+                <div class="pe-8">
+                    <flux:heading size="lg">Request a refund</flux:heading>
+                    <flux:text class="mt-1">
+                        The admin receives this together with the booking details and the cancellation reason.
+                        Attempt {{ $refundInfo['next_attempt'] }} of {{ $refundInfo['max'] }}.
+                    </flux:text>
+                </div>
+
+                @error('refundRequest')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+                @error('refundBookingId')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+
+                <div class="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Booking</span><span class="font-medium">{{ $refundBooking->b_ref_no }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Guest</span><span class="text-right font-medium">{{ $this->guestName($refundBooking->guest) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Contact</span><span>{{ $refundBooking->guest->contact_no ?: '—' }}</span></div>
+                    <div class="flex justify-between gap-4">
+                        <span class="text-zinc-500">Facilities</span>
+                        <span class="text-right">
+                            @foreach ($refundBooking->details as $detail)
+                                <span class="block">{{ $detail->facility?->facility_name ?? 'Unassigned facility' }} · {{ \Illuminate\Support\Carbon::parse($detail->check_in_date)->format('M d, Y') }} → {{ \Illuminate\Support\Carbon::parse($detail->check_out_date)->format('M d, Y') }}</span>
+                            @endforeach
+                        </span>
+                    </div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Total price</span><span>₱{{ number_format((float) $refundBooking->total_price, 2) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Verified payments</span><span class="font-medium">₱{{ number_format((float) $refundInfo['paid'], 2) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Cancelled on</span><span>{{ $refundBooking->cancelled_at?->format('M d, Y') }}</span></div>
+                    <div>
+                        <div class="text-zinc-500">Cancellation reason</div>
+                        <div class="mt-0.5">{{ $refundBooking->cancellation_reason ?: 'No reason recorded' }}</div>
+                    </div>
+                </div>
+
+                <flux:text class="text-sm">
+                    The request covers what the guest paid (₱{{ number_format((float) $refundInfo['paid'], 2) }}). The admin decides how much to approve.
+                </flux:text>
+
+                <flux:field class="relative">
+                    <flux:label>Note to the admin <span class="text-red-500">*</span></flux:label>
+                    <flux:textarea wire:model="refundNote" rows="3" placeholder="Explain this case, for example why the guest should be refunded." :invalid="$errors->has('refundNote')" />
+                    @error('refundNote')
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </flux:field>
+
+                <details class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                    <summary class="cursor-pointer font-medium">Booking, Cancellation, and Refund Policy</summary>
+                    <x-booking-policy-content class="mt-3 max-h-64 overflow-y-auto pr-1" />
+                </details>
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="closeRefundRequest">Close</flux:button>
+                    <flux:button type="submit" variant="primary">Send to admin</flux:button>
+                </div>
+            </form>
+        @endif
+    </flux:modal>
+    {{-- Give an approved refund back to the guest --}}
+    <flux:modal wire:model="showReleaseModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[34rem]">
+        @if ($releaseRequest)
+            <form wire:submit="releaseRefund" novalidate class="space-y-5">
+                <div class="pe-8">
+                    <flux:heading size="lg">Give refund to guest</flux:heading>
+                    <flux:text class="mt-1">
+                        @if ($this->isGcashRelease())
+                            GCash refunds are sent by the admin. Add a note and send it back; the admin will send the money and add the reference number and proof.
+                        @else
+                            Record how the approved refund is given back. It reduces revenue from today.
+                        @endif
+                    </flux:text>
+                </div>
+
+                @error('releaseRefund')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+                @error('releaseRequestId')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
+
+                <div class="space-y-2 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Booking</span><span class="font-medium">{{ $releaseRequest->referenceNumber() }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Guest</span><span class="text-right font-medium">{{ $this->guestName($releaseRequest->subject()?->guest) }}</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-zinc-500">Approved by admin</span><span class="font-medium">₱{{ number_format((float) $releaseRequest->approved_amount, 2) }}</span></div>
+                </div>
+
+                <flux:field class="relative">
+                    <flux:label>{{ $this->isGcashRelease() ? 'Amount to refund through GCash' : 'Amount given' }} <span class="text-red-500">*</span></flux:label>
+                    <flux:input wire:model="releaseAmount" type="number" step="0.01" min="0.01" max="{{ $releaseRequest->approved_amount }}" :invalid="$errors->has('releaseAmount')" />
+                    <flux:text class="text-xs">Up to ₱{{ number_format((float) $releaseRequest->approved_amount, 2) }}.</flux:text>
+                    @if ($msg = $this->visibleError('releaseAmount'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+
+                <flux:field class="relative">
+                    <flux:label>Mode of payment <span class="text-red-500">*</span></flux:label>
+                    <flux:select wire:model.live="releaseModeId" :invalid="$errors->has('releaseModeId')">
+                        @foreach ($refundModes as $mode)
+                            <option value="{{ $mode->mode_of_payment_id }}">{{ $mode->mode_of_payment }}</option>
+                        @endforeach
+                    </flux:select>
+                    @if ($msg = $this->visibleError('releaseModeId'))
+                        <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $msg }}</p>
+                    @endif
+                </flux:field>
+
+                @if ($this->isGcashRelease())
+                    <flux:field class="relative">
+                        <flux:label>GCash contact number <span class="text-red-500">*</span></flux:label>
+                        <flux:input
+                            wire:model="releaseContact"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            maxlength="11"
+                            placeholder="09XXXXXXXXX"
+                            x-on:input="$el.value = $el.value.replace(/\D/g, '')"
+                            :invalid="$errors->has('releaseContact')"
+                        />
+                        <flux:text class="text-xs">The guest's GCash number the admin will send the refund to. Numbers only.</flux:text>
+                        @error('releaseContact')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </flux:field>
+
+                    <flux:field class="relative">
+                        <flux:label>Note to admin <span class="text-red-500">*</span></flux:label>
+                        <flux:textarea wire:model="releaseNote" rows="3" placeholder="Explain this GCash refund to the admin." :invalid="$errors->has('releaseNote')" />
+                        @error('releaseNote')
+                            <p class="field-error text-sm font-medium text-red-500 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </flux:field>
+                @endif
+
+                <details class="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+                    <summary class="cursor-pointer font-medium">Booking, Cancellation, and Refund Policy</summary>
+                    <x-booking-policy-content class="mt-3 max-h-64 overflow-y-auto pr-1" />
+                </details>
+
+                <div class="flex justify-end gap-3">
+                    <flux:button type="button" variant="ghost" wire:click="closeRefundRelease">Close</flux:button>
+                    <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="releaseRefund">{{ $this->isGcashRelease() ? 'Send to admin' : 'Record refund' }}</flux:button>
+                </div>
+            </form>
+        @endif
     </flux:modal>
 </div>

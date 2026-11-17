@@ -94,13 +94,19 @@ class ReportsService
         if ($needle !== '') {
             $like = '%'.$needle.'%';
 
-            $refundBase->whereHas('reservation', function (Builder $reservation) use ($like): void {
-                $reservation->where('r_ref_no', 'like', $like)
-                    ->orWhereHas('guest', function (Builder $guest) use ($like): void {
-                        $guest->where('first_name', 'like', $like)
-                            ->orWhere('last_name', 'like', $like)
-                            ->orWhere('contact_no', 'like', $like);
-                    });
+            $matchesPerson = fn (Builder $guest) => $guest
+                ->where('first_name', 'like', $like)
+                ->orWhere('last_name', 'like', $like)
+                ->orWhere('contact_no', 'like', $like);
+
+            $refundBase->where(function (Builder $outer) use ($like, $matchesPerson): void {
+                $outer->whereHas('reservation', function (Builder $reservation) use ($like, $matchesPerson): void {
+                    $reservation->where('r_ref_no', 'like', $like)
+                        ->orWhereHas('guest', $matchesPerson);
+                })->orWhereHas('booking', function (Builder $booking) use ($like, $matchesPerson): void {
+                    $booking->where('b_ref_no', 'like', $like)
+                        ->orWhereHas('guest', $matchesPerson);
+                });
             });
         }
 
@@ -124,7 +130,7 @@ class ReportsService
         }
 
         $refundRows = (clone $refundBase)
-            ->with(['reservation.guest', 'refundModeOfPayment', 'refundedBy'])
+            ->with(['reservation.guest', 'booking.guest', 'refundModeOfPayment', 'refundedBy'])
             ->orderBy('tbl_refund_request.refunded_at')
             ->get();
 

@@ -222,7 +222,7 @@
                 <thead class="border-b text-xs uppercase text-zinc-500">
                     <tr>
                         <th class="p-2">Date</th>
-                        <th class="p-2">Reservation #</th>
+                        <th class="p-2">Reservation / Booking #</th>
                         <th class="p-2">Guest Name</th>
                         <th class="p-2">Payment Mode</th>
                         <th class="p-2">Reference</th>
@@ -235,8 +235,8 @@
                     @forelse (($report['refund_rows'] ?? []) as $refund)
                         <tr>
                             <td class="p-2">{{ $refund->refunded_at?->format('M d, Y') }}</td>
-                            <td class="p-2">{{ $refund->reservation?->r_ref_no }}</td>
-                            <td class="p-2">{{ $this->guestName($refund->reservation?->guest) }}</td>
+                            <td class="p-2">{{ $refund->referenceNumber() }}</td>
+                            <td class="p-2">{{ $this->guestName($refund->subject()?->guest) }}</td>
                             <td class="p-2">{{ $refund->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}</td>
                             <td class="p-2">{{ $refund->refund_reference_number ?: '—' }}</td>
                             <td class="p-2">{{ $this->staffName($refund->refundedBy, 'Unknown') }}</td>

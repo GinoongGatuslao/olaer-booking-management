@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\ModeOfPayment;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
@@ -20,10 +21,21 @@ class RefundRequestWorkflowService
         private readonly DecimalMoneyService $money,
     ) {}
 
-    /** Total of the reservation's verified payments: the most that can ever be refunded. */
-    public function amountPaid(Reservation $reservation): string
+    /**
+     * Total of the verified payments: the most that can ever be refunded.
+     * A booking counts its own payments plus the ones taken while it was still a
+     * reservation (a payment made at conversion sits on both, so it is counted once).
+     */
+    public function amountPaid(Reservation|Booking $source): string
     {
-        return $this->money->add(...$reservation->payments
+        $payments = collect($source->payments);
+
+        if ($source instanceof Booking && $source->reservation !== null) {
+            $payments = $payments->concat($source->reservation->payments);
+        }
+
+        return $this->money->add(...$payments
+            ->unique(fn ($payment) => $payment->getKey())
             ->filter(fn ($payment): bool => strtolower(trim((string) $payment->payment_status)) === 'verified')
             ->pluck('amount_paid')
             ->map(fn (mixed $amount): string => (string) $amount)
@@ -38,8 +50,9 @@ class RefundRequestWorkflowService
      *
      * @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?RefundRequest}
      */
-    public function eligibility(Reservation $reservation): array
+    public function eligibility(Reservation|Booking $reservation): array
     {
+        $label = $reservation instanceof Booking ? 'booking' : 'reservation';
         $requests = $reservation->refundRequests->sortBy('attempt_no')->values();
         $paid = $this->amountPaid($reservation);
         $used = $requests->count();
@@ -47,13 +60,13 @@ class RefundRequestWorkflowService
         $reason = null;
 
         if ((string) $reservation->status !== 'Cancelled') {
-            $reason = 'Refunds can only be requested for cancelled reservations.';
+            $reason = "Refunds can only be requested for cancelled {$label}s.";
         } elseif ($this->money->compare($paid, '0.00') <= 0) {
             $reason = 'There is no verified payment to refund.';
         } elseif ($requests->contains('status', RefundRequest::STATUS_PENDING)) {
             $reason = 'Waiting for the admin to respond to the current refund request.';
         } elseif ($requests->contains('status', RefundRequest::STATUS_APPROVED)) {
-            $reason = 'A refund was already approved for this reservation.';
+            $reason = "A refund was already approved for this {$label}.";
         } elseif ($used >= self::MAX_ATTEMPTS) {
             $reason = 'All '.self::MAX_ATTEMPTS.' refund request attempts were used.';
         }
@@ -79,6 +92,21 @@ class RefundRequestWorkflowService
         ?string $note,
         int $cashierUserId,
     ): RefundRequest {
+        return $this->submitFor('reservation', $reservationId, $note, $cashierUserId);
+    }
+
+    /** Same as submit(), for a cancelled booking. */
+    public function submitForBooking(
+        int $bookingId,
+        ?string $note,
+        int $cashierUserId,
+    ): RefundRequest {
+        return $this->submitFor('booking', $bookingId, $note, $cashierUserId);
+    }
+
+    /** @param  'reservation'|'booking'  $type */
+    private function submitFor(string $type, int $id, ?string $note, int $cashierUserId): RefundRequest
+    {
         $this->guardRole($cashierUserId, 'Cashier', 'send refund requests');
 
         $note = trim((string) $note);
@@ -91,26 +119,27 @@ class RefundRequestWorkflowService
             throw new InvalidArgumentException('The note must not exceed 1000 characters.');
         }
 
-        return DB::transaction(function () use ($reservationId, $note, $cashierUserId): RefundRequest {
-            $reservation = Reservation::query()
-                ->lockForUpdate()
-                ->findOrFail($reservationId);
+        return DB::transaction(function () use ($type, $id, $note, $cashierUserId): RefundRequest {
+            if ($type === 'booking') {
+                $source = Booking::query()->lockForUpdate()->findOrFail($id);
+                $source->load(['payments', 'reservation.payments', 'refundRequests']);
+            } else {
+                $source = Reservation::query()->lockForUpdate()->findOrFail($id);
+                $source->load(['payments', 'refundRequests']);
+            }
 
-            $reservation->load(['payments', 'refundRequests']);
-
-            $eligibility = $this->eligibility($reservation);
+            $eligibility = $this->eligibility($source);
 
             if (! $eligibility['can_request']) {
                 throw new InvalidArgumentException((string) $eligibility['reason']);
             }
 
-            $amount = $this->money->normalize($eligibility['paid']);
-
             return RefundRequest::query()->create([
-                'reservation_id' => $reservation->reservation_id,
+                'reservation_id' => $type === 'reservation' ? $source->getKey() : null,
+                'booking_id' => $type === 'booking' ? $source->getKey() : null,
                 'attempt_no' => $eligibility['next_attempt'],
                 'requested_by_user_id' => $cashierUserId,
-                'requested_amount' => $amount,
+                'requested_amount' => $this->money->normalize($eligibility['paid']),
                 'request_note' => $note,
                 'status' => RefundRequest::STATUS_PENDING,
             ]);
@@ -153,11 +182,11 @@ class RefundRequestWorkflowService
             $approved = null;
 
             if ($decision === 'approve') {
-                $reservation = Reservation::query()
-                    ->with('payments')
-                    ->findOrFail($request->reservation_id);
+                $source = $request->booking_id !== null
+                    ? Booking::query()->with(['payments', 'reservation.payments'])->findOrFail($request->booking_id)
+                    : Reservation::query()->with('payments')->findOrFail($request->reservation_id);
 
-                $paid = $this->amountPaid($reservation);
+                $paid = $this->amountPaid($source);
                 $approved = $this->parseAmount((string) $approvedAmount, 'The approved refund amount');
 
                 if ($this->money->compare($approved, $paid) > 0) {
@@ -177,7 +206,7 @@ class RefundRequestWorkflowService
                 'reviewed_at' => Carbon::now(),
             ]);
 
-            return $request->fresh(['reservation', 'requestedBy', 'reviewedBy']);
+            return $request->fresh(['reservation', 'booking', 'requestedBy', 'reviewedBy']);
         });
     }
 

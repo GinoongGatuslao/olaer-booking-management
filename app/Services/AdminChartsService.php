@@ -219,7 +219,7 @@ class AdminChartsService
     /**
      * Verified payments per period, split by what they paid for. A booking payment is
      * divided across the booking's facility, amenity and fine charges the same way the
-     * receipt shows it. Refunds given back reduce Reservation on the day they were given.
+     * receipt shows it. Refunds given back reduce Reservation (or Booking, for a booking refund) on the day they were given.
      *
      * @param  list<array{start: Carbon, end: Carbon, label: string}>  $buckets
      * @return array<string, list<float>>
@@ -294,9 +294,9 @@ class AdminChartsService
                 ->whereNotNull('refunded_at')
                 ->whereDate('refunded_at', '>=', $from)
                 ->whereDate('refunded_at', '<=', $to)
-                ->get(['refunded_amount', 'refunded_at'])
+                ->get(['refunded_amount', 'refunded_at', 'booking_id'])
                 ->each(fn (object $row) => $add(
-                    'Reservation',
+                    $row->booking_id !== null ? 'Booking' : 'Reservation',
                     substr((string) $row->refunded_at, 0, 10),
                     -1 * (float) $row->refunded_amount,
                 ));

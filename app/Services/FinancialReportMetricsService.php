@@ -52,8 +52,8 @@ class FinancialReportMetricsService
             clone $payments,
         );
 
-        // Refunds given back to guests in the range reduce revenue (all of
-        // them belong to reservations).
+        // Refunds given back to guests in the range reduce revenue: a reservation's
+        // refund comes off reservation revenue, a booking's refund off booking revenue.
         $refunds = $this->refundsQuery($from, $to, $cashierUserId);
         $refundedTotal = $this->sumRefunds(clone $refunds);
         $refundCount = (int) (clone $refunds)->count('rr.refund_request_id');
@@ -66,23 +66,26 @@ class FinancialReportMetricsService
             ['', 'gcash'],
         ));
 
+        $reservationRefunds = $this->sumRefunds((clone $refunds)->whereNull('rr.booking_id'));
+        $bookingRefunds = $this->sumRefunds((clone $refunds)->whereNotNull('rr.booking_id'));
+
         $verifiedRevenue = round($grossRevenue - $refundedTotal, 2);
 
         // The three sources must not overlap, or they will not add up to net revenue.
         // The payment taken when a reservation is converted carries both a booking_id
         // and a reservation_id, so it is counted once, under Booking. Reservation
         // revenue is only money still held on a reservation, less refunds given back.
-        $bookingRevenue = $this->sumAmount(
+        $bookingRevenue = round($this->sumAmount(
             (clone $payments)->whereNotNull(
                 'p.booking_id',
             ),
-        );
+        ) - $bookingRefunds, 2);
 
         $reservationRevenue = round($this->sumAmount(
             (clone $payments)
                 ->whereNull('p.booking_id')
                 ->whereNotNull('p.reservation_id'),
-        ) - $refundedTotal, 2);
+        ) - $reservationRefunds, 2);
 
         $entranceRevenue = $this->sumAmount(
             (clone $payments)->whereNotNull(
