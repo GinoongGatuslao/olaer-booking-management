@@ -318,10 +318,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
 
             $this->resetValidation();
         } catch (\Throwable $exception) {
-            $this->addError(
-                'inspection',
-                $exception->getMessage(),
-            );
+            $this->toastError($exception->getMessage());
         }
     }
 
@@ -340,9 +337,31 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
         $this->resetValidation();
     }
 
+    /**
+     * Show an error as a toast. Only lasts for this request, so it is never
+     * repeated on the next interaction.
+     */
+    private function toastError(string $message): void
+    {
+        session()->now('error', $message);
+    }
+
+    private function hasDraftFines(): bool
+    {
+        return $this->selectedDraftFines()->contains(
+            fn (InspectionDraftFine $draft): bool => $draft->status === 'Draft',
+        );
+    }
+
     public function requestCompletion(string $type): void
     {
         if (! in_array($type, ['no_damage', 'publish_fines'], true)) {
+            return;
+        }
+
+        if ($type === 'no_damage' && $this->hasDraftFines()) {
+            $this->toastError('Remove all draft fines before completing the inspection as no damage.');
+
             return;
         }
 
@@ -400,10 +419,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                 'Inspection cleared. The cashier may proceed when the booking balance is zero.',
             );
         } catch (\Throwable $exception) {
-            $this->addError(
-                'inspection',
-                $exception->getMessage(),
-            );
+            $this->toastError($exception->getMessage());
         }
     }
 
@@ -482,10 +498,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                 'Fine saved as draft. It will not affect cashier billing until Complete Inspection.',
             );
         } catch (\Throwable $exception) {
-            $this->addError(
-                'inspection',
-                $exception->getMessage(),
-            );
+            $this->toastError($exception->getMessage());
         }
     }
 
@@ -508,7 +521,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                 'Inspection completed. Draft fines are now posted to cashier billing and locked.',
             );
         } catch (\Throwable $exception) {
-            $this->addError('inspection', $exception->getMessage());
+            $this->toastError($exception->getMessage());
         }
     }
 
@@ -524,7 +537,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
 
             session()->flash('success', 'Draft fine removed.');
         } catch (\Throwable $exception) {
-            $this->addError('inspection', $exception->getMessage());
+            $this->toastError($exception->getMessage());
         }
     }
 
@@ -1270,12 +1283,7 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
     </x-staff-page-header>
 
     <x-toast :message="session('success')" fresh />
-
-    @error('inspection')
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            {{ $message }}
-        </div>
-    @enderror
+    <x-toast :message="session('error')" type="error" fresh />
 
     @if (
         $selectedRequestId !== null
@@ -1553,13 +1561,18 @@ new #[Layout('layouts.app')] #[Title('Facility Checklists - Olaer Spring Resort'
                         </p>
 
                         <p class="text-xs text-green-700 dark:text-green-300">
-                            Use this only after checking all inclusive and delivered requested amenities.
+                            @if ($selectedDraftFines->contains('status', 'Draft'))
+                                Unavailable while draft fines exist. Remove them, or use Complete Inspection to post them.
+                            @else
+                                Use this only after checking all inclusive and delivered requested amenities.
+                            @endif
                         </p>
                     </div>
 
                     <flux:button
                         wire:click="requestCompletion('no_damage')"
                         variant="primary"
+                        :disabled="$selectedDraftFines->contains('status', 'Draft')"
                     >
                         Complete as No Damage
                     </flux:button>

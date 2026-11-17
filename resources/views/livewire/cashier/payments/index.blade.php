@@ -615,6 +615,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             ->with([
                 'booking.guest',
                 'reservation.guest',
+                'reservation.booking',
                 'entranceSlip.guest',
                 'modeOfPayment',
                 'user',
@@ -1390,10 +1391,11 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                             <td class="px-5 py-4 text-right">
                                 <div class="flex justify-end">
                                     <x-table-actions label="Actions for payment {{ $payment->p_ref_no }}">
-                                        @if ($payment->booking_id && Route::has('cashier.bookings.show'))
+                                        @php($viewBookingId = $payment->booking_id ?? $payment->reservation?->booking?->booking_id)
+                                        @if ($viewBookingId && Route::has('cashier.bookings.show'))
                                             <flux:menu.item
                                                 icon="eye"
-                                                href="{{ route('cashier.bookings.show', $payment->booking_id) }}"
+                                                href="{{ route('cashier.bookings.show', $viewBookingId) }}"
                                                 wire:navigate
                                             >
                                                 View booking

@@ -32,11 +32,12 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
     #[Url(as: 'transaction_type', except: 'all')]
     public string $transactionType = 'all';
 
-    #[Url(as: 'sort', except: 'date')]
-    public string $sortField = 'date';
+    // Bookings first by default ('booking' sorts before 'reservation').
+    #[Url(as: 'sort', except: 'transaction_type')]
+    public string $sortField = 'transaction_type';
 
-    #[Url(as: 'direction', except: 'desc')]
-    public string $sortDirection = 'desc';
+    #[Url(as: 'direction', except: 'asc')]
+    public string $sortDirection = 'asc';
 
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
@@ -164,8 +165,8 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
         $this->toDate = '';
         $this->paymentStatus = 'all';
         $this->transactionType = 'all';
-        $this->sortField = 'date';
-        $this->sortDirection = 'desc';
+        $this->sortField = 'transaction_type';
+        $this->sortDirection = 'asc';
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -427,6 +428,7 @@ new #[Layout('layouts.app')] #[Title('Billing Statements - Olaer Spring Resort')
                                     </div>
                                     <p class="mt-1 text-xs text-zinc-500">
                                         {{ $line['date_paid'] }}
+                                        @if (($line['source'] ?? null)) · From {{ $line['source'] }} (converted) @endif
                                         @if (($line['reference_number'] ?? null)) · Ref {{ $line['reference_number'] }} @endif
                                         @if (($line['status'] ?? null)) · {{ $line['status'] }} @endif
                                     </p>

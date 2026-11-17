@@ -284,22 +284,57 @@ class OutstandingBreakdownService
             ];
         }
 
+        // The same amenity is one receipt line however many requests it came
+        // from: quantities and amounts are added together (per unit price, so a
+        // price change between requests never blends two different prices).
+        $amenities = [];
+
         foreach ($statement['amenity_lines'] as $line) {
             // Only amenities that were actually delivered are billed here.
             if (strcasecmp((string) $line['request_status'], 'Delivered') !== 0) {
                 continue;
             }
 
+            $key = mb_strtolower((string) $line['amenity']).'|'.$this->money->normalize((string) $line['unit_price']);
+
+            if (! isset($amenities[$key])) {
+                $amenities[$key] = [
+                    'amenity' => (string) $line['amenity'],
+                    'unit_price' => (string) $line['unit_price'],
+                    'quantity' => 0,
+                    'amount' => '0.00',
+                    'requests' => [],
+                    'facilities' => [],
+                    'delivered_at' => [],
+                ];
+            }
+
+            $amenities[$key]['quantity'] += (int) $line['quantity'];
+            $amenities[$key]['amount'] = $this->money->add($amenities[$key]['amount'], (string) $line['line_total']);
+            $amenities[$key]['requests'][] = 'AR-'.$line['request_id'];
+            $amenities[$key]['facilities'][] = (string) $line['facility'];
+
+            if (! empty($line['delivered_at'])) {
+                $amenities[$key]['delivered_at'][] = (string) $line['delivered_at'];
+            }
+        }
+
+        foreach ($amenities as $amenity) {
+            $requests = array_values(array_unique($amenity['requests']));
+            $facilities = array_values(array_unique($amenity['facilities']));
+
             $charges[] = [
                 'group' => 'Amenity',
-                'label' => $line['amenity'].' × '.$line['quantity'],
+                'label' => $amenity['amenity'].' × '.$amenity['quantity'],
                 'detail' => implode(' · ', array_filter([
-                    'Request AR-'.$line['request_id'],
-                    (string) $line['facility'],
-                    '₱'.number_format((float) $line['unit_price'], 2).' each',
-                    ! empty($line['delivered_at']) ? 'Delivered '.$line['delivered_at'] : null,
+                    'Request '.implode(', ', $requests),
+                    implode(', ', $facilities),
+                    '₱'.number_format((float) $amenity['unit_price'], 2).' each',
+                    count($requests) === 1 && $amenity['delivered_at'] !== []
+                        ? 'Delivered '.$amenity['delivered_at'][0]
+                        : null,
                 ])),
-                'amount' => $this->money->normalize((string) $line['line_total']),
+                'amount' => $amenity['amount'],
             ];
         }
 

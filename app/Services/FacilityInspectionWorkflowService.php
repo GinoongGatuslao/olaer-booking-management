@@ -71,7 +71,66 @@ class FacilityInspectionWorkflowService
             ))
             ->all();
 
-        return array_values(array_merge($facilityItems, $requestedItems));
+        return $this->fuseChecklistItems(array_merge($facilityItems, $requestedItems));
+    }
+
+    /**
+     * The same amenity is one checklist line, however it got into the facility
+     * (inclusive amenity, or any number of delivered requests). The inspector
+     * counts the units on the floor, so their quantities are added together.
+     *
+     * The fused line is identified by its first member (inclusive amenities
+     * first), and keeps every member so older drafts that point at a different
+     * member still resolve to it.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function fuseChecklistItems(array $items): array
+    {
+        $fused = [];
+
+        foreach ($items as $item) {
+            $amenityKey = (int) $item['amenity_id'];
+            $member = ['source' => $item['source'], 'source_id' => $item['source_id']];
+
+            if (! isset($fused[$amenityKey])) {
+                $fused[$amenityKey] = [
+                    ...$item,
+                    'members' => [$member],
+                    '_labels' => [$item['source_label']],
+                ];
+
+                continue;
+            }
+
+            $fused[$amenityKey]['expected_quantity'] += (int) $item['expected_quantity'];
+            $fused[$amenityKey]['members'][] = $member;
+            $fused[$amenityKey]['_labels'][] = $item['source_label'];
+        }
+
+        return array_values(array_map(function (array $item): array {
+            $labels = array_values(array_unique($item['_labels']));
+            unset($item['_labels']);
+
+            $item['source_label'] = implode(' + ', $labels);
+
+            return $item;
+        }, $fused));
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function checklistItemHasSource(array $item, ?string $source, ?int $sourceId): bool
+    {
+        foreach ($item['members'] ?? [['source' => $item['source'], 'source_id' => $item['source_id']]] as $member) {
+            if ($member['source'] === $source && (int) $member['source_id'] === (int) $sourceId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -463,7 +522,7 @@ class FacilityInspectionWorkflowService
         }
 
         foreach ($this->checklistFor($bookingDetailsId) as $item) {
-            if ($item['source'] === $itemSource && (int) $item['source_id'] === $sourceId) {
+            if ($this->checklistItemHasSource($item, $itemSource, $sourceId)) {
                 return $item;
             }
         }
@@ -559,14 +618,17 @@ class FacilityInspectionWorkflowService
             ->get()
             // The draft being saved replaces the one with the same identity.
             ->reject(fn (InspectionDraftFine $draft): bool => (int) $draft->fine_id === (int) $fine->fine_id
-                && $draft->item_source === ($sourceItem['source'] ?? null)
-                && (int) ($draft->source_id ?? 0) === (int) ($sourceItem['source_id'] ?? 0));
+                && $sourceItem !== null
+                && $this->checklistItemHasSource($sourceItem, $draft->item_source, (int) ($draft->source_id ?? 0)));
 
         // 1. The specific checklist item (e.g. "Table set x 5").
         if ($sourceItem !== null) {
             $alreadyOnItem = (int) $drafts
-                ->filter(fn (InspectionDraftFine $draft): bool => $draft->item_source === $sourceItem['source']
-                    && (int) $draft->source_id === (int) $sourceItem['source_id'])
+                ->filter(fn (InspectionDraftFine $draft): bool => $this->checklistItemHasSource(
+                    $sourceItem,
+                    $draft->item_source,
+                    (int) $draft->source_id,
+                ))
                 ->sum('quantity');
 
             $expected = (int) $sourceItem['expected_quantity'];

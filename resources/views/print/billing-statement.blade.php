@@ -254,6 +254,11 @@
                 <tr>
                     <td class="border border-zinc-300 p-2">
                         {{ $line['payment_ref_no'] }}
+                        @if (! empty($line['source']))
+                            <div class="text-xs text-zinc-500">
+                                From {{ $line['source'] }} (converted)
+                            </div>
+                        @endif
                         @if ($line['reference_number'])
                             <div class="text-xs text-zinc-500">
                                 Ref: {{ $line['reference_number'] }}

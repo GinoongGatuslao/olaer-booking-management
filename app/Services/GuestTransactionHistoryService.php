@@ -21,8 +21,8 @@ class GuestTransactionHistoryService
     public function paginated(
         array $filters,
         int $perPage = 10,
-        string $sortField = 'date',
-        string $sortDirection = 'desc',
+        string $sortField = 'transaction_type',
+        string $sortDirection = 'asc',
     ): LengthAwarePaginator {
         $reservations = DB::table('tbl_reservation as r')
             ->join('tbl_guest as g', 'g.guest_id', '=', 'r.guest_id')
@@ -109,8 +109,14 @@ class GuestTransactionHistoryService
         };
         $direction = $sortDirection === 'asc' ? 'asc' : 'desc';
 
+        $query->orderBy($sortColumn, $direction);
+
+        // Within a group (e.g. all bookings) show the newest first.
+        if ($sortColumn !== 'transaction_date') {
+            $query->orderBy('transaction_date', 'desc');
+        }
+
         return $query
-            ->orderBy($sortColumn, $direction)
             ->orderBy('transaction_id', 'desc')
             ->paginate(in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10);
     }

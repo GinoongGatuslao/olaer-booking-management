@@ -160,7 +160,8 @@ class BillingStatementService
             ->with([
                 'guest.address',
                 'user',
-                'reservation',
+                'reservation.payments.modeOfPayment',
+                'reservation.payments.user',
                 'entranceSlip',
                 'details.facility.facilityType',
                 'details.discount',
@@ -176,9 +177,18 @@ class BillingStatementService
             ])
             ->findOrFail($bookingId);
 
-        $verifiedPayments = $booking->payments->filter(function ($payment): bool {
-            return strtolower((string) $payment->payment_status) === 'verified';
-        });
+        // A booking also owns the payment(s) taken on the reservation it was
+        // converted from, so they belong on its statement and in what was paid.
+        $reservationRef = $booking->reservation?->r_ref_no;
+
+        $verifiedPayments = collect($booking->payments)
+            ->concat($booking->reservation?->payments ?? [])
+            ->unique(fn ($payment) => $payment->getKey())
+            ->filter(function ($payment): bool {
+                return strtolower((string) $payment->payment_status) === 'verified';
+            })
+            ->sortBy('payment_id')
+            ->values();
 
         $facilityLines = $booking->details->map(function ($detail): array {
             $storedUnitRate = $detail->getAttribute('unit_rate');
@@ -246,9 +256,12 @@ class BillingStatementService
             ];
         })->values();
 
-        $paymentLines = $verifiedPayments->map(function ($payment): array {
+        $paymentLines = $verifiedPayments->map(function ($payment) use ($reservationRef): array {
             return [
                 'payment_ref_no' => (string) $payment->p_ref_no,
+                'source' => $payment->reservation_id !== null && $payment->booking_id === null
+                    ? 'Reservation '.($reservationRef ?? '#'.$payment->reservation_id)
+                    : null,
                 'mode' => $payment->modeOfPayment?->mode_of_payment ?? 'N/A',
                 'reference_number' => $payment->reference_number,
                 'amount_paid' => $this->money->normalize((string) $payment->amount_paid),
