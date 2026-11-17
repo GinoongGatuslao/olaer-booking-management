@@ -88,6 +88,8 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public ?int $selectedPaymentId = null;
 
+    public bool $showReceiptModal = false;
+
     public function mount(): void
     {
         // Unpaid entrance slips from earlier days become Closed, so they are not payable.
@@ -376,6 +378,7 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
             ]);
 
             $this->selectedPaymentId = (int) $payment->payment_id;
+            $this->showReceiptModal = true;
             $this->clearSelection();
             $this->resetPage('payablesPage');
             $this->resetPage('paymentsPage');
@@ -403,11 +406,21 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
         }
 
         $this->selectedPaymentId = $paymentId;
+        $this->showReceiptModal = true;
     }
 
     public function clearReceipt(): void
     {
+        $this->showReceiptModal = false;
         $this->selectedPaymentId = null;
+    }
+
+    /** Closing the modal with the X button, Esc or a click outside also forgets the receipt. */
+    public function updatedShowReceiptModal(bool $open): void
+    {
+        if (! $open) {
+            $this->selectedPaymentId = null;
+        }
     }
 
     public function sortHistoryBy(string $field): void
@@ -508,7 +521,12 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
 
     public function paymentStatusColor(string $status): string
     {
-        return \App\Support\StatusColor::for($status);
+        return match (strtolower($status)) {
+            'verified', 'paid' => 'green',
+            'pending' => 'amber',
+            'rejected' => 'red',
+            default => 'zinc',
+        };
     }
 
     public function handledBy(Payment $payment): string
@@ -952,17 +970,118 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
     @enderror
     @endif
 
-    @if ($selectedPayment !== null)
-        <flux:card class="print:border-0 print:shadow-none">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <flux:modal wire:model="showReceiptModal" class="w-full max-w-full md:w-[46rem]">
+        @if ($selectedPayment !== null)
+            <div class="space-y-5">
                 <div>
-                    <h2 class="text-lg font-semibold">Payment Receipt</h2>
-                    <p class="text-sm text-zinc-500">
+                    <flux:heading size="lg">Payment Receipt</flux:heading>
+                    <flux:text class="mt-1">
                         Receipt: <span class="font-medium">{{ $selectedPayment->p_ref_no }}</span>
-                    </p>
+                    </flux:text>
                 </div>
 
-                <div class="flex flex-wrap gap-2 print:hidden">
+                <dl class="grid gap-4 text-sm sm:grid-cols-2">
+                    <div>
+                        <dt class="text-zinc-500">Transaction</dt>
+                        <dd class="mt-1 font-medium">{{ $this->paymentTargetLabel($selectedPayment) }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Amount paid</dt>
+                        <dd class="mt-1 font-medium">₱{{ number_format((float) $selectedPayment->amount_paid, 2) }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Mode</dt>
+                        <dd class="mt-1 font-medium">{{ $selectedPayment->modeOfPayment?->mode_of_payment ?? 'N/A' }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Status</dt>
+                        <dd class="mt-1">
+                            <flux:badge
+                                color="{{ $this->paymentStatusColor((string) $selectedPayment->payment_status) }}"
+                                size="sm"
+                            >
+                                {{ $selectedPayment->payment_status }}
+                            </flux:badge>
+                        </dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">External reference</dt>
+                        <dd class="mt-1 font-medium">{{ $selectedPayment->reference_number ?: 'N/A' }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Date paid</dt>
+                        <dd class="mt-1 font-medium">{{ $selectedPayment->date_paid?->format('M d, Y') ?? 'N/A' }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Handled or verified by</dt>
+                        <dd class="mt-1 font-medium">{{ $this->handledBy($selectedPayment) }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-zinc-500">Target type</dt>
+                        <dd class="mt-1 font-medium">{{ $this->targetTypeOf($selectedPayment) }}</dd>
+                    </div>
+                </dl>
+
+                @if ($receiptBreakdown !== null && $receiptBreakdown['lines'] !== [])
+                    <div class="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
+                        <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            @foreach ($receiptBreakdown['lines'] as $line)
+                                <div class="flex items-center justify-between gap-4 px-4 py-3 text-sm" wire:key="receipt-line-{{ $loop->index }}">
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <flux:badge size="sm" color="{{ match ($line['group']) {
+                                            'Facility' => 'blue',
+                                            'Amenity' => 'emerald',
+                                            'Fine' => 'red',
+                                            'Adjustments' => 'amber',
+                                            default => 'zinc',
+                                        } }}">{{ $line['group'] }}</flux:badge>
+
+                                        <div class="min-w-0">
+                                            <p class="truncate font-medium">{{ $line['label'] }}</p>
+                                            @if ($line['detail'] !== '')
+                                                <p class="truncate text-xs text-zinc-500">{{ $line['detail'] }}</p>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="text-right">
+                                        <p class="whitespace-nowrap font-semibold">₱{{ number_format((float) $line['applied'], 2) }}</p>
+                                        <p class="whitespace-nowrap text-xs text-zinc-500">
+                                            of ₱{{ number_format((float) $line['charge'], 2) }}
+                                            @if ((float) $line['remaining'] > 0)
+                                                · ₱{{ number_format((float) $line['remaining'], 2) }} still owed
+                                            @endif
+                                        </p>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        @if ((float) $receiptBreakdown['unapplied'] > 0)
+                            <p class="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+                                ₱{{ number_format((float) $receiptBreakdown['unapplied'], 2) }} of this payment was not matched to an itemised charge.
+                            </p>
+                        @endif
+
+                        <div class="flex items-center justify-between gap-4 bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900/60">
+                            <span>Balance after this payment</span>
+                            <span class="text-base">₱{{ number_format((float) $receiptBreakdown['balance_after'], 2) }}</span>
+                        </div>
+                    </div>
+                @endif
+
+                <div class="flex flex-wrap justify-end gap-2 print:hidden">
+                    <flux:button wire:click="clearReceipt" variant="ghost">
+                        Close
+                    </flux:button>
+
                     @if (Route::has('print.payment'))
                         <flux:button
                             href="{{ route('print.payment', $selectedPayment) }}"
@@ -976,111 +1095,10 @@ new #[Layout('layouts.app')] #[Title('Payment Management - Olaer Spring Resort')
                             Print
                         </flux:button>
                     @endif
-
-                    <flux:button wire:click="clearReceipt" variant="ghost">
-                        Close
-                    </flux:button>
                 </div>
             </div>
-
-            <dl class="mt-5 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
-                <div>
-                    <dt class="text-zinc-500">Transaction</dt>
-                    <dd class="mt-1 font-medium">{{ $this->paymentTargetLabel($selectedPayment) }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Amount paid</dt>
-                    <dd class="mt-1 font-medium">₱{{ number_format((float) $selectedPayment->amount_paid, 2) }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Mode</dt>
-                    <dd class="mt-1 font-medium">{{ $selectedPayment->modeOfPayment?->mode_of_payment ?? 'N/A' }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Status</dt>
-                    <dd class="mt-1">
-                        <flux:badge
-                            color="{{ $this->paymentStatusColor((string) $selectedPayment->payment_status) }}"
-                            size="sm"
-                        >
-                            {{ $selectedPayment->payment_status }}
-                        </flux:badge>
-                    </dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">External reference</dt>
-                    <dd class="mt-1 font-medium">{{ $selectedPayment->reference_number ?: 'N/A' }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Date paid</dt>
-                    <dd class="mt-1 font-medium">{{ $selectedPayment->date_paid?->format('M d, Y') ?? 'N/A' }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Handled or verified by</dt>
-                    <dd class="mt-1 font-medium">{{ $this->handledBy($selectedPayment) }}</dd>
-                </div>
-
-                <div>
-                    <dt class="text-zinc-500">Target type</dt>
-                    <dd class="mt-1 font-medium">{{ $this->targetTypeOf($selectedPayment) }}</dd>
-                </div>
-            </dl>
-
-            @if ($receiptBreakdown !== null && $receiptBreakdown['lines'] !== [])
-                <div class="mt-5 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
-                    <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                        @foreach ($receiptBreakdown['lines'] as $line)
-                            <div class="flex items-center justify-between gap-4 px-4 py-3 text-sm" wire:key="receipt-line-{{ $loop->index }}">
-                                <div class="flex min-w-0 items-center gap-3">
-                                    <flux:badge size="sm" color="{{ match ($line['group']) {
-                                        'Facility' => 'blue',
-                                        'Amenity' => 'emerald',
-                                        'Fine' => 'red',
-                                        'Adjustments' => 'amber',
-                                        default => 'zinc',
-                                    } }}">{{ $line['group'] }}</flux:badge>
-
-                                    <div class="min-w-0">
-                                        <p class="truncate font-medium">{{ $line['label'] }}</p>
-                                        @if ($line['detail'] !== '')
-                                            <p class="truncate text-xs text-zinc-500">{{ $line['detail'] }}</p>
-                                        @endif
-                                    </div>
-                                </div>
-
-                                <div class="text-right">
-                                    <p class="whitespace-nowrap font-semibold">₱{{ number_format((float) $line['applied'], 2) }}</p>
-                                    <p class="whitespace-nowrap text-xs text-zinc-500">
-                                        of ₱{{ number_format((float) $line['charge'], 2) }}
-                                        @if ((float) $line['remaining'] > 0)
-                                            · ₱{{ number_format((float) $line['remaining'], 2) }} still owed
-                                        @endif
-                                    </p>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    @if ((float) $receiptBreakdown['unapplied'] > 0)
-                        <p class="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
-                            ₱{{ number_format((float) $receiptBreakdown['unapplied'], 2) }} of this payment was not matched to an itemised charge.
-                        </p>
-                    @endif
-
-                    <div class="flex items-center justify-between gap-4 bg-zinc-50 px-4 py-3 text-sm font-semibold dark:bg-zinc-900/60">
-                        <span>Balance after this payment</span>
-                        <span class="text-base">₱{{ number_format((float) $receiptBreakdown['balance_after'], 2) }}</span>
-                    </div>
-                </div>
-            @endif
-        </flux:card>
-    @endif
+        @endif
+    </flux:modal>
 
     <flux:card class="overflow-hidden p-0">
         
