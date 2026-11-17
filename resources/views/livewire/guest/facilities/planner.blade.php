@@ -148,7 +148,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 $fee = \App\Support\GroupRowPricing::ROOM_EXTRA_GUEST_FEE;
                 $fee = number_format($fee, fmod($fee, 1.0) === 0.0 ? 0 : 2);
 
-                $label .= " · first {$included} guests free, ₱{$fee} per extra guest per night";
+                $label .= " · First {$included} guests free, ₱{$fee} per extra guest per night";
             }
 
             return $label;
@@ -798,7 +798,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-end">
                 <div>
                     <flux:heading size="lg">Facility requirements</flux:heading>
-                    <flux:text class="mt-1">Availability is counted by product, date, and canonical schedule slot.</flux:text>
+                    <flux:text class="mt-1">Fill in all the required details. To add more facilities, click “Add Facility.” Once completed, click “Check Availability & Total” to proceed.</flux:text>
                 </div>
             </div>
 
@@ -911,7 +911,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
             </div>
 
             <div class="mt-5 flex flex-wrap items-center gap-3">
-                <flux:button type="button" variant="ghost" wire:click="addGroup">Add another facility group</flux:button>
+                <flux:button type="button" variant="ghost" wire:click="addGroup">Add Facility</flux:button>
                 <flux:button type="button" wire:click="savePlan">Check availability & total</flux:button>
                 @if ($planTotal !== '')
                     <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Current total: ₱{{ number_format((float) $planTotal, 2) }}</span>
@@ -996,7 +996,7 @@ new #[Layout('layouts.public')] #[Title('Plan Facilities - Olaer Spring Resort')
                 @else
                     Reservation requires at least 50% of the final discounted total. 
                 @endif
-                The payment remains Pending until a Cashier verifies the reference and private proof.
+                The payment remains Pending until a Cashier verifies the reference and proof.
             </flux:text>
             <div class="mt-5 grid gap-4 md:grid-cols-2">
                 <flux:field class="relative">

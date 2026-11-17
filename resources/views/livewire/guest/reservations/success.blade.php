@@ -52,7 +52,7 @@ new #[Layout('layouts.public')] #[Title('Reservation Received - Olaer Spring Res
                         Thank you, {{ $reservation->guest?->first_name }}.
                     </h1>
                     <p class="mt-3 max-w-3xl text-sm leading-6 text-emerald-800 dark:text-emerald-200 sm:text-base">
-                        Your facility reservation is currently under review by our staff. Please save the reference number below for future inquiries while we verify your payment and finalize your confirmation.
+                       Your facility reservation is currently under review by our staff. Please save the reference number below for future inquiries while we verify your payment and finalize your reservation confirmation.
                     </p>
                 </header>
 
