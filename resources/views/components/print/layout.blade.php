@@ -79,7 +79,7 @@
             <section class="print-card thermal bg-white shadow-sm" style="padding: 3mm 4mm;">
                 <header class="t-center">
                     <p class="t-big">Olaer Spring Resort</p>
-                    <p class="t-small">Booking Management with Billing System</p>
+                    <p class="t-small">Purok Olaer, General Santos City (Dadiangas), 9500 South Cotabato</p>
                     <p class="t-small">{{ now()->format('M d, Y h:i A') }}</p>
                 </header>
                 <div class="t-sep"></div>

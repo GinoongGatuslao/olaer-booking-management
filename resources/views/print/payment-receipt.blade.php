@@ -25,14 +25,12 @@
 
     @if (! empty($breakdown) && count($breakdown['lines']) > 0)
         <div class="t-sep"></div>
-        <p class="t-strong">WHAT THIS PAYMENT COVERED</p>
 
         @foreach ($breakdown['lines'] as $line)
             <div style="margin-top: 5px;">
                 <p class="t-strong">{{ $line['label'] }}</p>
                 <p class="t-small">{{ $line['group'] }}@if ($line['detail']) · {{ $line['detail'] }}@endif</p>
                 <div class="t-row t-small"><span>Charge</span><span>{{ $peso($line['charge']) }}</span></div>
-                <div class="t-row"><span>Amount Paid</span><span class="t-strong">{{ $peso($line['applied']) }}</span></div>
                 @if ((float) $line['remaining'] > 0)
                     <div class="t-row t-small"><span>Still owed</span><span>{{ $peso($line['remaining']) }}</span></div>
                 @endif
@@ -44,7 +42,7 @@
         @endif
 
         <div class="t-sep"></div>
-        <div class="t-row"><span>Balance after payment</span><span class="t-strong">{{ $peso($breakdown['balance_after']) }}</span></div>
+        <div class="t-row"><span>Balance </span><span class="t-strong">{{ $peso($breakdown['balance_after']) }}</span></div>
     @endif
 
     <div class="t-sep"></div>
@@ -52,12 +50,11 @@
 
     {{-- Only cash payments store the cash received and the change returned. --}}
     @if (! is_null($payment->cash_paid))
-        <div class="t-row"><span>Cash Given</span><span>{{ $peso($payment->cash_paid) }}</span></div>
+        <div class="t-row"><span>Cash </span><span>{{ $peso($payment->cash_paid) }}</span></div>
         <div class="t-row"><span>Change</span><span>{{ $peso($payment->change_amount) }}</span></div>
     @endif
 
     <div class="t-sign">Received By</div>
-    <div class="t-sign">Guest Signature</div>
 
     <p class="t-center t-small" style="margin-top: 10px;">Thank you!</p>
 </x-print.layout>
