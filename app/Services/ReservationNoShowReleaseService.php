@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\GuestVerificationOtp;
+use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationDetail;
 use Illuminate\Support\Carbon;
@@ -80,6 +81,10 @@ class ReservationNoShowReleaseService
                 $this->expireManagementOtps(
                     (int) $reservation->reservation_id,
                 );
+
+                $this->cancelPendingGcashPayments(
+                    (int) $reservation->reservation_id,
+                );
             }
 
             $this->scheduleBlocks->releaseReservationDetails($details);
@@ -115,6 +120,27 @@ class ReservationNoShowReleaseService
                 },
             )
             ->count();
+    }
+
+    /**
+     * A no-show reservation will never be paid, so any GCash proof still waiting
+     * for verification is cancelled and leaves the cashier's verification queue
+     * (same wording as when a reservation is cancelled). Verified payments are
+     * never touched here, and rejected ones stay rejected.
+     */
+    private function cancelPendingGcashPayments(
+        int $reservationId,
+    ): void {
+        Payment::query()
+            ->where('reservation_id', $reservationId)
+            ->whereRaw('LOWER(payment_status) = ?', ['pending'])
+            ->whereHas('modeOfPayment', function ($query): void {
+                $query->whereRaw('LOWER(mode_of_payment) = ?', ['gcash']);
+            })
+            ->get()
+            ->each(fn (Payment $payment) => $payment->update([
+                'payment_status' => 'Cancelled',
+            ]));
     }
 
     private function expireManagementOtps(

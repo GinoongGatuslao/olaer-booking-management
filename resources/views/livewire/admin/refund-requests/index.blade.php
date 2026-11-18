@@ -547,7 +547,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         description="Cashiers send refund requests for cancelled reservations and bookings. Approve to set the most they may refund, or reject. A note is optional. GCash refunds come back here for you to send and record. You can also create a refund request yourself; it is approved as soon as you create it."
     >
         <x-slot:actions>
-            <flux:button type="button" variant="primary" wire:click="openCreate">New refund request</flux:button>
+            <flux:button type="button" variant="primary" wire:click="openCreate">Create Refund Request</flux:button>
             <flux:button :href="route('admin.dashboard')" wire:navigate variant="ghost">Back to dashboard</flux:button>
         </x-slot:actions>
     </x-staff-page-header>
