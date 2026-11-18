@@ -1346,7 +1346,7 @@ new class extends Component {
                                             >
                                                 View booking
                                             </flux:menu.item>
-                                            @php($cancelModel = $bookingModels->get($booking->booking_id))
+                                            @php $cancelModel = $bookingModels->get($booking->booking_id); @endphp
                                             @if ($cancelModel && $this->canCancelBooking($cancelModel))
                                                 <flux:menu.item
                                                     icon="x-circle"
@@ -1382,9 +1382,9 @@ new class extends Component {
                                     </div>
                                 </div>
 
-                                @php($model = $bookingModels->get($booking->booking_id))
+                                @php $model = $bookingModels->get($booking->booking_id); @endphp
                                 @if ($model && (string) $model->status === 'Cancelled')
-                                    @php($refund = $this->refundInfo($model))
+                                    @php $refund = $this->refundInfo($model); @endphp
                                     <div class="mt-4 space-y-3 rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-700">
                                         <div>
                                             <div class="text-xs uppercase tracking-wide text-brand-text-muted dark:text-zinc-400">Cancellation</div>
@@ -1447,7 +1447,7 @@ new class extends Component {
                                                         @endif
                                                     </div>
                                                 @elseif ($request->isGivenToGuest())
-                                                    @php($proofLink = $this->refundProofUrl($request))
+                                                    @php $proofLink = $this->refundProofUrl($request); @endphp
                                                     <div class="mt-1 text-sm text-brand-text dark:text-zinc-200">
                                                         <span class="font-medium">Refunded ₱{{ number_format((float) $request->refunded_amount, 2) }}</span>
                                                         via {{ $request->refundModeOfPayment?->mode_of_payment ?? 'Unknown' }}
@@ -1725,7 +1725,7 @@ new class extends Component {
     {{-- Request a refund for a cancelled booking --}}
     <flux:modal wire:model="showRefundModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[36rem]">
         @if ($refundBooking)
-            @php($refundInfo = $this->refundInfo($refundBooking))
+            @php $refundInfo = $this->refundInfo($refundBooking); @endphp
             <form wire:submit="submitRefundRequest" novalidate class="space-y-5">
                 <div class="pe-8">
                     <flux:heading size="lg">Request a refund</flux:heading>
