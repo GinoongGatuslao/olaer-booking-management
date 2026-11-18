@@ -270,6 +270,19 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation or Booking - Olaer S
             $this->details[$id]['check_out_date'] = $this->checkOutFor($id);
         }
 
+        if ($field === 'total_guest_count') {
+            // Never let 0, blank or an out-of-range number reach the pricing and occupancy services.
+            $count = filter_var($this->details[$id]['total_guest_count'] ?? null, FILTER_VALIDATE_INT);
+            $count = ($count === false || $count < 1) ? 1 : $count;
+            $maximum = $this->strictMaximumFor($id);
+
+            if ($maximum !== null && $count > $maximum) {
+                $count = $maximum;
+            }
+
+            $this->details[$id]['total_guest_count'] = $count;
+        }
+
         if ($field === 'facility_type_id') {
             $this->details[$id]['rate_type'] = '';
             $this->details[$id]['facility_id'] = null;
@@ -1156,7 +1169,7 @@ new #[Layout('layouts.public')] #[Title('Manage Reservation or Booking - Olaer S
                         <div class="mt-6 max-w-xl">
                             <flux:field class="relative">
                                 <flux:label>Total guests</flux:label>
-                                <flux:input type="number" min="1" max="{{ $this->strictMaximumFor($detailId) }}" wire:model.live="details.{{ $detailId }}.total_guest_count" />
+                                <flux:input type="number" min="1" max="{{ $this->strictMaximumFor($detailId) }}" wire:model.blur="details.{{ $detailId }}.total_guest_count" />
                                 <flux:error class="field-error" name="details.{{ $detailId }}.total_guest_count" />
                             </flux:field>
                             <p class="mt-2 text-xs leading-5 text-public-muted dark:text-zinc-400">
