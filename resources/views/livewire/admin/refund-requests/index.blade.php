@@ -854,7 +854,12 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     </flux:modal>
 
     {{-- Admin creates a refund request of their own: approved by its creator --}}
-    <flux:modal wire:model="showCreateModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[62rem]">
+    {{-- The list is wide; the form after choosing a record keeps the narrower size. --}}
+    <flux:modal
+        wire:model="showCreateModal"
+        class="w-full max-h-[90vh] overflow-y-auto md:w-[62rem]"
+        :style="$createTargetId === null ? 'width: 72rem; max-width: calc(100vw - 2rem);' : null"
+    >
         @if ($showCreateModal)
             <div class="space-y-5">
                 <div class="pe-8">
