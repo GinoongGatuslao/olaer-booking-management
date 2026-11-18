@@ -37,7 +37,10 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     // The admin creating a refund request of their own (approved by its creator)
     public bool $showCreateModal = false;
     public string $createType = 'reservation';
-    public string $createReference = '';
+    public string $createSearch = '';
+    public string $createFilter = 'Refundable';
+    public int $createPerPage = 10;
+    public ?int $createTargetId = null;
     public string $createAmount = '';
     public string $createNote = '';
 
@@ -156,26 +159,73 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
         $this->resetPage();
     }
 
-    /** The cancelled reservation or booking matching the reference typed in the create form. */
+    /** Cancelled reservations or bookings to choose from, filtered like the cashier tables. */
+    public function createCandidates(): LengthAwarePaginator
+    {
+        $search = trim($this->createSearch);
+        $isBooking = $this->createType === 'booking';
+        $referenceColumn = $isBooking ? 'b_ref_no' : 'r_ref_no';
+        $verified = fn ($payments) => $payments->whereRaw('LOWER(TRIM(payment_status)) = ?', ['verified']);
+
+        $query = $isBooking
+            ? Booking::query()->with(['guest', 'payments', 'reservation.payments', 'refundRequests'])
+            : Reservation::query()->with(['guest', 'payments', 'refundRequests']);
+
+        return $query
+            ->where('status', 'Cancelled')
+            ->when($search !== '', function ($query) use ($search, $referenceColumn): void {
+                $query->where(function ($match) use ($search, $referenceColumn): void {
+                    $match->where($referenceColumn, 'like', "%{$search}%")
+                        ->orWhereHas('guest', function ($guest) use ($search): void {
+                            $guest->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhere('contact_no', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->when($this->createFilter === 'Refundable', function ($query) use ($isBooking, $verified): void {
+                $query->where(function ($paid) use ($isBooking, $verified): void {
+                    $paid->whereHas('payments', $verified);
+
+                    if ($isBooking) {
+                        $paid->orWhereHas('reservation.payments', $verified);
+                    }
+                })
+                    ->whereDoesntHave('refundRequests', fn ($refunds) => $refunds->whereIn('status', [
+                        RefundRequest::STATUS_PENDING,
+                        RefundRequest::STATUS_APPROVED,
+                    ]))
+                    ->whereRaw(
+                        $isBooking
+                            ? '(select count(*) from tbl_refund_request rr where rr.booking_id = tbl_booking.booking_id) < ?'
+                            : '(select count(*) from tbl_refund_request rr where rr.reservation_id = tbl_reservation.reservation_id) < ?',
+                        [RefundRequestWorkflowService::MAX_ATTEMPTS],
+                    );
+            })
+            ->orderByDesc($isBooking ? 'booking_id' : 'reservation_id')
+            ->paginate(
+                in_array($this->createPerPage, [10, 25, 50], true) ? $this->createPerPage : 10,
+                ['*'],
+                'createPage',
+            );
+    }
+
+    /** @return array{can_request: bool, reason: ?string, paid: string, used: int, max: int, next_attempt: int, latest: ?RefundRequest} */
+    public function rowInfo(Reservation|Booking $record): array
+    {
+        return app(RefundRequestWorkflowService::class)->eligibility($record);
+    }
+
+    /** The record chosen in the table. */
     public function createTarget(): Reservation|Booking|null
     {
-        $reference = strtoupper(trim($this->createReference));
-
-        if ($reference === '') {
+        if ($this->createTargetId === null) {
             return null;
         }
 
-        if ($this->createType === 'booking') {
-            return Booking::query()
-                ->with(['guest', 'payments', 'reservation.payments', 'refundRequests'])
-                ->where('b_ref_no', $reference)
-                ->first();
-        }
-
-        return Reservation::query()
-            ->with(['guest', 'payments', 'refundRequests'])
-            ->where('r_ref_no', $reference)
-            ->first();
+        return $this->createType === 'booking'
+            ? Booking::query()->with(['guest', 'payments', 'reservation.payments', 'refundRequests'])->find($this->createTargetId)
+            : Reservation::query()->with(['guest', 'payments', 'refundRequests'])->find($this->createTargetId);
     }
 
     /** @return array{target: Reservation|Booking, eligibility: array}|null */
@@ -196,9 +246,13 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     public function openCreate(): void
     {
         $this->createType = 'reservation';
-        $this->createReference = '';
+        $this->createSearch = '';
+        $this->createFilter = 'Refundable';
+        $this->createPerPage = 10;
+        $this->createTargetId = null;
         $this->createAmount = '';
         $this->createNote = '';
+        $this->resetPage('createPage');
         $this->resetValidation();
         $this->showCreateModal = true;
     }
@@ -206,7 +260,7 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     public function closeCreate(): void
     {
         $this->showCreateModal = false;
-        $this->createReference = '';
+        $this->createTargetId = null;
         $this->createAmount = '';
         $this->createNote = '';
         $this->resetValidation();
@@ -221,39 +275,79 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
 
     public function updatedCreateType(): void
     {
-        $this->createReference = '';
+        $this->createTargetId = null;
         $this->createAmount = '';
+        $this->resetPage('createPage');
         $this->resetValidation();
     }
 
-    /** When the reference matches a refundable record, start the amount at everything the guest paid. */
-    public function updatedCreateReference(): void
+    public function updatedCreateSearch(): void
     {
-        $this->resetValidation();
+        $this->resetPage('createPage');
+    }
+
+    public function updatedCreateFilter(): void
+    {
+        $this->resetPage('createPage');
+    }
+
+    public function updatedCreatePerPage(): void
+    {
+        $this->resetPage('createPage');
+    }
+
+    public function clearCreateFilters(): void
+    {
+        $this->createSearch = '';
+        $this->createFilter = 'Refundable';
+        $this->createPerPage = 10;
+        $this->resetPage('createPage');
+    }
+
+    /** Pick a row: the amount starts at everything the guest paid. */
+    public function selectCreateTarget(int $id): void
+    {
+        $this->createTargetId = $id;
         $this->createAmount = '';
+        $this->createNote = '';
+        $this->resetValidation();
 
-        $target = $this->createTarget();
+        $info = $this->createInfo();
 
-        if ($target === null) {
+        if ($info === null) {
+            $this->createTargetId = null;
+            $this->addError('createRefund', 'This record is no longer available. Refresh the list.');
+
             return;
         }
 
-        $eligibility = app(RefundRequestWorkflowService::class)->eligibility($target);
+        if (! $info['eligibility']['can_request']) {
+            $this->createTargetId = null;
+            $this->addError('createRefund', (string) $info['eligibility']['reason']);
 
-        if ($eligibility['can_request']) {
-            $this->createAmount = number_format((float) $eligibility['paid'], 2, '.', '');
+            return;
         }
+
+        $this->createAmount = number_format((float) $info['eligibility']['paid'], 2, '.', '');
+    }
+
+    public function backToCreateList(): void
+    {
+        $this->createTargetId = null;
+        $this->createAmount = '';
+        $this->createNote = '';
+        $this->resetValidation();
     }
 
     public function createRefund(RefundRequestWorkflowService $refunds): void
     {
         $validated = $this->validate([
             'createType' => ['required', 'in:reservation,booking'],
-            'createReference' => ['required', 'string', 'max:30'],
+            'createTargetId' => ['required', 'integer'],
             'createAmount' => ['required', 'numeric', 'min:0.01'],
             'createNote' => ['required', 'string', 'max:1000'],
         ], [
-            'createReference.required' => 'Enter the reservation or booking reference number.',
+            'createTargetId.required' => 'Choose the reservation or booking to refund.',
             'createAmount.required' => 'Enter the amount to refund.',
             'createAmount.numeric' => 'The refund amount must be a number.',
             'createAmount.min' => 'The refund amount must be greater than zero.',
@@ -261,18 +355,10 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             'createNote.max' => 'The note cannot be longer than :max characters.',
         ]);
 
-        $target = $this->createTarget();
-
-        if ($target === null) {
-            $this->addError('createReference', 'No '.$validated['createType'].' was found with that reference number.');
-
-            return;
-        }
-
         try {
             $refunds->createAsAdmin(
                 $validated['createType'],
-                (int) $target->getKey(),
+                (int) $validated['createTargetId'],
                 (string) $validated['createAmount'],
                 $validated['createNote'],
                 (int) Auth::id(),
@@ -768,65 +854,136 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     </flux:modal>
 
     {{-- Admin creates a refund request of their own: approved by its creator --}}
-    <flux:modal wire:model="showCreateModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[34rem]">
-        <form wire:submit="createRefund" novalidate class="space-y-5">
-            <div class="pe-8">
-                <flux:heading size="lg">New refund request</flux:heading>
-                <flux:text class="mt-1">
-                    For a cancelled reservation or booking. As the admin you approve it yourself: it is saved as approved, and the cashier then gives the money back (GCash refunds come to you).
-                </flux:text>
-            </div>
-
-            @error('createRefund')
-                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
-            @enderror
-
-            <div class="grid gap-4 md:grid-cols-2">
-                <flux:select wire:model.live="createType" label="Refund for">
-                    <option value="reservation">Reservation</option>
-                    <option value="booking">Booking</option>
-                </flux:select>
-
-                <flux:input wire:model.live.debounce.400ms="createReference" label="Reference number" placeholder="Enter the reference number" />
-            </div>
-            <flux:error name="createReference" />
-
-            @if ($createInfo = $this->createInfo())
-                <div class="rounded-lg bg-zinc-50 p-4 text-sm dark:bg-zinc-900/60">
-                    <div class="flex justify-between gap-3">
-                        <span class="text-zinc-500">Guest</span>
-                        <span class="font-medium">{{ $this->guestName($createInfo['target']->guest) }}</span>
-                    </div>
-                    <div class="mt-1 flex justify-between gap-3">
-                        <span class="text-zinc-500">Status</span>
-                        <span class="font-medium">{{ $createInfo['target']->status }}</span>
-                    </div>
-                    <div class="mt-1 flex justify-between gap-3">
-                        <span class="text-zinc-500">Verified payments</span>
-                        <span class="font-semibold">₱{{ number_format((float) $createInfo['eligibility']['paid'], 2) }}</span>
-                    </div>
-                    @unless ($createInfo['eligibility']['can_request'])
-                        <p class="mt-3 text-red-700 dark:text-red-300">{{ $createInfo['eligibility']['reason'] }}</p>
-                    @endunless
+    <flux:modal wire:model="showCreateModal" class="w-full max-h-[90vh] overflow-y-auto md:w-[62rem]">
+        @if ($showCreateModal)
+            <div class="space-y-5">
+                <div class="pe-8">
+                    <flux:heading size="lg">New refund request</flux:heading>
+                    <flux:text class="mt-1">
+                        Pick a cancelled reservation or booking. As the admin you approve it yourself: it is saved as approved, and the cashier then gives the money back (GCash refunds come to you).
+                    </flux:text>
                 </div>
-            @elseif (trim($createReference) !== '')
-                <p class="text-sm text-zinc-500">No {{ $createType }} found with that reference number.</p>
-            @endif
 
-            @if ($createInfo && $createInfo['eligibility']['can_request'])
-                <flux:input wire:model="createAmount" type="number" step="0.01" min="0.01" max="{{ $createInfo['eligibility']['paid'] }}" label="Amount to refund" />
-                <flux:error name="createAmount" />
+                @error('createRefund')
+                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{{ $message }}</div>
+                @enderror
 
-                <flux:textarea wire:model="createNote" label="Note" rows="3" placeholder="Why is this refund being made?" />
-                <flux:error name="createNote" />
-            @endif
+                @if ($createInfo = $this->createInfo())
+                    <form wire:submit="createRefund" novalidate class="space-y-5">
+                        <div class="rounded-lg bg-zinc-50 p-4 text-sm dark:bg-zinc-900/60">
+                            <div class="flex justify-between gap-3">
+                                <span class="text-zinc-500">{{ ucfirst($createType) }}</span>
+                                <span class="font-medium">{{ $createType === 'booking' ? $createInfo['target']->b_ref_no : $createInfo['target']->r_ref_no }}</span>
+                            </div>
+                            <div class="mt-1 flex justify-between gap-3">
+                                <span class="text-zinc-500">Guest</span>
+                                <span class="font-medium">{{ $this->guestName($createInfo['target']->guest) }}</span>
+                            </div>
+                            <div class="mt-1 flex justify-between gap-3">
+                                <span class="text-zinc-500">Verified payments</span>
+                                <span class="font-semibold">₱{{ number_format((float) $createInfo['eligibility']['paid'], 2) }}</span>
+                            </div>
+                            <div class="mt-1 flex justify-between gap-3">
+                                <span class="text-zinc-500">Attempt</span>
+                                <span class="font-medium">{{ $createInfo['eligibility']['next_attempt'] }} of {{ RefundRequestWorkflowService::MAX_ATTEMPTS }}</span>
+                            </div>
+                        </div>
 
-            <div class="flex justify-end gap-3">
-                <flux:button type="button" variant="ghost" wire:click="closeCreate">Close</flux:button>
-                @if ($createInfo && $createInfo['eligibility']['can_request'])
-                    <flux:button type="submit" variant="primary">Create and approve</flux:button>
+                        <flux:input wire:model="createAmount" type="number" step="0.01" min="0.01" max="{{ $createInfo['eligibility']['paid'] }}" label="Amount to refund" />
+                        <flux:error name="createAmount" />
+
+                        <flux:textarea wire:model="createNote" label="Note" rows="3" placeholder="Why is this refund being made?" />
+                        <flux:error name="createNote" />
+
+                        <div class="flex justify-end gap-3">
+                            <flux:button type="button" variant="ghost" wire:click="backToCreateList">Back to list</flux:button>
+                            <flux:button type="submit" variant="primary">Create and approve</flux:button>
+                        </div>
+                    </form>
+                @else
+                    @if ($candidates = $this->createCandidates())
+                        <div class="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+                            <div class="grid gap-3 border-b border-zinc-200 p-4 md:grid-cols-5 dark:border-zinc-800">
+                                <flux:select wire:model.live="createType" label="Refund for">
+                                    <option value="reservation">Reservation</option>
+                                    <option value="booking">Booking</option>
+                                </flux:select>
+
+                                <flux:input wire:model.live.debounce.300ms="createSearch" label="Search" placeholder="Reference, guest, contact" clearable />
+
+                                <flux:select wire:model.live="createFilter" label="Show">
+                                    <option value="Refundable">Can be refunded</option>
+                                    <option value="All">All cancelled</option>
+                                </flux:select>
+
+                                <flux:select wire:model.live="createPerPage" label="Rows">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                </flux:select>
+
+                                <div class="flex items-end">
+                                    <flux:button type="button" wire:click="clearCreateFilters" variant="ghost">Clear Filters</flux:button>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="createType,createSearch,createFilter,createPerPage,clearCreateFilters,gotoPage,previousPage,nextPage">
+                                <table class="w-full min-w-[48rem] text-left text-sm">
+                                    <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
+                                        <tr>
+                                            <th class="px-4 py-3 font-semibold">{{ ucfirst($createType) }}</th>
+                                            <th class="px-4 py-3 font-semibold">Guest</th>
+                                            <th class="px-4 py-3 font-semibold">Cancelled</th>
+                                            <th class="px-4 py-3 text-right font-semibold">Paid</th>
+                                            <th class="px-4 py-3 font-semibold">Refund</th>
+                                            <th class="px-4 py-3 text-right font-semibold">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                        @forelse ($candidates as $candidate)
+                                            @if ($info = $this->rowInfo($candidate))
+                                                <tr wire:key="create-row-{{ $createType }}-{{ $candidate->getKey() }}">
+                                                    <td class="px-4 py-4 font-medium">{{ $createType === 'booking' ? $candidate->b_ref_no : $candidate->r_ref_no }}</td>
+                                                    <td class="px-4 py-4">{{ $this->guestName($candidate->guest) }}</td>
+                                                    <td class="whitespace-nowrap px-4 py-4">{{ $candidate->cancelled_at ? \Illuminate\Support\Carbon::parse($candidate->cancelled_at)->format('M d, Y') : '—' }}</td>
+                                                    <td class="whitespace-nowrap px-4 py-4 text-right">₱{{ number_format((float) $info['paid'], 2) }}</td>
+                                                    <td class="px-4 py-4">
+                                                        @if ($info['latest'])
+                                                            <flux:badge size="sm" color="{{ \App\Support\StatusColor::for((string) $info['latest']->status) }}">{{ $info['latest']->status }}</flux:badge>
+                                                            <div class="mt-1 text-xs text-zinc-500">{{ $info['used'] }} of {{ $info['max'] }} attempts</div>
+                                                        @else
+                                                            <span class="text-zinc-400">None yet</span>
+                                                        @endif
+                                                    </td>
+                                                    <td class="px-4 py-4 text-right">
+                                                        @if ($info['can_request'])
+                                                            <flux:button size="sm" variant="primary" wire:click="selectCreateTarget({{ $candidate->getKey() }})">Select</flux:button>
+                                                        @else
+                                                            <span class="text-xs text-zinc-500">{{ $info['reason'] }}</span>
+                                                        @endif
+                                                    </td>
+                                                </tr>
+                                            @endif
+                                        @empty
+                                            <tr>
+                                                <td colspan="6" class="px-5 py-10 text-center text-zinc-500">No cancelled {{ $createType }}s match the current filters.</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                                {{ $candidates->links() }}
+                            </div>
+                        </div>
+                    @endif
+
+                    <div class="flex justify-end">
+                        <flux:button type="button" variant="ghost" wire:click="closeCreate">Close</flux:button>
+                    </div>
                 @endif
             </div>
-        </form>
+        @endif
     </flux:modal>
 </div>
