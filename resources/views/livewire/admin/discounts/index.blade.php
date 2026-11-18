@@ -346,7 +346,7 @@ new #[Layout('layouts.app')] #[Title('Discount Management - Olaer Spring Resort'
                     }
 
                     if ($start->lt(now()->startOfMinute())) {
-                        $fail('Discount start cannot be in the past. Choose the current time or later.');
+                        $fail('Discount start cannot be on a previous date. Choose the current time or later.');
                     }
                 },
             ],

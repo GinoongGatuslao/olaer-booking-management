@@ -565,7 +565,7 @@ class GuestReservationManagementService
         $originalDays = $this->stayLengthDays($detail->check_in_date, $detail->check_out_date);
 
         if ($in->lt($today)) {
-            throw new InvalidArgumentException('The check-in date cannot be in the past.');
+            throw new InvalidArgumentException('The check-in date cannot be on a previous date.');
         }
 
         if ($out->lt($in)) {

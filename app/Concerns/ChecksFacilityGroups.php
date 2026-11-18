@@ -218,7 +218,7 @@ trait ChecksFacilityGroups
             'groups.*.estimated_users.min' => 'There must be at least 1 estimated guest.',
             'groups.*.check_in_date.required' => 'Choose a check-in date.',
             'groups.*.check_in_date.date_format' => 'Choose a valid check-in date.',
-            'groups.*.check_in_date.after_or_equal' => 'The check-in date cannot be in the past.',
+            'groups.*.check_in_date.after_or_equal' => 'The check-in date cannot be on a previous date.',
             'groups.*.check_out_date.required' => 'Choose a check-out date.',
             'groups.*.check_out_date.date_format' => 'Choose a valid check-out date.',
             'firstName.required' => 'Enter the first name.',

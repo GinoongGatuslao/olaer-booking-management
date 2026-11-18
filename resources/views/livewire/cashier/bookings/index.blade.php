@@ -301,7 +301,7 @@ new class extends Component {
             'rescheduleForm.booking_details_id.exists' => $unavailable,
             'rescheduleForm.new_check_in_date.required' => 'Choose the new check-in date.',
             'rescheduleForm.new_check_in_date.date_format' => 'Enter a valid check-in date.',
-            'rescheduleForm.new_check_in_date.after_or_equal' => 'The new check-in date cannot be in the past.',
+            'rescheduleForm.new_check_in_date.after_or_equal' => 'The new check-in date cannot be on a previous date.',
             'rescheduleForm.new_check_out_date.required' => 'Choose the new check-out date.',
             'rescheduleForm.new_check_out_date.date_format' => 'Enter a valid check-out date.',
             'rescheduleForm.new_check_out_date.after_or_equal' => 'The new check-out date cannot be before the new check-in date.',

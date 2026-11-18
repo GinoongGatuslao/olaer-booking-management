@@ -695,7 +695,7 @@ new #[Layout('layouts.app')] #[Title('Reservation Management - Olaer Spring Reso
 
             'detailCheckInDate.required' => 'Choose the new check-in or use date.',
             'detailCheckInDate.date_format' => 'Enter a valid check-in or use date.',
-            'detailCheckInDate.after_or_equal' => 'The new check-in or use date cannot be in the past.',
+            'detailCheckInDate.after_or_equal' => 'The new check-in or use date cannot be on a previous date.',
             'detailCheckOutDate.required' => 'Choose the new check-out or end date.',
             'detailCheckOutDate.date_format' => 'Enter a valid check-out or end date.',
             'detailCheckOutDate.after_or_equal' => 'The check-out date cannot be before the check-in date.',
