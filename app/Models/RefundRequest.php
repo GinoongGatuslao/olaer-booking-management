@@ -66,6 +66,14 @@ class RefundRequest extends Model
         return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }
 
+    /** Created by an admin, who approved it at the same moment (no cashier request involved). */
+    public function isSelfApproved(): bool
+    {
+        return $this->requested_by_user_id !== null
+            && (int) $this->requested_by_user_id === (int) $this->reviewed_by_user_id
+            && (string) $this->status === self::STATUS_APPROVED;
+    }
+
     public function isForBooking(): bool
     {
         return $this->booking_id !== null;

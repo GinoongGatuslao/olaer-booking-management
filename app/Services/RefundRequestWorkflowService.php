@@ -147,6 +147,79 @@ class RefundRequestWorkflowService
     }
 
     /**
+     * An admin creates a refund request of their own. There is nobody above them to
+     * approve it, so it is approved by its creator in the same step: they choose the
+     * amount (up to what the guest paid) and the request is saved as Approved. From
+     * there it follows the normal path (the cashier gives it back, or GCash goes
+     * through the admin). The same eligibility rules apply as for a cashier's request.
+     *
+     * @param  'reservation'|'booking'  $type
+     */
+    public function createAsAdmin(
+        string $type,
+        int $id,
+        ?string $approvedAmount,
+        ?string $note,
+        int $adminUserId,
+    ): RefundRequest {
+        $this->guardRole($adminUserId, 'Admin', 'create their own refund requests');
+
+        if (! in_array($type, ['reservation', 'booking'], true)) {
+            throw new InvalidArgumentException('Choose whether this refund is for a reservation or a booking.');
+        }
+
+        $note = trim((string) $note);
+
+        if ($note === '') {
+            throw new InvalidArgumentException('Add a note explaining why this refund is needed.');
+        }
+
+        if (mb_strlen($note) > 1000) {
+            throw new InvalidArgumentException('The note must not exceed 1000 characters.');
+        }
+
+        $approved = $this->parseAmount((string) $approvedAmount, 'The refund amount');
+
+        return DB::transaction(function () use ($type, $id, $note, $approved, $adminUserId): RefundRequest {
+            if ($type === 'booking') {
+                $source = Booking::query()->lockForUpdate()->findOrFail($id);
+                $source->load(['payments', 'reservation.payments', 'refundRequests']);
+            } else {
+                $source = Reservation::query()->lockForUpdate()->findOrFail($id);
+                $source->load(['payments', 'refundRequests']);
+            }
+
+            $eligibility = $this->eligibility($source);
+
+            if (! $eligibility['can_request']) {
+                throw new InvalidArgumentException((string) $eligibility['reason']);
+            }
+
+            if ($this->money->compare($approved, $eligibility['paid']) > 0) {
+                throw new InvalidArgumentException(
+                    'The refund cannot be more than the verified payments (₱'.number_format((float) $eligibility['paid'], 2).').',
+                );
+            }
+
+            $now = Carbon::now();
+
+            return RefundRequest::query()->create([
+                'reservation_id' => $type === 'reservation' ? $source->getKey() : null,
+                'booking_id' => $type === 'booking' ? $source->getKey() : null,
+                'attempt_no' => $eligibility['next_attempt'],
+                'requested_by_user_id' => $adminUserId,
+                'requested_amount' => $this->money->normalize($eligibility['paid']),
+                'request_note' => $note,
+                'status' => RefundRequest::STATUS_APPROVED,
+                'approved_amount' => $approved,
+                'admin_note' => null,
+                'reviewed_by_user_id' => $adminUserId,
+                'reviewed_at' => $now,
+            ]);
+        });
+    }
+
+    /**
      * @param  'approve'|'reject'  $decision
      * @param  ?string  $approvedAmount  the most the cashier may give back (approve only)
      */

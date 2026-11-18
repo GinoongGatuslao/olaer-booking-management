@@ -1,9 +1,25 @@
 <?php
 
-use function Livewire\Volt\{layout, title};
+use function Livewire\Volt\{layout, mount, title};
 
 layout('layouts.app');
 title('Dashboard - Olaer Spring Resort');
+
+// /dashboard is where Laravel sends people who are already logged in (for example when the
+// site is reopened on /login), so send each role to its own dashboard.
+mount(function () {
+    $route = match (auth()->user()?->role?->role_name) {
+        'Admin' => 'admin.dashboard',
+        'Cashier' => 'cashier.dashboard',
+        'Maintenance Staff' => 'maintenance.dashboard',
+        'Security Guard' => 'security.entrance-slips.create',
+        default => null,
+    };
+
+    if ($route !== null) {
+        return $this->redirectRoute($route, navigate: false);
+    }
+});
 
 ?>
 
