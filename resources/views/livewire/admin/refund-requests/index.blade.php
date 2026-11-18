@@ -26,6 +26,12 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     #[Url(as: 'status', except: 'Pending')]
     public string $statusFilter = 'Pending';
 
+    #[Url(as: 'sort', except: 'created_at')]
+    public string $sortField = 'created_at';
+
+    #[Url(as: 'direction', except: 'desc')]
+    public string $sortDirection = 'desc';
+
     #[Url(as: 'per_page', except: 10)]
     public int $perPage = 10;
 
@@ -91,9 +97,74 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
                     });
                 });
             })
-            ->orderByRaw("case when status = 'Pending' then 0 else 1 end")
-            ->orderByDesc('refund_request_id')
+            ->tap(fn ($query) => $this->applySort($query))
             ->paginate(in_array($this->perPage, [10, 25, 50, 100], true) ? $this->perPage : 10);
+    }
+
+    private const SORTABLE = [
+        'created_at',
+        'reference',
+        'guest',
+        'requested_amount',
+        'approved_amount',
+        'status',
+    ];
+
+    /** Sorts the refund list. Untouched, it shows Pending first, then newest. */
+    private function applySort($query): void
+    {
+        $field = in_array($this->sortField, self::SORTABLE, true) ? $this->sortField : 'created_at';
+        $direction = $this->sortDirection === 'asc' ? 'asc' : 'desc';
+
+        $reference = '(coalesce('
+            .'(select r.r_ref_no from tbl_reservation r where r.reservation_id = tbl_refund_request.reservation_id),'
+            .'(select b.b_ref_no from tbl_booking b where b.booking_id = tbl_refund_request.booking_id)))';
+
+        $guestPart = fn (string $column): string => '(coalesce('
+            ."(select g.{$column} from tbl_reservation r join tbl_guest g on g.guest_id = r.guest_id where r.reservation_id = tbl_refund_request.reservation_id),"
+            ."(select g.{$column} from tbl_booking b join tbl_guest g on g.guest_id = b.guest_id where b.booking_id = tbl_refund_request.booking_id)))";
+
+        if ($field === 'created_at' && $direction === 'desc') {
+            $query->orderByRaw("case when tbl_refund_request.status = 'Pending' then 0 else 1 end")
+                ->orderByDesc('tbl_refund_request.refund_request_id');
+
+            return;
+        }
+
+        match ($field) {
+            'reference' => $query->orderByRaw("{$reference} {$direction}"),
+            'guest' => $query
+                ->orderByRaw($guestPart('last_name')." {$direction}")
+                ->orderByRaw($guestPart('first_name')." {$direction}"),
+            default => $query->orderBy("tbl_refund_request.{$field}", $direction),
+        };
+
+        $query->orderByDesc('tbl_refund_request.refund_request_id');
+    }
+
+    public function sortBy(string $field): void
+    {
+        if (! in_array($field, self::SORTABLE, true)) {
+            return;
+        }
+
+        if ($this->sortField === $field) {
+            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortField = $field;
+            $this->sortDirection = 'asc';
+        }
+
+        $this->resetPage();
+    }
+
+    public function sortIcon(string $field): string
+    {
+        if ($this->sortField !== $field) {
+            return '↕';
+        }
+
+        return $this->sortDirection === 'asc' ? '↑' : '↓';
     }
 
     public function selectedRequest(): ?RefundRequest
@@ -155,6 +226,8 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
     {
         $this->search = '';
         $this->statusFilter = 'Pending';
+        $this->sortField = 'created_at';
+        $this->sortDirection = 'desc';
         $this->perPage = 10;
         $this->resetPage();
     }
@@ -580,17 +653,17 @@ new #[Layout('layouts.app')] #[Title('Refund Requests - Olaer Spring Resort')] c
             </div>
         </div>
 
-        <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,perPage,clearFilters,gotoPage,previousPage,nextPage">
+        <div class="overflow-x-auto" wire:loading.class="opacity-60" wire:target="search,statusFilter,perPage,sortBy,clearFilters,gotoPage,previousPage,nextPage">
             <table class="w-full min-w-[56rem] text-left text-sm">
                 <thead class="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-400">
                     <tr>
-                        <th class="px-4 py-3 font-semibold">Sent</th>
-                        <th class="px-4 py-3 font-semibold">Reservation / Booking</th>
-                        <th class="px-4 py-3 font-semibold">Guest</th>
+                        <th class="px-4 py-3 font-semibold"><button type="button" wire:click="sortBy('created_at')" class="inline-flex items-center gap-1 uppercase tracking-wide">Sent<span>{{ $this->sortIcon('created_at') }}</span></button></th>
+                        <th class="px-4 py-3 font-semibold"><button type="button" wire:click="sortBy('reference')" class="inline-flex items-center gap-1 uppercase tracking-wide">Reservation / Booking<span>{{ $this->sortIcon('reference') }}</span></button></th>
+                        <th class="px-4 py-3 font-semibold"><button type="button" wire:click="sortBy('guest')" class="inline-flex items-center gap-1 uppercase tracking-wide">Guest<span>{{ $this->sortIcon('guest') }}</span></button></th>
                         <th class="px-4 py-3 text-right font-semibold">Paid</th>
-                        <th class="px-4 py-3 text-right font-semibold">Requested</th>
-                        <th class="px-4 py-3 text-right font-semibold">Approved</th>
-                        <th class="px-4 py-3 font-semibold">Status</th>
+                        <th class="px-4 py-3 text-right font-semibold"><button type="button" wire:click="sortBy('requested_amount')" class="inline-flex items-center gap-1 uppercase tracking-wide">Requested<span>{{ $this->sortIcon('requested_amount') }}</span></button></th>
+                        <th class="px-4 py-3 text-right font-semibold"><button type="button" wire:click="sortBy('approved_amount')" class="inline-flex items-center gap-1 uppercase tracking-wide">Approved<span>{{ $this->sortIcon('approved_amount') }}</span></button></th>
+                        <th class="px-4 py-3 font-semibold"><button type="button" wire:click="sortBy('status')" class="inline-flex items-center gap-1 uppercase tracking-wide">Status<span>{{ $this->sortIcon('status') }}</span></button></th>
                         <th class="px-4 py-3 text-right font-semibold">Action</th>
                     </tr>
                 </thead>
