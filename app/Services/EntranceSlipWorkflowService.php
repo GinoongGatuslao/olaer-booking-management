@@ -200,7 +200,7 @@ class EntranceSlipWorkflowService
     }
 
     /**
-     * Cashier-only direct Walk-In admission. The entrance charge is settled
+     * Cashier-only direct Walk-In entrance slip. The entrance charge is settled
      * through the parent booking payment, so the slip itself is issued paid
      * and receives an auditable credit adjustment rather than a duplicate
      * payment row/reference number.
@@ -231,8 +231,6 @@ class EntranceSlipWorkflowService
                 'total_price' => $total,
                 'amount_due' => '0.00',
                 'handled_by_user_id' => $cashierUserId,
-                'admitted_by_user_id' => $cashierUserId,
-                'admitted_at' => now(),
                 'status' => 'Paid',
             ]);
 
@@ -263,7 +261,6 @@ class EntranceSlipWorkflowService
                 'details.discount',
                 'createdBy',
                 'handledBy',
-                'admittedBy',
             ]);
         }, attempts: 3);
     }
@@ -428,34 +425,6 @@ class EntranceSlipWorkflowService
         }, attempts: 3);
     }
 
-    public function admit(int $entranceSlipId, int $cashierUserId): EntranceSlip
-    {
-        $this->guardCashier($cashierUserId);
-
-        return DB::transaction(function () use ($entranceSlipId, $cashierUserId): EntranceSlip {
-            $slip = EntranceSlip::query()->whereKey($entranceSlipId)->lockForUpdate()->firstOrFail();
-
-            if ($slip->admitted_at !== null) {
-                throw new InvalidArgumentException('This entrance slip has already been admitted.');
-            }
-
-            if ($slip->isClosed()) {
-                throw new InvalidArgumentException('This entrance slip is closed. It can only be viewed.');
-            }
-
-            if ($slip->status !== 'Paid' || bccomp((string) $slip->amount_due, '0.00', 2) !== 0) {
-                throw new InvalidArgumentException('Only a fully paid entrance slip may be admitted.');
-            }
-
-            $slip->update([
-                'admitted_by_user_id' => $cashierUserId,
-                'admitted_at' => now(),
-            ]);
-
-            return $slip->fresh(['createdBy', 'handledBy', 'admittedBy', 'details.entranceFee', 'payments']);
-        }, attempts: 3);
-    }
-
     private function guardSecurityGuard(int $userId): void
     {
         if ($userId < 1) {
@@ -486,7 +455,7 @@ class EntranceSlipWorkflowService
             ->exists();
 
         if (! $isCashier) {
-            throw new InvalidArgumentException('Only an active Cashier may admit entrance slips.');
+            throw new InvalidArgumentException('Only an active Cashier may perform this action.');
         }
     }
 
