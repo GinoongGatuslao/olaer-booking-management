@@ -51,6 +51,18 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
     #[Url(as: 'year', except: '')]
     public string $year = '';
 
+    #[Url(as: 'cashier', except: '')]
+    public string $cashierId = '';
+
+    #[Url(as: 'source', except: '')]
+    public string $bookingSource = '';
+
+    #[Url(as: 'outcome', except: '')]
+    public string $cancelOutcome = '';
+
+    #[Url(as: 'record', except: '')]
+    public string $cancelRecordType = '';
+
     #[Url(as: 'generated', except: false)]
     public bool $generated = false;
 
@@ -99,6 +111,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
 
         return [
             'facilityTypes' => $service->facilityTypes(),
+            'cashiers' => $this->reportType === 'revenue' ? $service->cashiers() : collect(),
             'report' => $this->generated
                 ? $this->buildReport($service)
                 : null,
@@ -126,6 +139,10 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             'month' => $this->month,
             'year' => $this->year,
             'facilityTypeId' => $this->facilityTypeId,
+            'cashierId' => $this->cashierId,
+            'bookingSource' => $this->bookingSource,
+            'cancelOutcome' => $this->cancelOutcome,
+            'cancelRecordType' => $this->cancelRecordType,
         ];
     }
 
@@ -151,6 +168,11 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                 'after_or_equal:startDate',
             ];
         }
+
+        $rules['cashierId'] = ['nullable', 'integer', 'exists:tbl_user,user_id'];
+        $rules['bookingSource'] = ['nullable', Rule::in(['cashier', 'guest'])];
+        $rules['cancelOutcome'] = ['nullable', Rule::in(['cancelled', 'no_show'])];
+        $rules['cancelRecordType'] = ['nullable', Rule::in(['reservation', 'booking'])];
 
         if ($this->usesFacilityType()) {
             $rules['facilityTypeId'] = [
@@ -191,6 +213,26 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
         $this->invalidateReport();
     }
 
+    public function updatedCashierId(): void
+    {
+        $this->invalidateReport();
+    }
+
+    public function updatedBookingSource(): void
+    {
+        $this->invalidateReport();
+    }
+
+    public function updatedCancelOutcome(): void
+    {
+        $this->invalidateReport();
+    }
+
+    public function updatedCancelRecordType(): void
+    {
+        $this->invalidateReport();
+    }
+
     public function updatedMonth(): void
     {
         $this->invalidateReport();
@@ -222,6 +264,21 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             ['available_facilities', 'facility_utilization'],
             true,
         );
+    }
+
+    public function usesCashierFilter(): bool
+    {
+        return $this->reportType === 'revenue';
+    }
+
+    public function usesBookingSource(): bool
+    {
+        return $this->reportType === 'booking_summary';
+    }
+
+    public function usesCancellationFilters(): bool
+    {
+        return $this->reportType === 'cancellation';
     }
 
     public function usesMonthYear(): bool
@@ -305,6 +362,10 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             'start' => $this->startDate,
             'end' => $this->endDate,
             'facility_type' => $this->facilityTypeId,
+            'cashier' => $this->cashierId,
+            'source' => $this->bookingSource,
+            'outcome' => $this->cancelOutcome,
+            'record' => $this->cancelRecordType,
             'month' => $this->month,
             'year' => $this->year,
             'generated' => 1,
@@ -321,6 +382,10 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             'start' => $this->startDate,
             'end' => $this->endDate,
             'facility_type' => $this->facilityTypeId,
+            'cashier' => $this->cashierId,
+            'source' => $this->bookingSource,
+            'outcome' => $this->cancelOutcome,
+            'record' => $this->cancelRecordType,
             'month' => $this->month,
             'year' => $this->year,
             'generated' => 1,
@@ -346,7 +411,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             'revenue' => $service->revenueReport(
                 $this->startDate,
                 $this->endDate,
-                null,
+                $this->cashierId !== '' ? (int) $this->cashierId : null,
                 $this->perPage,
                 $this->reportSearch,
                 'reportPage',
@@ -360,6 +425,7 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                 $this->reportSearch,
                 'reportPage',
                 $this->printAll,
+                $this->bookingSource !== '' ? $this->bookingSource : null,
             ),
             'cancellation' => $service->cancellationReport(
                 $this->startDate,
@@ -368,6 +434,9 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                 $this->reportSearch,
                 'reportPage',
                 $this->printAll,
+                $this->cancelOutcome !== '' ? $this->cancelOutcome : null,
+                $this->cancelRecordType !== '' ? $this->cancelRecordType : null,
+                true,
             ),
             'damaged_amenities' => $service->damagedAmenitiesReport(
                 $this->startDate,
@@ -514,6 +583,38 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
                     </flux:field>
                 @endif
 
+                @if ($this->usesCashierFilter())
+                    <flux:select wire:model.live="cashierId" label="Handled by (cashier)">
+                        <option value="">All cashiers</option>
+
+                        @foreach ($cashiers as $cashier)
+                            <option value="{{ $cashier->user_id }}">{{ $this->staffName($cashier) }}</option>
+                        @endforeach
+                    </flux:select>
+                @endif
+
+                @if ($this->usesBookingSource())
+                    <flux:select wire:model.live="bookingSource" label="Booked by">
+                        <option value="">Cashier and guest</option>
+                        <option value="cashier">From cashier</option>
+                        <option value="guest">From guest (online)</option>
+                    </flux:select>
+                @endif
+
+                @if ($this->usesCancellationFilters())
+                    <flux:select wire:model.live="cancelOutcome" label="Status">
+                        <option value="">Cancelled and no-show</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="no_show">No-show</option>
+                    </flux:select>
+
+                    <flux:select wire:model.live="cancelRecordType" label="Reservation or booking">
+                        <option value="">Reservations and bookings</option>
+                        <option value="reservation">Reservations</option>
+                        <option value="booking">Bookings</option>
+                    </flux:select>
+                @endif
+
                 @if ($this->usesFacilityType())
                     <flux:select
                         wire:model.live="facilityTypeId"
@@ -555,6 +656,10 @@ new #[Layout('layouts.app')] #[Title('Admin Reports - Olaer Spring Resort')] cla
             @enderror
 
             @error('year')
+                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+            @enderror
+
+            @error('cashierId')
                 <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
             @enderror
 

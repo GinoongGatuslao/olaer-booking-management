@@ -10,10 +10,13 @@ use App\Models\GuestFine;
 use App\Models\Payment;
 use App\Models\RefundRequest;
 use App\Models\Reservation;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -180,6 +183,7 @@ class ReportsService
         string $search = '',
         string $pageName = 'reportPage',
         bool $allRows = false,
+        ?string $source = null,
     ): array {
         $base = Booking::query()
             ->whereDate('booking_date', '>=', $startDate)
@@ -187,6 +191,14 @@ class ReportsService
 
         if ($cashierUserId !== null) {
             $base->where('user_id', $cashierUserId);
+        }
+
+        // Bookings made online by the guest have no staff user; the ones a cashier
+        // created (including reservations a cashier converted) carry that cashier.
+        if ($source === 'guest') {
+            $base->whereNull('user_id');
+        } elseif ($source === 'cashier') {
+            $base->whereNotNull('user_id');
         }
 
         $this->applyBookingSearch($base, $search);
@@ -232,7 +244,23 @@ class ReportsService
         string $search = '',
         string $pageName = 'reportPage',
         bool $allRows = false,
+        ?string $outcome = null,
+        ?string $recordType = null,
+        bool $extended = false,
     ): array {
+        if ($extended) {
+            return $this->extendedCancellationReport(
+                $startDate,
+                $endDate,
+                $perPage,
+                $search,
+                $pageName,
+                $allRows,
+                $outcome,
+                $recordType,
+            );
+        }
+
         $base = Reservation::query()
             ->whereNotNull('cancelled_at')
             ->whereDate('cancelled_at', '>=', $startDate)
@@ -257,6 +285,7 @@ class ReportsService
             ->whereIn('reservation_id', (clone $base)->select('tbl_reservation.reservation_id'));
 
         return [
+            'extended' => false,
             'rows' => $this->paginateOrGet(
                 $rowsQuery,
                 $perPage,
@@ -274,6 +303,181 @@ class ReportsService
                 ->where('status', RefundRequest::STATUS_PENDING)
                 ->count(),
         ];
+    }
+
+    /**
+     * Cancelled reservations, cancelled bookings and no-show reservations in one list.
+     * (Bookings have no no-show status, only reservations do.)
+     *
+     * @param  ?string  $outcome  null (all), 'cancelled' or 'no_show'
+     * @param  ?string  $recordType  null (all), 'reservation' or 'booking'
+     */
+    private function extendedCancellationReport(
+        string $startDate,
+        string $endDate,
+        int $perPage,
+        string $search,
+        string $pageName,
+        bool $allRows,
+        ?string $outcome,
+        ?string $recordType,
+    ): array {
+        $wantCancelled = $outcome !== 'no_show';
+        $wantNoShow = $outcome !== 'cancelled';
+        $wantReservations = $recordType !== 'booking';
+        $wantBookings = $recordType !== 'reservation';
+        $refundsService = app(RefundRequestWorkflowService::class);
+        $rows = collect();
+
+        if ($wantReservations && $wantCancelled) {
+            $query = Reservation::query()
+                ->whereNotNull('cancelled_at')
+                ->whereDate('cancelled_at', '>=', $startDate)
+                ->whereDate('cancelled_at', '<=', $endDate);
+
+            $this->applyCancellationSearch($query, $search);
+
+            $query->with(['guest', 'user', 'details.facility.facilityType', 'payments', 'refundRequests'])
+                ->get()
+                ->each(function (Reservation $reservation) use ($rows, $refundsService): void {
+                    $reservation->setAttribute('report_kind', 'Reservation');
+                    $reservation->setAttribute('report_outcome', 'Cancelled');
+                    $reservation->setAttribute('report_date', $reservation->cancelled_at);
+                    $reservation->setAttribute('report_ref', $reservation->r_ref_no);
+                    $reservation->setAttribute('report_reason', $reservation->cancellation_reason);
+                    $reservation->setAttribute('report_paid', $refundsService->amountPaid($reservation));
+                    $rows->push($reservation);
+                });
+        }
+
+        if ($wantReservations && $wantNoShow) {
+            // A no-show happened on the date the guest was due, so that date is what
+            // the report period is matched against.
+            $query = Reservation::query()
+                ->where('status', 'No-show')
+                ->whereHas('details', function (Builder $details) use ($startDate, $endDate): void {
+                    $details->whereDate('check_in_date', '>=', $startDate)
+                        ->whereDate('check_in_date', '<=', $endDate);
+                });
+
+            $this->applyCancellationSearch($query, $search);
+
+            $query->with(['guest', 'user', 'details.facility.facilityType', 'payments', 'refundRequests'])
+                ->get()
+                ->each(function (Reservation $reservation) use ($rows, $refundsService): void {
+                    $due = $reservation->details->min('check_in_date');
+
+                    $reservation->setAttribute('report_kind', 'Reservation');
+                    $reservation->setAttribute('report_outcome', 'No-show');
+                    $reservation->setAttribute('report_date', $due !== null ? \Illuminate\Support\Carbon::parse($due) : null);
+                    $reservation->setAttribute('report_ref', $reservation->r_ref_no);
+                    $reservation->setAttribute('report_reason', 'Guest did not arrive');
+                    $reservation->setAttribute('report_paid', $refundsService->amountPaid($reservation));
+                    $rows->push($reservation);
+                });
+        }
+
+        if ($wantBookings && $wantCancelled) {
+            $query = Booking::query()
+                ->whereNotNull('cancelled_at')
+                ->whereDate('cancelled_at', '>=', $startDate)
+                ->whereDate('cancelled_at', '<=', $endDate);
+
+            $this->applyBookingCancellationSearch($query, $search);
+
+            $query->with(['guest', 'user', 'details.facility.facilityType', 'payments', 'reservation.payments', 'refundRequests'])
+                ->get()
+                ->each(function (Booking $booking) use ($rows, $refundsService): void {
+                    $booking->setAttribute('report_kind', 'Booking');
+                    $booking->setAttribute('report_outcome', 'Cancelled');
+                    $booking->setAttribute('report_date', $booking->cancelled_at);
+                    $booking->setAttribute('report_ref', $booking->b_ref_no);
+                    $booking->setAttribute('report_reason', $booking->cancellation_reason);
+                    $booking->setAttribute('report_paid', $refundsService->amountPaid($booking));
+                    $rows->push($booking);
+                });
+        }
+
+        $rows = $rows
+            ->sortBy([
+                fn ($a, $b) => ($a->report_date?->timestamp ?? 0) <=> ($b->report_date?->timestamp ?? 0),
+                fn ($a, $b) => strcmp((string) $a->report_ref, (string) $b->report_ref),
+            ])
+            ->values();
+
+        $reservationIds = $rows->where('report_kind', 'Reservation')->map(fn ($row) => $row->getKey())->all();
+        $bookingIds = $rows->where('report_kind', 'Booking')->map(fn ($row) => $row->getKey())->all();
+
+        $refunds = RefundRequest::query()->where(function (Builder $query) use ($reservationIds, $bookingIds): void {
+            $query->whereIn('reservation_id', $reservationIds ?: [0])
+                ->orWhereIn('booking_id', $bookingIds ?: [0]);
+        });
+
+        if ($allRows) {
+            $pageRows = $rows;
+        } else {
+            $perPage = $this->validPerPage($perPage);
+            $page = Paginator::resolveCurrentPage($pageName);
+
+            $pageRows = new LengthAwarePaginator(
+                $rows->forPage($page, $perPage)->values(),
+                $rows->count(),
+                $perPage,
+                $page,
+                ['path' => Paginator::resolveCurrentPath(), 'pageName' => $pageName],
+            );
+        }
+
+        return [
+            'extended' => true,
+            'rows' => $pageRows,
+            'count' => $rows->count(),
+            'cancelled_count' => $rows->where('report_outcome', 'Cancelled')->count(),
+            'no_show_count' => $rows->where('report_outcome', 'No-show')->count(),
+            'reservation_count' => count($reservationIds),
+            'booking_count' => count($bookingIds),
+            'refund_approved_total' => round((float) (clone $refunds)
+                ->where('status', RefundRequest::STATUS_APPROVED)
+                ->sum('approved_amount'), 2),
+            'refund_approved_count' => (clone $refunds)
+                ->where('status', RefundRequest::STATUS_APPROVED)
+                ->count(),
+            'refund_pending_count' => (clone $refunds)
+                ->where('status', RefundRequest::STATUS_PENDING)
+                ->count(),
+        ];
+    }
+
+    private function applyBookingCancellationSearch(
+        Builder $query,
+        string $search,
+    ): void {
+        if (trim($search) === '') {
+            return;
+        }
+
+        $like = '%'.trim($search).'%';
+
+        $query->where(function (Builder $query) use ($like): void {
+            $query->where('b_ref_no', 'like', $like)
+                ->orWhere('cancellation_reason', 'like', $like)
+                ->orWhereHas('guest', function (Builder $query) use ($like): void {
+                    $this->applyGuestSearch($query, $like);
+                })
+                ->orWhereHas('details.facility', function (Builder $query) use ($like): void {
+                    $query->where('facility_name', 'like', $like);
+                });
+        });
+    }
+
+    /** Cashier accounts, for the "handled by" filter. */
+    public function cashiers(): EloquentCollection
+    {
+        return User::query()
+            ->whereHas('role', fn (Builder $role) => $role->where('role_name', 'Cashier'))
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
     }
 
     public function damagedAmenitiesReport(

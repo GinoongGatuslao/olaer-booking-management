@@ -22,6 +22,22 @@
             @if (trim($reportSearch) !== '')
                 · Search: “{{ $reportSearch }}”
             @endif
+
+            @if ($reportType === 'revenue' && filled($cashierId ?? null))
+                · Cashier: {{ $cashiers->firstWhere('user_id', (int) $cashierId)?->full_name ?? 'Selected cashier' }}
+            @endif
+
+            @if ($reportType === 'booking_summary' && filled($bookingSource ?? null))
+                · {{ $bookingSource === 'guest' ? 'From guest (online)' : 'From cashier' }}
+            @endif
+
+            @if ($reportType === 'cancellation' && filled($cancelOutcome ?? null))
+                · {{ $cancelOutcome === 'no_show' ? 'No-show only' : 'Cancelled only' }}
+            @endif
+
+            @if ($reportType === 'cancellation' && filled($cancelRecordType ?? null))
+                · {{ $cancelRecordType === 'booking' ? 'Bookings only' : 'Reservations only' }}
+            @endif
         </p>
 
         @if ($printAll)
@@ -282,6 +298,9 @@
                         <th class="p-2">Facilities</th>
                         <th class="p-2">Extra Guests</th>
                         <th class="p-2">Status</th>
+                        @if (method_exists($this, 'usesBookingSource'))
+                            <th class="p-2">Booked by</th>
+                        @endif
                         <th class="p-2 text-right">Total</th>
                         <th class="p-2 text-right">Due</th>
                         <th class="p-2 print:hidden">Action</th>
@@ -305,6 +324,9 @@
                             </td>
                             <td class="p-2">{{ $booking->total_guest_count }}</td>
                             <td class="p-2">{{ $booking->status }}</td>
+                            @if (method_exists($this, 'usesBookingSource'))
+                                <td class="p-2">{{ $booking->user ? $this->staffName($booking->user) : 'Guest (online)' }}</td>
+                            @endif
                             <td class="p-2 text-right">{{ $this->money($booking->total_price) }}</td>
                             <td class="p-2 text-right">{{ $this->money($booking->amount_due) }}</td>
                             <td class="p-2 print:hidden">
@@ -318,7 +340,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9" class="p-4 text-center text-zinc-500">
+                            <td colspan="{{ method_exists($this, 'usesBookingSource') ? 10 : 9 }}" class="p-4 text-center text-zinc-500">
                                 No bookings found.
                             </td>
                         </tr>
@@ -328,7 +350,103 @@
         </div>
     @endif
 
-    @if ($reportType === 'cancellation')
+    @if ($reportType === 'cancellation' && ($report['extended'] ?? false))
+        <div class="mb-4 grid gap-3 md:grid-cols-5 print:grid-cols-5">
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Total ({{ $report['reservation_count'] }} reservations, {{ $report['booking_count'] }} bookings)</p>
+                <p class="text-xl font-bold">{{ $report['count'] }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Cancelled</p>
+                <p class="text-xl font-bold">{{ $report['cancelled_count'] }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">No-show</p>
+                <p class="text-xl font-bold">{{ $report['no_show_count'] }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Approved Refunds ({{ $report['refund_approved_count'] }})</p>
+                <p class="text-xl font-bold">{{ $this->money($report['refund_approved_total']) }}</p>
+            </div>
+
+            <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
+                <p class="text-xs text-zinc-500">Refund Requests Pending</p>
+                <p class="text-xl font-bold">{{ $report['refund_pending_count'] }}</p>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto print:overflow-visible">
+            <table class="min-w-full text-left text-sm print:text-xs">
+                <thead class="border-b text-xs uppercase text-zinc-500">
+                    <tr>
+                        <th class="p-2">Date</th>
+                        <th class="p-2">Type</th>
+                        <th class="p-2">Status</th>
+                        <th class="p-2">Reference</th>
+                        <th class="p-2">Guest</th>
+                        <th class="p-2">Facilities</th>
+                        <th class="p-2">Reason</th>
+                        <th class="p-2 text-right">Paid</th>
+                        <th class="p-2">Refund</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    @forelse ($report['rows'] as $row)
+                        @php
+                            $approvedRefund = $row->refundRequests->firstWhere('status', 'Approved');
+                            $pendingRefund = $row->refundRequests->firstWhere('status', 'Pending');
+                            $latestRefund = $row->refundRequests->last();
+                        @endphp
+                        <tr>
+                            <td class="whitespace-nowrap p-2">{{ $row->report_date?->format($row->report_outcome === 'No-show' ? 'M d, Y' : 'M d, Y h:i A') }}</td>
+                            <td class="p-2">{{ $row->report_kind }}</td>
+                            <td class="p-2">{{ $row->report_outcome }}</td>
+                            <td class="p-2">{{ $row->report_ref }}</td>
+                            <td class="p-2">{{ $this->guestName($row->guest) }}</td>
+                            <td class="p-2">
+                                @foreach ($row->details as $detail)
+                                    {{ $detail->facility?->facility_name }}@if (!$loop->last)
+                                        ,
+                                    @endif
+                                @endforeach
+                            </td>
+                            <td class="p-2">{{ $row->report_reason }}</td>
+                            <td class="whitespace-nowrap p-2 text-right">{{ (float) $row->report_paid > 0 ? $this->money($row->report_paid) : '—' }}</td>
+                            <td class="p-2">
+                                @if ($approvedRefund)
+                                    @if ($approvedRefund->refunded_at)
+                                        <div class="font-medium">{{ $this->money($approvedRefund->refunded_amount) }} given to guest</div>
+                                        <div class="text-xs text-zinc-500">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                    @else
+                                        <div class="font-medium">{{ $this->money($approvedRefund->approved_amount) }} approved</div>
+                                        <div class="text-xs text-zinc-500">Not yet given to guest</div>
+                                    @endif
+                                @elseif ($pendingRefund)
+                                    <div>Pending · {{ $this->money($pendingRefund->requested_amount) }} requested</div>
+                                @elseif ($latestRefund)
+                                    <div>Rejected ({{ $row->refundRequests->count() }} of 3 tries)</div>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="p-4 text-center text-zinc-500">
+                                No cancelled or no-show reservations or bookings found.
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    @endif
+
+    @if ($reportType === 'cancellation' && ! ($report['extended'] ?? false))
         <div class="mb-4 grid gap-3 md:grid-cols-3 print:grid-cols-3">
             <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-800">
                 <p class="text-xs text-zinc-500">Cancelled Reservations</p>
