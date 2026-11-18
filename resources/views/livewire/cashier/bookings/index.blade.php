@@ -773,22 +773,30 @@ new class extends Component {
 
     private function bookingStatuses()
     {
+        // 'Cancelled' is always offered, even before the first cancellation exists.
         return DB::table('tbl_booking')
             ->whereNotNull('status')
             ->where('status', '!=', '')
             ->distinct()
-            ->orderBy('status')
-            ->pluck('status');
+            ->pluck('status')
+            ->push('Cancelled')
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     private function detailStatuses()
     {
+        // 'Cancelled' is always offered, even before the first cancellation exists.
         return DB::table('tbl_booking_details')
             ->whereNotNull('status')
             ->where('status', '!=', '')
             ->distinct()
-            ->orderBy('status')
-            ->pluck('status');
+            ->pluck('status')
+            ->push('Cancelled')
+            ->unique()
+            ->sort()
+            ->values();
     }
 
 
