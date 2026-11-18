@@ -538,18 +538,18 @@ class ReportsService
         );
 
         $base = Facility::query()
-            ->where('facility_status', 'Available')
+            ->where('tbl_facility.facility_status', 'Available')
             ->when(
                 $blockedFacilityIds !== [],
                 fn (Builder $query) => $query->whereNotIn(
-                    'facility_id',
+                    'tbl_facility.facility_id',
                     $blockedFacilityIds,
                 ),
             )
             ->when(
                 $facilityTypeId !== null,
                 fn (Builder $query) => $query->where(
-                    'facility_type_id',
+                    'tbl_facility.facility_type_id',
                     $facilityTypeId,
                 ),
             );
@@ -577,8 +577,8 @@ class ReportsService
                 'facilityType',
                 'prices',
             ])
-            ->orderBy('facility_type_id')
-            ->orderBy('facility_name');
+            ->orderBy('tbl_facility.facility_type_id')
+            ->orderBy('tbl_facility.facility_name');
 
         return [
             'rows' => $this->paginateOrGet(
@@ -937,9 +937,9 @@ class ReportsService
         $like = '%'.trim($search).'%';
 
         $query->where(function (Builder $query) use ($like): void {
-            $query->where('facility_name', 'like', $like)
-                ->orWhere('facility_size', 'like', $like)
-                ->orWhere('capacity', 'like', $like)
+            $query->where('tbl_facility.facility_name', 'like', $like)
+                ->orWhere('tbl_facility.facility_size', 'like', $like)
+                ->orWhere('tbl_facility.capacity', 'like', $like)
                 ->orWhereHas('facilityType', function (Builder $query) use ($like): void {
                     $query->where('facility_type', 'like', $like);
                 });
