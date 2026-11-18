@@ -69,8 +69,9 @@
     </table>
 
     @foreach ($details as $detail)
-        @php($facility = $detail->facility)
         @php
+            $facility = $detail->facility;
+
             // Show the discount as a whole percent (10%, not 10.00%). The rate saved with the
             // booking is used first; the discount's current value is only a fallback.
             $discount = $detail->discount;
