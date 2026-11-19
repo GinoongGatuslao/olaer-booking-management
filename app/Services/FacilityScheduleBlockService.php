@@ -60,8 +60,8 @@ class FacilityScheduleBlockService
             if ($checkOut->greaterThan($checkIn->addDays(15))) {
                 throw new InvalidArgumentException('A room stay cannot be longer than 15 days.');
             }
-        } elseif ($checkOut->greaterThan($checkIn->addDays(366))) {
-            throw new InvalidArgumentException('A facility schedule cannot span more than 366 days.');
+        } elseif ($checkOut->greaterThan($checkIn->addDays(1))) {
+            throw new InvalidArgumentException('A facility schedule cannot span more than 1 day.');
         }
 
         return match ($schedulePolicy) {
