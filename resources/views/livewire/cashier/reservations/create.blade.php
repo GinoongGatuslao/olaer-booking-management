@@ -584,7 +584,7 @@ new #[Layout('layouts.app')] #[Title('Create Reservation - Olaer Spring Resort')
                         @if ($rowSummary)
                             <div class="mt-3 flex flex-wrap gap-2">
                                 @if ($rowSummary['is_room'])
-                                    <flux:badge color="amber">{{ $rowSummary['days'] }} {{ \Illuminate\Support\Str::plural('day', $rowSummary['days']) }}</flux:badge>
+                                    <flux:badge color="amber">{{ $rowSummary['days'] }} {{ \Illuminate\Support\Str::plural('night', $rowSummary['days']) }}</flux:badge>
                                 @endif
                                 <flux:badge color="green" title="Before any discount">Subtotal: ₱{{ number_format($rowSummary['subtotal'], 2) }}</flux:badge>
                             </div>
