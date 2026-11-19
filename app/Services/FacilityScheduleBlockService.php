@@ -55,7 +55,12 @@ class FacilityScheduleBlockService
             throw new InvalidArgumentException('Check-out date cannot be before check-in date.');
         }
 
-        if ($checkOut->greaterThan($checkIn->addDays(366))) {
+        // Rooms (overnight schedule policy) are limited to 15 days per stay.
+        if ($schedulePolicy === FacilitySchedulePolicy::Overnight) {
+            if ($checkOut->greaterThan($checkIn->addDays(15))) {
+                throw new InvalidArgumentException('A room stay cannot be longer than 15 days.');
+            }
+        } elseif ($checkOut->greaterThan($checkIn->addDays(366))) {
             throw new InvalidArgumentException('A facility schedule cannot span more than 366 days.');
         }
 
