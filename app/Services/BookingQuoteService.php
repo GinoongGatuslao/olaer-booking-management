@@ -119,19 +119,18 @@ class BookingQuoteService
             return false;
         }
 
-        $now = Carbon::now();
-
-        if (
-            $discount->discount_start
-            && $now->lt(Carbon::parse($discount->discount_start))
-        ) {
+        // No validity period means no discount.
+        if ($discount->discount_start === null || $discount->discount_end === null) {
             return false;
         }
 
-        if (
-            $discount->discount_end
-            && $now->gt(Carbon::parse($discount->discount_end))
-        ) {
+        $now = Carbon::now();
+
+        if ($now->lt(Carbon::parse($discount->discount_start))) {
+            return false;
+        }
+
+        if ($now->gt(Carbon::parse($discount->discount_end))) {
             return false;
         }
 

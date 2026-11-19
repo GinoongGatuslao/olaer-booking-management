@@ -16,6 +16,7 @@ class ReservationQuoteService
         private readonly FacilityOccupancyService $occupancy,
         private readonly FacilityProductConfigurationService $products,
         private readonly DecimalMoneyService $money,
+        private readonly DiscountResolverService $discountResolver,
     ) {}
 
     public function quote(
@@ -78,7 +79,7 @@ class ReservationQuoteService
                 );
             }
 
-            if (! $this->discountIsValidForDate($discount, $checkInDate)) {
+            if (! $this->discountIsValidForDate($discount, $facility, $checkInDate)) {
                 throw new InvalidArgumentException(
                     'The selected discount is inactive or outside its validity period.'
                 );
@@ -165,33 +166,11 @@ class ReservationQuoteService
 
     private function discountIsValidForDate(
         Discount $discount,
+        Facility $facility,
         string $checkInDate,
     ): bool {
-        if ($discount->status !== 'Active') {
-            return false;
-        }
-
-        $effectiveAt = Carbon::parse($checkInDate)
-            ->setTime(12, 0, 0);
-
-        if (
-            $discount->discount_start
-            && $effectiveAt->lt(
-                Carbon::parse($discount->discount_start),
-            )
-        ) {
-            return false;
-        }
-
-        if (
-            $discount->discount_end
-            && $effectiveAt->gt(
-                Carbon::parse($discount->discount_end),
-            )
-        ) {
-            return false;
-        }
-
-        return true;
+        // Same rule as the resolver: must be Active, have both a start and an end,
+        // and be running at the effective time (right now if the date is today).
+        return $this->discountResolver->appliesToFacilityOn($discount, $facility, $checkInDate);
     }
 }

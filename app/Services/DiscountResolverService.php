@@ -104,8 +104,13 @@ class DiscountResolverService
             ? Carbon::instance($date->toDateTime())
             : Carbon::parse($date);
 
-        // Public reservation forms currently collect dates, not exact facility-use time.
-        // Noon keeps same-day discounts usable when discounts start in the morning.
+        // Using the facility today: the discount must be running right now. A discount that
+        // is only scheduled (e.g. starts 10:05) must not apply at 10:00.
+        if ($carbon->isToday()) {
+            return Carbon::now();
+        }
+
+        // Future dates: the forms collect a date, not an exact time, so noon is used.
         return $carbon->copy()->setTime(12, 0, 0);
     }
 }
