@@ -98,19 +98,14 @@ class DiscountResolverService
         };
     }
 
+    /**
+     * A discount depends on when the reservation/booking is created, not on the
+     * check-in or check-out date. So it is always checked against the current time:
+     * a scheduled discount (not started yet) or an expired one never applies.
+     * The date argument is kept so existing callers do not change.
+     */
     private function effectiveDateTime(string|CarbonInterface $date): Carbon
     {
-        $carbon = $date instanceof CarbonInterface
-            ? Carbon::instance($date->toDateTime())
-            : Carbon::parse($date);
-
-        // Using the facility today: the discount must be running right now. A discount that
-        // is only scheduled (e.g. starts 10:05) must not apply at 10:00.
-        if ($carbon->isToday()) {
-            return Carbon::now();
-        }
-
-        // Future dates: the forms collect a date, not an exact time, so noon is used.
-        return $carbon->copy()->setTime(12, 0, 0);
+        return Carbon::now();
     }
 }
